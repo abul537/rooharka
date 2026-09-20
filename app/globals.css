@@ -1,0 +1,29 @@
+@import 'tailwindcss';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-playfair: 'Playfair Display', serif;
+    --font-inter: 'Inter', sans-serif;
+  }
+  
+  body {
+    font-family: var(--font-inter);
+  }
+  
+  h1, h2, h3, h4, .font-playfair {
+    font-family: var(--font-playfair);
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-700 to-emerald-700;
+  }
+  
+  .shadow-glow {
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.2);
+  }
+}
