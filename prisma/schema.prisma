@@ -1018,7 +1018,7 @@ model BlocklistEntry {
 
 model Province {
   id   Int    @id @default(autoincrement())
-  name String @db.VarChar
+  name String @unique(map: "provinces_name_key") @db.VarChar
 
   cities    City[]
   addresses CustomerAddress[]
