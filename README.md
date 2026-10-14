@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Rooharka
 
-## Getting Started
+Multi-tenant e-commerce storefront + admin platform (Next.js 16, Prisma 7, Neon Postgres).
 
-First, run the development server:
+## Setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Install Node 22+ and pnpm, then `pnpm install` (this also runs `prisma generate`).
+2. Copy `.env.example` to `.env` and fill in `DATABASE_URL` (pooled), `DIRECT_URL` (direct) and `ADDRESS_DATABASE_URL` (same as `DATABASE_URL` while the address tables live in the same Neon database) from the Neon **Connect** dialog. Never commit `.env`.
+3. Create the platform tables (the existing `provinces` / `cities` / `localities` tables are reused as they are):
+   ```bash
+   pnpm db:push
+   ```
+   Read Prisma's prompt carefully. It should only list **new tables** being created.
+4. Load the starter data (service catalogue, the MPPMHK store, checkout field settings):
+   ```bash
+   pnpm db:seed
+   ```
+5. Run the site: `pnpm dev`, then open http://localhost:3000 and try `/checkout`.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Useful commands
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Command | What it does |
+| --- | --- |
+| `pnpm dev` | Start the dev server |
+| `pnpm db:studio` | Browse the database in your browser |
+| `pnpm db:push` | Sync the Prisma schema to the database (development) |
+| `pnpm db:seed` | Insert starter data (safe to repeat) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project layout
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `prisma/schema.prisma`: the whole database design, grouped and commented
+- `lib/db.ts`: the shared database client
+- `lib/address-db.ts` + `app/api/pakistan/*`: province / city / locality endpoints used by the checkout (read-only)
+- `app/checkout`, `app/product`, `components/`: the storefront

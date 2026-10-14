@@ -1012,36 +1012,41 @@ model BlocklistEntry {
 }
 
 // ============= 8. PAKISTAN ADDRESS DATASET (shared, read-only) ===============
+// These three models MAP onto the tables that already exist in the Neon
+// database (provinces, cities, localities: 8 / 1,063 / 7,188 rows). Prisma
+// reuses them as they are; nothing is renamed or reloaded.
 
 model Province {
-  id     Int    @id @default(autoincrement())
-  name   String @unique
+  id   Int    @id @default(autoincrement())
+  name String @db.VarChar
 
   cities    City[]
   addresses CustomerAddress[]
+
+  @@map("provinces")
 }
 
 model City {
   id         Int    @id @default(autoincrement())
-  provinceId Int
-  name       String
+  name       String @db.VarChar
+  provinceId Int    @map("province_id")
 
   province   Province          @relation(fields: [provinceId], references: [id])
   localities Locality[]
   addresses  CustomerAddress[]
 
-  @@unique([provinceId, name])
+  @@index([provinceId])
+  @@map("cities")
 }
 
 model Locality {
-  id         Int     @id @default(autoincrement())
-  cityId     Int
-  name       String
-  postalCode String?
+  id     Int    @id @default(autoincrement())
+  name   String @db.VarChar
+  cityId Int    @map("city_id")
 
   city      City              @relation(fields: [cityId], references: [id])
   addresses CustomerAddress[]
 
-  @@unique([cityId, name])
   @@index([cityId])
+  @@map("localities")
 }

@@ -50,7 +50,7 @@ export default function CheckoutPage() {
         </div>
 
         {/* Step Indicator */}
-        // Render the StepIndicator component, passing the current step and the list of steps as props. This will visually indicate to the user which step they are currently on in the checkout process.
+        {/* Shows the customer which step they are on (passes the current step and the list of steps). */}
         <StepIndicator currentStep={step} steps={steps} />
 
         {/* Step Content */}
