@@ -13,6 +13,16 @@ import {
 import AddressTypeIcons from '@/components/checkout/addressTypeIcon';
 import ValidationMessage from '@/components/checkout/validationMessage';
 
+// Loads a list from our API and fails loudly (instead of crashing the form) if the
+// server returned an error object, e.g. when the database connection is not configured.
+async function fetchList<T>(url: string): Promise<T[]> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} returned ${res.status}`);
+  const data: unknown = await res.json();
+  if (!Array.isArray(data)) throw new Error(`${url} returned unexpected data`);
+  return data as T[];
+}
+
 interface AddressStepProps {
   onNext: (data: AddressFormData) => void;
   initialData?: Partial<AddressFormData>;
@@ -41,17 +51,19 @@ export default function AddressStep({ onNext, initialData }: AddressStepProps) {
   const [loadingProvinces, setLoadingProvinces] = useState(true);
   const [loadingCities, setLoadingCities] = useState(false);
   const [loadingLocalities, setLoadingLocalities] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Fetch provinces on mount
   useEffect(() => {
-    fetch('/api/pakistan/provinces')
-      .then(res => res.json())
+    fetchList<PakistanProvince>('/api/pakistan/provinces')
       .then(data => {
         setProvinces(data);
+        setLoadError(null);
         setLoadingProvinces(false);
       })
       .catch(err => {
         console.error('Failed to fetch provinces:', err);
+        setLoadError('We could not load the list of provinces. Please refresh the page or try again shortly.');
         setLoadingProvinces(false);
       });
   }, []);
@@ -62,14 +74,15 @@ export default function AddressStep({ onNext, initialData }: AddressStepProps) {
       setLoadingCities(true);
       setCities([]);
       setFormData(prev => ({ ...prev, cityId: '', localityId: '' }));
-      fetch(`/api/pakistan/cities/${formData.provinceId}`)
-        .then(res => res.json())
+      fetchList<PakistanCity>(`/api/pakistan/cities/${formData.provinceId}`)
         .then(data => {
           setCities(data);
+          setLoadError(null);
           setLoadingCities(false);
         })
         .catch(err => {
           console.error('Failed to fetch cities:', err);
+          setLoadError('We could not load the cities. Please try again.');
           setLoadingCities(false);
         });
     } else {
@@ -83,14 +96,15 @@ export default function AddressStep({ onNext, initialData }: AddressStepProps) {
       setLoadingLocalities(true);
       setLocalities([]);
       setFormData(prev => ({ ...prev, localityId: '' }));
-      fetch(`/api/pakistan/localities/${formData.cityId}`)
-        .then(res => res.json())
+      fetchList<PakistanLocality>(`/api/pakistan/localities/${formData.cityId}`)
         .then(data => {
           setLocalities(data);
+          setLoadError(null);
           setLoadingLocalities(false);
         })
         .catch(err => {
           console.error('Failed to fetch localities:', err);
+          setLoadError('We could not load the localities. Please try again.');
           setLoadingLocalities(false);
         });
     } else {
@@ -256,6 +270,12 @@ export default function AddressStep({ onNext, initialData }: AddressStepProps) {
           {touched.phone && <ValidationMessage message={errors.phone} />}
         </div>
       </div>
+
+      {loadError && (
+        <p role="alert" className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
+          {loadError}
+        </p>
+      )}
 
       {/* Province Dropdown */}
       <div>

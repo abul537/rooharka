@@ -653,14 +653,19 @@ model ProductMedia {
   @@unique([productId, mediaId])
 }
 
-/// Flexible product-page blocks: benefits, ingredients, usage steps, FAQ.
-/// type + items keeps the page fully data-driven without a table per block.
+/// Flexible product-page blocks, fully data-driven.
+///   type  = how it is drawn: CHECKLIST | CARDS | STEPS | BULLETS | FAQ | KEY_BENEFITS
+///   tab   = which tab it appears under (description | ingredients | usage |
+///           benefits | any custom key). null for FAQ / KEY_BENEFITS.
+///   items = [{ title?, text? }]
 model ProductSection {
   id        String  @id @default(cuid())
   productId String
-  type      String  // BENEFITS | INGREDIENTS | USAGE | FAQ | CUSTOM
+  type      String
+  tab       String?
+  tabLabel  String? // label shown on the tab button
   title     String
-  items     Json    // [{ title, text }]
+  items     Json
   sortOrder Int     @default(0)
   isVisible Boolean @default(true)
 

@@ -11,7 +11,7 @@ Multi-tenant e-commerce storefront + admin platform (Next.js 16, Prisma 7, Neon 
    pnpm db:push
    ```
    Read Prisma's prompt carefully. It should only list **new tables** being created.
-4. Load the starter data (service catalogue, the MPPMHK store, checkout field settings):
+4. Load the starter data (service catalogue, the MPPMHK store, checkout field settings, the Darwaish product with **placeholder prices**):
    ```bash
    pnpm db:seed
    ```
@@ -32,3 +32,18 @@ Multi-tenant e-commerce storefront + admin platform (Next.js 16, Prisma 7, Neon 
 - `lib/db.ts`: the shared database client
 - `lib/address-db.ts` + `app/api/pakistan/*`: province / city / locality endpoints used by the checkout (read-only)
 - `app/checkout`, `app/product`, `components/`: the storefront
+
+## Product page (`/product/[slug]`)
+
+Everything on the page comes from the database, nothing is hard-coded:
+
+| What | Where it lives |
+| --- | --- |
+| Name, subtitle, descriptions, SEO | `Product` |
+| Sizes, prices, crossed-out price, stock, badge ("Most Popular") | `ProductVariant` |
+| Images and video | `MediaAsset` + `ProductMedia` |
+| Key benefits, ingredients, usage steps, tips, FAQ, custom tabs | `ProductSection` (`type` = how it is drawn, `tab` = where it appears) |
+| Reviews (only approved ones are shown) | `Review` |
+| Page switches: show/hide reviews, FAQ, trust badges, sticky bar, low-stock message, button label, badge and guarantee text | `ContentBlock` where `page = 'product'`, `key = 'settings'` |
+
+Until the admin dashboard exists, edit these rows with `pnpm db:studio`. Changes appear on the live page within about a minute.
