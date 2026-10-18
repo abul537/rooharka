@@ -19,7 +19,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
   if (!line) redirect('/product');
   const config = await getCheckoutConfig(store);
 
-  const maxQuantity = Math.max(1, Math.min(10, line.trackStock ? line.stock : 10));
+  const maxQuantity = Math.max(1, Math.min(config.maxQuantity, line.trackStock ? line.stock : config.maxQuantity));
   const initialQuantity = Math.min(maxQuantity, Math.max(1, parseInt(qty ?? '1', 10) || 1));
 
   if (line.trackStock && line.stock <= 0) {

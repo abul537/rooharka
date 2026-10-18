@@ -38,6 +38,8 @@ export interface CheckoutConfig {
   currency: string
   fields: CheckoutFields
   pricing: PricingConfig
+  /** Most units of one item per order (Settings > Product page). */
+  maxQuantity: number
   trackingEnabled: boolean
   trackingRequiresPhoneLast4: boolean
 }
@@ -62,12 +64,15 @@ function parseWallets(extra: unknown): Wallet[] {
 
 /** Everything checkout needs to know about a store's rules, from the dashboard-controlled settings. */
 export async function getCheckoutConfig(store: { id: string; slug: string }): Promise<CheckoutConfig> {
-  const [settings, fieldRows] = await Promise.all([
+  const [settings, fieldRows, productBlock] = await Promise.all([
     db.storeSettings.findUnique({ where: { storeId: store.id } }),
     db.checkoutField.findMany({ where: { storeId: store.id } }),
+    db.contentBlock.findUnique({ where: { storeId_page_key: { storeId: store.id, page: 'product', key: 'settings' } }, select: { data: true } }),
   ])
+  const q = Number((productBlock?.data as { maxQuantity?: unknown } | null)?.maxQuantity)
+  const maxQuantity = Number.isInteger(q) && q >= 1 && q <= 99 ? q : 10
 
-  const byKey = new Map(fieldRows.map((f) => [f.fieldKey, f]))
+  const byKey = new Map<string, { enabled: boolean; required: boolean; label: string | null }>(fieldRows.map((f) => [f.fieldKey, f]))
   const fields = {} as CheckoutFields
   for (const key of KEYS) {
     const row = byKey.get(key)
@@ -93,6 +98,7 @@ export async function getCheckoutConfig(store: { id: string; slug: string }): Pr
       advanceValue: settings?.advanceAmountValue ? settings.advanceAmountValue.toNumber() : null,
       wallets: parseWallets(settings?.extra),
     },
+    maxQuantity,
     trackingEnabled: settings?.orderTrackingEnabled ?? true,
     trackingRequiresPhoneLast4: settings?.trackingRequiresPhoneLast4 ?? true,
   }

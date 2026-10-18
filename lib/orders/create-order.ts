@@ -94,6 +94,9 @@ export async function createOrder(
     return { v, quantity: item.quantity, unitPrice, lineTotal: unitPrice * item.quantity }
   })
   for (const l of lines) {
+    if (l.quantity > config.maxQuantity) {
+      throw new OrderError('ITEM_UNAVAILABLE', `You can order at most ${config.maxQuantity} of one item at a time.`)
+    }
     if (l.v.trackStock && l.v.stock < l.quantity) {
       throw new OrderError('OUT_OF_STOCK', l.v.stock > 0
         ? `Only ${l.v.stock} of "${l.v.product.name} (${l.v.label})" left in stock.`

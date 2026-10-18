@@ -64,3 +64,26 @@ Flow: `/product/[slug]` → `/checkout?variant=…&qty=…` → `POST /api/order
   If a policy needs an advance and no wallet is configured, checkout says online payment is unavailable instead of skipping the rule.
 - **Tracking** (`/track`): the customer enters the code from checkout (e.g. `MP-7K4Q-9XMD`) and, if `trackingRequiresPhoneLast4` is on, the last 4 phone digits. They see first name + last initial, city, items, status timeline and courier details, never the phone or street address. Lookups are rate limited and every failure gives the same message.
 - Pricing / payment rules are in `lib/pricing.ts`; request rules are in `lib/orders/validate.ts`.
+
+## Admin dashboard (`/admin`)
+
+**Create the first admin** (after `pnpm db:push` and `pnpm db:seed`):
+
+```bash
+pnpm admin:create     # asks for store slug (mppmhk), email, name, role and a password (min 12 characters)
+```
+
+Run it again with the same email to reset a password (all of that person's sessions are signed out).
+
+| Role | Can do |
+|---|---|
+| `STORE_OWNER`, `STORE_MANAGER` | everything: orders, payments, customers, products, settings |
+| `STORE_STAFF` | view and update orders, view customers and products |
+
+**Pages:** Overview (sales, new orders, pending payments, low stock), Orders (search, status, confirm advance payments, shipments, cancel with restock), Customers (history, notes, block a phone number), Products (details, prices, stock, sizes), Settings (store details, payment policy and JazzCash/EasyPaisa wallets, checkout fields, tracking, product-page switches).
+
+**Security design:** passwords hashed with scrypt; random session token in an httpOnly cookie (only its hash is stored); 5 wrong passwords lock the account 15 minutes; every page and action checks the signed-in user's role and filters data by their own store; every change is written to the audit log; admin pages are `noindex` and never cached.
+
+**Not built yet:** two-factor login (TOTP), password change screen (use `pnpm admin:create`), adding new products/sizes, product images and section editors, phone-OTP gate, courier booking, CSMI owner dashboard.
+
+**Tests:** `pnpm test` runs the pure business-rule tests (order status rules, payment policies, validation, settings, passwords). Database code is verified by running the app.
