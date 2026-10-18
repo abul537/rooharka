@@ -25,6 +25,35 @@ export interface CreatedOrder {
   awaitingPayment: boolean
 }
 
+
+const existingSelect = {
+  method: true,
+  amount: true,
+  order: { select: { number: true, trackingCode: true, total: true } },
+} as const
+
+type ExistingPayment = { method: string; amount: { toNumber(): number }; order: { number: string; trackingCode: string; total: { toNumber(): number } } }
+
+/** The order created earlier by a request with this idempotency key, if any. */
+async function findExistingOrder(idempotencyKey: string): Promise<CreatedOrder | null> {
+  const row = await db.payment.findUnique({ where: { idempotencyKey }, select: existingSelect })
+  return row ? summarise(row) : null
+}
+
+function summarise(p: ExistingPayment): CreatedOrder {
+  const total = p.order.total.toNumber()
+  const advance = p.method === 'COD' ? 0 : p.amount.toNumber()
+  return {
+    number: p.order.number,
+    trackingCode: p.order.trackingCode,
+    total,
+    advance,
+    dueOnDelivery: total - advance,
+    paymentMethod: p.method,
+    awaitingPayment: advance > 0,
+  }
+}
+
 const isUniqueViolation = (e: unknown) => (e as { code?: string })?.code === 'P2002'
 
 /**
@@ -37,6 +66,11 @@ export async function createOrder(
   context: { ip: string }
 ): Promise<CreatedOrder> {
   const storeId = config.storeId
+
+  // 0. The same button double-clicked / request retried: hand back the order we already made,
+  //    before any stock check (the first request may have taken the last item).
+  const already = await findExistingOrder(input.idempotencyKey)
+  if (already) return already
 
   // 1. Items: real, active, belong to this store. Prices come from the database.
   const variants = await db.productVariant.findMany({
@@ -99,22 +133,8 @@ export async function createOrder(
     try {
       return await db.$transaction(async (tx) => {
         // Same button double-clicked / request retried: return the order we already made.
-        const existing = await tx.payment.findUnique({
-          where: { idempotencyKey: input.idempotencyKey },
-          select: { order: { select: { number: true, trackingCode: true, total: true, amountDue: true, amountPaid: true, payments: { select: { amount: true, status: true } } } } },
-        })
-        if (existing) {
-          const o = existing.order
-          return {
-            number: o.number,
-            trackingCode: o.trackingCode,
-            total: o.total.toNumber(),
-            advance: charges.advance,
-            dueOnDelivery: o.amountDue.toNumber(),
-            paymentMethod: input.paymentMethod,
-            awaitingPayment,
-          }
-        }
+        const existing = await tx.payment.findUnique({ where: { idempotencyKey: input.idempotencyKey }, select: existingSelect })
+        if (existing) return summarise(existing)
 
         // Stock: decrement only if enough is left. Two buyers can't both take the last bottle.
         for (const l of lines) {

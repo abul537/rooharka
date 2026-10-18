@@ -232,7 +232,7 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors 
         )}
         <div>
           <Label htmlFor="phone" text={fields.phone.label} required />
-          <input id="phone" type="tel" inputMode="numeric" autoComplete="tel" value={formData.phone}
+          <input id="phone" type="tel" inputMode="tel" autoComplete="tel" value={formData.phone}
             onChange={(e) => handleChange('phone', e.target.value)} onBlur={() => markTouched('phone')}
             className={inputClass(!!errorFor('phone', 'phone'))} placeholder="03001234567" />
           <ValidationMessage message={errorFor('phone', 'phone')} />

@@ -5,7 +5,7 @@ Multi-tenant e-commerce storefront + admin platform (Next.js 16, Prisma 7, Neon 
 ## Setup
 
 1. Install Node 22+ and pnpm, then `pnpm install` (this also runs `prisma generate`).
-2. Copy `.env.example` to `.env` and fill in `DATABASE_URL` (pooled), `DIRECT_URL` (direct) and `ADDRESS_DATABASE_URL` (same as `DATABASE_URL` while the address tables live in the same Neon database) from the Neon **Connect** dialog. Never commit `.env`.
+2. Copy `.env.example` to `.env` and fill in `DATABASE_URL` (pooled), `DIRECT_URL` (direct) (the address dropdowns use `DATABASE_URL` too; `ADDRESS_DATABASE_URL` is no longer needed) from the Neon **Connect** dialog. Never commit `.env`.
 3. Create the platform tables (the existing `provinces` / `cities` / `localities` tables are reused as they are):
    ```bash
    pnpm db:push

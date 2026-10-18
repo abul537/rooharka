@@ -19,6 +19,12 @@ interface Props {
 
 const STEPS = ['Address', 'Payment'];
 
+// crypto.randomUUID only exists on https / localhost; fall back so testing on a phone over Wi-Fi still works.
+function newKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
+
 export default function CheckoutFlow({ config, line, initialQuantity, maxQuantity }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
@@ -28,7 +34,8 @@ export default function CheckoutFlow({ config, line, initialQuantity, maxQuantit
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   // One key per checkout attempt: if the request is sent twice (double click, retry), the server returns the same order.
-  const idempotencyKey = useRef(crypto.randomUUID());
+  const idempotencyKey = useRef<string>('');
+  if (!idempotencyKey.current) idempotencyKey.current = newKey();
 
   const subtotal = line.unitPrice * quantity;
   const options = useMemo(() => buildPaymentOptions(config.pricing, subtotal), [config.pricing, subtotal]);

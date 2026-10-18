@@ -1,3 +1,5 @@
+import { normalizePkMobile } from '@/lib/phone';
+
 export const validateName = (name: string): string | null => {
   if (!name || name.trim().length < 2) {
     return 'Name must be at least 2 characters';
@@ -5,7 +7,8 @@ export const validateName = (name: string): string | null => {
   if (name.trim().length > 50) {
     return 'Name must be less than 50 characters';
   }
-  if (!/^[A-Za-z\s]+$/.test(name)) {
+  // Letters of any language (English, Urdu...), spaces, and . ' - as in "Abdul-Rehman" or "Ali Jr."
+  if (!/^[\p{L}\p{M}\s.'’-]+$/u.test(name)) {
     return 'Name can only contain letters and spaces';
   }
   return null;
@@ -20,8 +23,8 @@ export const validateEmail = (email: string): string | null => {
 };
 
 export const validatePakistaniPhone = (phone: string): string | null => {
-  const phoneRegex = /^03\d{9}$/; // 11 digits starting with 03
-  if (!phone || !phoneRegex.test(phone)) {
+  // Same rule as the server: 0300 1234567, 0300-1234567, +92 300 1234567 and 923001234567 are all fine.
+  if (!phone || !normalizePkMobile(phone)) {
     return 'Please enter a valid Pakistani mobile number (03XXXXXXXXX)';
   }
   return null;

@@ -59,9 +59,9 @@ export default function PaymentStep({ options, currency, submitting, error, fiel
           return (
             <label key={o.method}
               className={`flex items-start p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                method === o.method ? 'border-amber-600 bg-amber-50' : 'border-gray-200 hover:border-amber-400'
+                selected?.method === o.method ? 'border-amber-600 bg-amber-50' : 'border-gray-200 hover:border-amber-400'
               }`}>
-              <input type="radio" name="payment" value={o.method} checked={method === o.method}
+              <input type="radio" name="payment" value={o.method} checked={selected?.method === o.method}
                 onChange={() => setMethod(o.method)} className="mt-1 w-4 h-4 text-amber-600" />
               <div className="ml-4 flex-1">
                 <p className="font-medium text-gray-900">{label.title}</p>
@@ -108,7 +108,7 @@ export default function PaymentStep({ options, currency, submitting, error, fiel
       <div className="flex justify-between pt-4">
         <button type="button" onClick={onBack} disabled={submitting}
           className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50">Back</button>
-        <button type="submit" disabled={!method || submitting}
+        <button type="submit" disabled={!selected || submitting}
           className="bg-gradient-to-r from-amber-600 to-amber-800 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
           {submitting ? 'Placing order…' : 'Complete Order'}
         </button>
