@@ -33,13 +33,19 @@ async function run<T>(
   return { ok: okMessage }
 }
 
-export const saveStoreInfoAction = (_: ActionState, fd: FormData) =>
-  run('store', fd, rules.parseStoreInfo, svc.saveStoreInfo, ['/admin/settings'], 'Store details saved.')
-export const savePaymentsAction = (_: ActionState, fd: FormData) =>
-  run('payments', fd, rules.parsePaymentSettings, svc.savePayments, ['/admin/settings', '/checkout'], 'Payment and delivery rules saved. They apply to the next customer.')
-export const saveFieldsAction = (_: ActionState, fd: FormData) =>
-  run('checkout-fields', fd, rules.parseCheckoutFields, svc.saveCheckoutFields, ['/admin/settings', '/checkout'], 'Checkout form saved.')
-export const saveTrackingAction = (_: ActionState, fd: FormData) =>
-  run('tracking', fd, rules.parseTracking, svc.saveTracking, ['/admin/settings', '/track'], 'Tracking settings saved.')
-export const saveProductPageAction = (_: ActionState, fd: FormData) =>
-  run('product-page', fd, rules.parseProductPage, svc.saveProductPage, ['/admin/settings', '/product'], 'Product page saved.')
+// Next.js requires every export of a "use server" file to be an `async function` declaration.
+export async function saveStoreInfoAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('store', fd, rules.parseStoreInfo, svc.saveStoreInfo, ['/admin/settings'], 'Store details saved. The public site shows the new name within 30 seconds.')
+}
+export async function savePaymentsAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('payments', fd, rules.parsePaymentSettings, svc.savePayments, ['/admin/settings', '/checkout'], 'Payment and delivery rules saved. They apply to the next customer.')
+}
+export async function saveFieldsAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('checkout-fields', fd, rules.parseCheckoutFields, svc.saveCheckoutFields, ['/admin/settings', '/checkout'], 'Checkout form saved.')
+}
+export async function saveTrackingAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('tracking', fd, rules.parseTracking, svc.saveTracking, ['/admin/settings', '/track'], 'Tracking settings saved.')
+}
+export async function saveProductPageAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('product-page', fd, rules.parseProductPage, svc.saveProductPage, ['/admin/settings', '/product'], 'Product page saved.')
+}

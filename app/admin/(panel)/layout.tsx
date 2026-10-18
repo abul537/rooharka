@@ -1,13 +1,13 @@
 import { requireAdmin } from '@/lib/auth/guard'
 import { can } from '@/lib/auth/permissions'
-import { db } from '@/lib/db'
+import { getStoreName } from '@/lib/store'
 import { logoutAction } from '../login/actions'
 import AdminNav from '@/components/admin/AdminNav'
 
 // Every page inside this group requires a signed-in store admin.
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin()
-  const store = await db.store.findUnique({ where: { id: admin.storeId }, select: { name: true } })
+  const storeName = await getStoreName(admin.storeId)
 
   const allowed = ['/admin', '/admin/orders', '/admin/customers']
   if (can(admin.role, 'products.view')) allowed.push('/admin/products')
@@ -18,7 +18,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       <aside className="lg:w-60 lg:shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-4 lg:p-5">
         <div className="flex lg:block items-center justify-between mb-3 lg:mb-8">
           <div>
-            <p className="font-bold text-lg leading-tight">{store?.name ?? 'Store'}</p>
+            <p className="font-bold text-lg leading-tight">{storeName}</p>
             <p className="text-xs text-slate-500">Dashboard</p>
           </div>
           <form action={logoutAction} className="lg:hidden">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AddressFormData, PakistanProvince, PakistanCity, PakistanLocality } from '@/lib/types';
 import {
   validateName,
@@ -11,16 +11,7 @@ import {
 import type { CheckoutFields } from '@/lib/data/checkout';
 import AddressTypeIcons from '@/components/checkout/addressTypeIcon';
 import ValidationMessage from '@/components/checkout/validationMessage';
-
-// Loads a list from our API and fails loudly (instead of crashing the form) if the
-// server returned an error object, e.g. when the database connection is not configured.
-async function fetchList<T>(url: string): Promise<T[]> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url} returned ${res.status}`);
-  const data: unknown = await res.json();
-  if (!Array.isArray(data)) throw new Error(`${url} returned unexpected data`);
-  return data as T[];
-}
+import { useList } from '@/components/checkout/useList';
 
 interface AddressStepProps {
   /** Which fields to show and which are required: controlled from the store's dashboard settings. */
@@ -57,67 +48,15 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors 
   const [errors, setErrors] = useState<Errors>({});
   const [touched, setTouched] = useState<Partial<Record<keyof AddressFormData, boolean>>>({});
 
-  const [provinces, setProvinces] = useState<PakistanProvince[]>([]);
-  const [cities, setCities] = useState<PakistanCity[]>([]);
-  const [localities, setLocalities] = useState<PakistanLocality[]>([]);
-  const [loadingProvinces, setLoadingProvinces] = useState(true);
-  const [loadingCities, setLoadingCities] = useState(false);
-  const [loadingLocalities, setLoadingLocalities] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  // Provinces on mount
-  useEffect(() => {
-    fetchList<PakistanProvince>('/api/pakistan/provinces')
-      .then((data) => {
-        setProvinces(data);
-        setLoadError(null);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch provinces:', err);
-        setLoadError('We could not load the list of provinces. Please refresh the page or try again shortly.');
-      })
-      .finally(() => setLoadingProvinces(false));
-  }, []);
-
-  // Cities when the province changes
-  useEffect(() => {
-    if (!formData.provinceId) {
-      setCities([]);
-      return;
-    }
-    setLoadingCities(true);
-    setCities([]);
-    fetchList<PakistanCity>(`/api/pakistan/cities/${formData.provinceId}`)
-      .then((data) => {
-        setCities(data);
-        setLoadError(null);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch cities:', err);
-        setLoadError('We could not load the cities. Please try again.');
-      })
-      .finally(() => setLoadingCities(false));
-  }, [formData.provinceId]);
-
-  // Localities when the city changes
-  useEffect(() => {
-    if (!formData.cityId) {
-      setLocalities([]);
-      return;
-    }
-    setLoadingLocalities(true);
-    setLocalities([]);
-    fetchList<PakistanLocality>(`/api/pakistan/localities/${formData.cityId}`)
-      .then((data) => {
-        setLocalities(data);
-        setLoadError(null);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch localities:', err);
-        setLoadError('We could not load the localities. Please try again.');
-      })
-      .finally(() => setLoadingLocalities(false));
-  }, [formData.cityId]);
+  // Each list reloads when its parent choice changes; stale answers are cancelled (see useList).
+  const prov = useList<PakistanProvince>('/api/pakistan/provinces');
+  const city = useList<PakistanCity>(formData.provinceId ? `/api/pakistan/cities/${formData.provinceId}` : null);
+  const loc = useList<PakistanLocality>(formData.cityId ? `/api/pakistan/localities/${formData.cityId}` : null);
+  const provinces = prov.items, cities = city.items, localities = loc.items;
+  const loadingProvinces = prov.loading, loadingCities = city.loading, loadingLocalities = loc.loading;
+  const failed = prov.error ? prov : city.error ? city : loc.error ? loc : null;
+  const emptyCity = !!formData.provinceId && !city.loading && !city.error && cities.length === 0;
+  const emptyLocality = !!formData.cityId && !loc.loading && !loc.error && localities.length === 0;
 
   const handleChange = <K extends keyof AddressFormData>(field: K, value: AddressFormData[K]) => {
     setFormData((prev) => {
@@ -239,8 +178,11 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors 
         </div>
       </div>
 
-      {loadError && (
-        <p role="alert" className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">{loadError}</p>
+      {failed && (
+        <p role="alert" className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm flex items-center justify-between gap-3">
+          <span>We could not load this list. Please check your connection.</span>
+          <button type="button" onClick={failed.retry} className="font-semibold underline shrink-0">Try again</button>
+        </p>
       )}
 
       {/* Province */}
@@ -265,6 +207,7 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors 
           {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <ValidationMessage message={errorFor('cityId', 'city')} />
+        {emptyCity && <p className="mt-1 text-sm text-amber-700">No cities are listed for this province yet. Please contact the store to place your order.</p>}
       </div>
 
       {/* Locality */}
@@ -277,6 +220,7 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors 
           {localities.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
         <ValidationMessage message={errorFor('localityId', 'locality')} />
+        {emptyLocality && <p className="mt-1 text-sm text-amber-700">No localities are listed for this city yet. Please contact the store to place your order.</p>}
       </div>
 
       {/* Landmark */}

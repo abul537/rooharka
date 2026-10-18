@@ -156,32 +156,25 @@ export const getProductPageData = cache(async (slug: string): Promise<ProductPag
   const store = await getCurrentStore()
   if (!store) return null
 
-  const product = await db.product.findFirst({
-    where: { storeId: store.id, slug, status: 'ACTIVE' },
-    include: {
-      variants: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
-      media: { include: { media: true }, orderBy: { sortOrder: 'asc' } },
-      sections: { where: { isVisible: true }, orderBy: { sortOrder: 'asc' } },
-    },
-  })
-  if (!product || product.variants.length === 0) return null
-
-  const [stats, reviews, settingsBlock] = await Promise.all([
-    db.review.aggregate({
-      where: { productId: product.id, isApproved: true },
-      _avg: { rating: true },
-      _count: { _all: true },
+  // One round of parallel queries (reviews and settings do not need the product's id first).
+  const reviewWhere = { isApproved: true, product: { storeId: store.id, slug, status: 'ACTIVE' as const } }
+  const [product, stats, reviews, settingsBlock] = await Promise.all([
+    db.product.findFirst({
+      where: { storeId: store.id, slug, status: 'ACTIVE' },
+      include: {
+        variants: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+        media: { include: { media: true }, orderBy: { sortOrder: 'asc' } },
+        sections: { where: { isVisible: true }, orderBy: { sortOrder: 'asc' } },
+      },
     }),
-    db.review.findMany({
-      where: { productId: product.id, isApproved: true },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    }),
+    db.review.aggregate({ where: reviewWhere, _avg: { rating: true }, _count: { _all: true } }),
+    db.review.findMany({ where: reviewWhere, orderBy: { createdAt: 'desc' }, take: 20 }),
     db.contentBlock.findUnique({
       where: { storeId_page_key: { storeId: store.id, page: 'product', key: 'settings' } },
       select: { data: true, isVisible: true },
     }),
   ])
+  if (!product || product.variants.length === 0) return null
 
   return {
     store,

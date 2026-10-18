@@ -35,7 +35,18 @@ function createClient() {
     throw new Error('DATABASE_URL is not set. Copy .env.example to .env and fill it in.')
   }
   assertValidPostgresUrl(connectionString)
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
+  return new PrismaClient({
+    adapter: new PrismaPg({
+      connectionString,
+      max: 10,
+      // Neon closes idle connections; drop ours first so we never reuse a dead one.
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 15_000, // allows for a sleeping Neon database to wake up
+      keepAlive: true,
+    }),
+    // Several sequential queries over a long-distance link can outlast Prisma's 5 second default.
+    transactionOptions: { maxWait: 10_000, timeout: 30_000 },
+  })
 }
 
 export const db = globalForPrisma.prisma ?? createClient()

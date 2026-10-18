@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { resolveAddress } from '@/lib/address-db'
 import { generateTrackingCode } from '@/lib/tracking-code'
 import { buildPaymentOptions, type PaymentOption } from '@/lib/pricing'
 import type { CheckoutConfig } from '@/lib/data/checkout'
@@ -67,24 +68,35 @@ export async function createOrder(
 ): Promise<CreatedOrder> {
   const storeId = config.storeId
 
-  // 0. The same button double-clicked / request retried: hand back the order we already made,
-  //    before any stock check (the first request may have taken the last item).
-  const already = await findExistingOrder(input.idempotencyKey)
-  if (already) return already
-
-  // 1. Items: real, active, belong to this store. Prices come from the database.
-  const variants = await db.productVariant.findMany({
-    where: { id: { in: input.items.map((i) => i.variantId) }, isActive: true, product: { storeId, status: 'ACTIVE' } },
-    include: {
-      product: {
-        select: {
-          id: true,
-          name: true,
-          media: { where: { media: { kind: 'IMAGE' } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], take: 1, select: { media: { select: { url: true } } } },
+  // 0-4. Everything we must READ before writing, fetched at the same time. Each database trip is slow over
+  //      a long distance, so five sequential reads would cost five times as long as one round of parallel ones.
+  const [already, variants, address, blocked] = await Promise.all([
+    // The same button double-clicked / request retried: hand back the order we already made, before any
+    // stock check (the first request may have taken the last item).
+    findExistingOrder(input.idempotencyKey),
+    db.productVariant.findMany({
+      where: { id: { in: input.items.map((i) => i.variantId) }, isActive: true, product: { storeId, status: 'ACTIVE' } },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            media: { where: { media: { kind: 'IMAGE' } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], take: 1, select: { media: { select: { url: true } } } },
+          },
         },
       },
-    },
-  })
+    }),
+    // Must be a real province > city > locality chain (answered from memory; no database trip).
+    resolveAddress(input.address.provinceId, input.address.cityId, input.address.localityId),
+    // Known fake-order offenders are turned away.
+    db.blocklistEntry.findFirst({
+      where: { storeId, OR: [{ type: 'PHONE', value: input.customer.phone }, { type: 'IP', value: context.ip }] },
+      select: { id: true },
+    }),
+  ])
+  if (already) return already
+
+  // Items: real, active, belong to this store. Prices come from the database.
   if (variants.length !== input.items.length) {
     throw new OrderError('ITEM_UNAVAILABLE', 'One of the items in your order is no longer available.')
   }
@@ -104,7 +116,7 @@ export async function createOrder(
     }
   }
 
-  // 2. Money + payment rule for this store.
+  // Money + payment rule for this store.
   const subtotal = lines.reduce((sum, l) => sum + l.lineTotal, 0)
   const option: PaymentOption | undefined = buildPaymentOptions(config.pricing, subtotal).find((o) => o.method === input.paymentMethod)
   if (!option) {
@@ -113,18 +125,7 @@ export async function createOrder(
   const { charges } = option
   const awaitingPayment = charges.advance > 0
 
-  // 3. Address must be a real province > city > locality chain (not three unrelated ids).
-  const locality = await db.locality.findFirst({
-    where: { id: input.address.localityId, cityId: input.address.cityId, city: { provinceId: input.address.provinceId } },
-    select: { name: true, city: { select: { name: true, province: { select: { name: true } } } } },
-  })
-  if (!locality) throw new OrderError('BAD_ADDRESS', 'Please re-select your province, city and locality.', { locality: 'Please re-select your address' })
-
-  // 4. Known fake-order offenders are turned away.
-  const blocked = await db.blocklistEntry.findFirst({
-    where: { storeId, OR: [{ type: 'PHONE', value: input.customer.phone }, { type: 'IP', value: context.ip }] },
-    select: { id: true },
-  })
+  if (!address) throw new OrderError('BAD_ADDRESS', 'Please re-select your province, city and locality.', { locality: 'Please re-select your address' })
   if (blocked) throw new OrderError('BLOCKED', 'We are unable to process this order online. Please contact the store.')
 
   const customerName = [input.customer.firstName, input.customer.lastName].filter(Boolean).join(' ')
@@ -135,9 +136,11 @@ export async function createOrder(
   for (let attempt = 1; attempt <= 4; attempt++) {
     try {
       return await db.$transaction(async (tx) => {
-        // Same button double-clicked / request retried: return the order we already made.
-        const existing = await tx.payment.findUnique({ where: { idempotencyKey: input.idempotencyKey }, select: existingSelect })
-        if (existing) return summarise(existing)
+        // A retry after a unique-key clash may mean a twin request already saved this order.
+        if (attempt > 1) {
+          const existing = await tx.payment.findUnique({ where: { idempotencyKey: input.idempotencyKey }, select: existingSelect })
+          if (existing) return summarise(existing)
+        }
 
         // Stock: decrement only if enough is left. Two buyers can't both take the last bottle.
         for (const l of lines) {
@@ -205,9 +208,9 @@ export async function createOrder(
             customerName,
             customerPhone: input.customer.phone,
             customerEmail: input.customer.email,
-            provinceName: locality.city.province.name,
-            cityName: locality.city.name,
-            localityName: locality.name,
+            provinceName: address.province,
+            cityName: address.city,
+            localityName: address.locality,
             landmark: input.address.landmark,
             addressType: input.address.addressType,
             subtotal: charges.subtotal,
