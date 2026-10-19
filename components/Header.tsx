@@ -23,7 +23,7 @@ export default function Header() {
     // { label: 'Ingredients', href: '#ingredients' },
     // { label: 'Testimonials', href: '#testimonials' },
     { label: 'Track Order', href: '/track' },
-    { label: 'Shop Now', href: '/product' },
+    { label: 'Shop', href: '/shop' },
   ]
 
   return (

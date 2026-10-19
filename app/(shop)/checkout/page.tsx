@@ -12,11 +12,11 @@ type Props = { searchParams: Promise<{ variant?: string; qty?: string }> };
 export default async function CheckoutPage({ searchParams }: Props) {
   const { variant, qty } = await searchParams;
   const store = await getCurrentStore();
-  if (!store || !variant) redirect('/product');
+  if (!store || !variant) redirect('/shop');
 
   // The URL only says WHICH size and how many. Name, price and stock are read from the database.
   const [line, config] = await Promise.all([getCheckoutLine(store.id, variant), getCheckoutConfig(store)]);
-  if (!line) redirect('/product');
+  if (!line) redirect('/shop');
 
   const maxQuantity = Math.max(1, Math.min(config.maxQuantity, line.trackStock ? line.stock : config.maxQuantity));
   const initialQuantity = Math.min(maxQuantity, Math.max(1, parseInt(qty ?? '1', 10) || 1));

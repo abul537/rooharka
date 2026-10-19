@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import MediaImage from '@/components/media/MediaImage'
 import { Play } from 'lucide-react'
 import type { MediaDTO } from '@/lib/data/product'
 
@@ -28,8 +28,9 @@ export default function Gallery({ media, productName }: { media: MediaDTO[]; pro
             </div>
           )}
           {current?.kind === 'IMAGE' && (
-            <Image
+            <MediaImage
               key={current.id}
+              width={1200}
               src={current.url}
               alt={current.alt ?? productName}
               fill
@@ -61,7 +62,7 @@ export default function Gallery({ media, productName }: { media: MediaDTO[]; pro
               }`}
             >
               {m.kind === 'IMAGE' ? (
-                <Image src={m.url} alt="" fill sizes="80px" className="object-cover" />
+                <MediaImage src={m.url} width={160} alt="" fill sizes="80px" className="object-cover" />
               ) : (
                 <span className="absolute inset-0 flex items-center justify-center bg-gray-900/80 text-white">
                   <Play className="w-6 h-6" aria-hidden />

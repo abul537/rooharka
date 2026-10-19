@@ -9,14 +9,7 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      // TODO: replace with your real image host (e.g. res.cloudinary.com)
-      // once media storage is chosen. '**' allows ANY site through Next's
-      // image optimizer, which is fine while developing but not in production.
-      { protocol: 'https', hostname: '**' },
-    ],
-  },
+  // Photos are served unoptimized from their own host (see components/media/MediaImage.tsx), so no image hosts need allowing.
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },

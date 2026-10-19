@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
-import Image from 'next/image';
+import MediaImage from '@/components/media/MediaImage';
 import { formatPrice } from '@/lib/format';
 import type { CheckoutLine } from '@/lib/data/checkout';
 import type { Charges } from '@/lib/pricing';
@@ -23,7 +23,7 @@ export default function OrderSummary({ line, quantity, maxQuantity, onQuantityCh
       <div className="flex gap-4 pb-4 border-b border-gray-100">
         <div className="relative w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-amber-100 to-emerald-100 flex items-center justify-center">
           {line.imageUrl
-            ? <Image src={line.imageUrl} alt="" fill sizes="80px" className="object-cover" />
+            ? <MediaImage src={line.imageUrl} width={160} alt="" fill sizes="80px" className="object-cover" />
             : <span className="text-3xl" aria-hidden>🫙</span>}
         </div>
         <div className="min-w-0 flex-1">
