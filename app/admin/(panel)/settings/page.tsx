@@ -2,6 +2,9 @@ import { requireAdmin } from '@/lib/auth/guard'
 import { loadSettings } from '@/lib/admin/settings'
 import { LOCKED_FIELDS, TRUST_ICONS } from '@/lib/admin/settings-rules'
 import ActionForm from '@/components/admin/ActionForm'
+import ServiceCard from '@/components/admin/ServiceCard'
+import { loadServiceViews } from '@/lib/services/store-services'
+import { SERVICES } from '@/lib/services/registry'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveTrackingAction } from './actions'
 
@@ -20,7 +23,7 @@ const POLICY_TEXT: Record<string, string> = {
 
 export default async function SettingsPage() {
   const admin = await requireAdmin('settings.edit')
-  const { settings: s, wallets, fields, productPage: pp } = await loadSettings(admin.storeId)
+  const [{ settings: s, wallets, fields, productPage: pp }, services] = await Promise.all([loadSettings(admin.storeId), loadServiceViews(admin.storeId)])
   if (!s) return <p>Store settings are missing. Run the seed again.</p>
 
   return (
@@ -98,6 +101,13 @@ export default async function SettingsPage() {
           <Check name="trackingRequiresPhoneLast4" label="Also ask for the last 4 digits of their phone" hint="Recommended: stops strangers from guessing codes." defaultChecked={s.trackingRequiresPhoneLast4} />
           <button className={primaryBtn}>Save tracking</button>
         </ActionForm>
+      </Card>
+
+
+      <Card title="Photos and videos" hint="Product photos and videos are stored in your own Cloudinary account, so you stay in control of cost and files. Cloudinary has a free plan.">
+        <div className="space-y-4">
+          {SERVICES.filter((d) => d.key === 'cloudinary').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
+        </div>
       </Card>
 
       <Card title="Product page" hint="Switch parts of the product page on or off.">

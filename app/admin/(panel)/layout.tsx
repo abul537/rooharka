@@ -10,7 +10,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const storeName = await getStoreName(admin.storeId)
 
   const allowed = ['/admin', '/admin/orders', '/admin/customers']
-  if (can(admin.role, 'products.view')) allowed.push('/admin/products')
+  if (can(admin.role, 'products.view')) allowed.push('/admin/products', '/admin/categories')
   if (can(admin.role, 'settings.edit')) allowed.push('/admin/settings')
 
   return (

@@ -493,6 +493,8 @@ model StoreSettings {
   otpLength                Int        @default(6)
   otpExpiryMinutes         Int        @default(5)
   otpMaxAttempts           Int        @default(5)
+  /// Cap on codes sent per day for the whole store: protects the owner's SMS bill from abuse.
+  otpDailyLimit            Int        @default(200)
 
   // Customer trust
   orderTrackingEnabled     Boolean @default(true)
@@ -561,6 +563,10 @@ model MediaAsset {
   width     Int?
   height    Int?
   alt       String?
+  /// Where the file lives: "cloudinary" (uploaded through the dashboard) or "external" (a pasted link).
+  provider  String    @default("external")
+  /// Cloudinary's id for the file; needed to delete it there. Null for external links.
+  publicId  String?
   createdAt DateTime  @default(now())
 
   store        Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
