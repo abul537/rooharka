@@ -15,6 +15,8 @@ interface Props {
   line: CheckoutLine;
   initialQuantity: number;
   maxQuantity: number;
+  /** Set when the store requires phone verification: the verified number in local form (03XXXXXXXXX). */
+  verifiedPhone?: string;
 }
 
 const STEPS = ['Address', 'Payment'];
@@ -25,7 +27,7 @@ function newKey(): string {
   return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 }
 
-export default function CheckoutFlow({ config, line, initialQuantity, maxQuantity }: Props) {
+export default function CheckoutFlow({ config, line, initialQuantity, maxQuantity, verifiedPhone }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [address, setAddress] = useState<AddressFormData | null>(null);
@@ -65,6 +67,11 @@ export default function CheckoutFlow({ config, line, initialQuantity, maxQuantit
         router.replace(`/checkout/success?code=${encodeURIComponent(data.trackingCode)}`);
         return; // keep the button disabled while navigating
       }
+      if (data.code === 'PHONE_NOT_VERIFIED') {
+        // The verification expired (or was never done): send the customer back to verify, keeping their choice.
+        router.replace(`/verify?variant=${encodeURIComponent(line.variantId)}&qty=${quantity}`);
+        return;
+      }
       setError(data.error ?? 'Something went wrong. Please try again.');
       if (data.fields) {
         setFieldErrors(data.fields);
@@ -87,7 +94,8 @@ export default function CheckoutFlow({ config, line, initialQuantity, maxQuantit
               {error && <p role="alert" className="mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">{error}</p>}
               <AddressStep
                 fields={config.fields}
-                initialData={address ?? undefined}
+                initialData={address ?? (verifiedPhone ? { phone: verifiedPhone } : undefined)}
+                phoneLocked={!!verifiedPhone}
                 serverErrors={fieldErrors}
                 onNext={(data) => { setAddress(data); setError(null); setFieldErrors({}); setStep(2); }}
               />

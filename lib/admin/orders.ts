@@ -1,6 +1,11 @@
 import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
-import { afterPaymentReceived, checkTransition, COURIERS, isValidTrackingNo, label, type OrderStatus } from './order-rules'
+import { afterPaymentReceived, checkTransition, isValidTrackingNo, label, type OrderStatus } from './order-rules'
+import type { Prisma } from '@/lib/generated/prisma/client'
+import { ADAPTERS, type BookingInput } from '@/lib/couriers/adapters'
+import { courierName, isKnownCourier, readCourierConfig } from '@/lib/couriers/config'
+import { serviceDef } from '@/lib/services/registry'
+import { getServiceSecrets, recordServiceResult } from '@/lib/services/store-services'
 import { formatPrice } from '@/lib/format'
 
 /** An error whose message is safe to show to the admin. */
@@ -128,28 +133,94 @@ export async function rejectPayment(admin: StoreAdmin, orderId: string, paymentI
   })
 }
 
-/** Records the parcel handed to a courier (manual entry until courier integrations exist). */
-export async function addShipment(admin: StoreAdmin, orderId: string, courier: string, trackingNo: string) {
-  if (!COURIERS.some((c) => c.key === courier)) throw new AdminError('Choose a courier.')
+/**
+ * Records the parcel handed to a courier. Used for BOTH ways of shipping: the owner typed the
+ * tracking number (any courier, including custom ones) or the courier's API returned it.
+ */
+export async function addShipment(admin: StoreAdmin, orderId: string, courier: string, trackingNo: string, raw?: unknown) {
   const tn = trackingNo.trim()
   if (!isValidTrackingNo(tn)) throw new AdminError('Enter the courier’s tracking number (4 to 40 letters, digits or dashes).')
 
   return db.$transaction(async (tx) => {
-    const order = await loadOrder(tx, admin, orderId)
+    const [order, settings] = await Promise.all([
+      loadOrder(tx, admin, orderId),
+      tx.storeSettings.findUnique({ where: { storeId: admin.storeId }, select: { extra: true } }),
+    ])
+    const config = readCourierConfig(settings?.extra)
+    // Any courier the store has switched on, or one it used before (so old data keeps working).
+    if (!isKnownCourier(config, courier)) throw new AdminError('Choose a courier.')
     if (order.status !== 'PACKED' && order.status !== 'SHIPPED') throw new AdminError('Mark the order as Packed before adding a shipment.')
     if (order.payments.some((p) => p.method !== 'COD' && p.status === 'PENDING')) throw new AdminError('Confirm or reject the advance payment first.')
 
     await tx.shipment.create({
-      data: { orderId: order.id, courier, courierTrackingNo: tn, status: 'CREATED', codAmount: order.total.toNumber() - order.amountPaid.toNumber() },
+      data: {
+        orderId: order.id, courier, courierTrackingNo: tn, status: 'CREATED',
+        codAmount: order.total.toNumber() - order.amountPaid.toNumber(),
+        ...(raw !== undefined ? { rawResponse: raw as Prisma.InputJsonValue } : {}),
+      },
     })
     if (order.status === 'PACKED') {
       const res = await tx.order.updateMany({ where: { id: order.id, status: 'PACKED' }, data: { status: 'SHIPPED' } })
       if (res.count === 0) throw new AdminError('This order was just changed by someone else. Please refresh.')
-      const name = COURIERS.find((c) => c.key === courier)!.name
       await tx.orderStatusHistory.create({
-        data: { orderId: order.id, status: 'SHIPPED', note: `Handed to ${name} (tracking no. ${tn})`, isPublic: true, createdById: admin.id },
+        data: { orderId: order.id, status: 'SHIPPED', note: `Handed to ${courierName(config, courier)} (tracking no. ${tn})`, isPublic: true, createdById: admin.id },
       })
     }
     return { number: order.number, courier, trackingNo: tn }
   })
+}
+
+// Booking the same order twice at once (double click) must not create two parcels at the courier.
+const booking = new Set<string>()
+
+/** Books the parcel through the courier's API with the STORE'S OWN account, then records it like a manual shipment. */
+export async function bookShipment(admin: StoreAdmin, orderId: string, courier: string) {
+  const adapter = ADAPTERS[courier]
+  if (!adapter) throw new AdminError('Automatic booking is not available for this courier. Book on their website and add the tracking number instead.')
+  if (booking.has(orderId)) throw new AdminError('This order is already being booked. Please wait a moment.')
+  booking.add(orderId)
+  try {
+    const [order, settings, secrets] = await Promise.all([
+      db.order.findFirst({ where: { id: orderId, storeId: admin.storeId }, include: { payments: true, items: true, shipments: { select: { id: true } } } }),
+      db.storeSettings.findUnique({ where: { storeId: admin.storeId }, select: { extra: true, displayName: true, supportPhone: true, supportEmail: true } }),
+      getServiceSecrets(admin.storeId, courier),
+    ])
+    if (!order) throw new AdminError('Order not found.')
+    const config = readCourierConfig(settings?.extra)
+    const name = courierName(config, courier)
+    if (!config.enabled.includes(courier)) throw new AdminError(`${name} is switched off in Settings.`)
+    if (order.status !== 'PACKED') throw new AdminError(order.status === 'SHIPPED' ? 'This order is already shipped.' : 'Mark the order as Packed before booking a courier.')
+    if (order.shipments.length > 0) throw new AdminError('This order already has a shipment.')
+    if (order.payments.some((p) => p.method !== 'COD' && p.status === 'PENDING')) throw new AdminError('Confirm or reject the advance payment first.')
+
+    const def = serviceDef(courier)!
+    const complete = !!secrets?.enabled && def.credentials.filter((f) => f.required).every((f) => secrets.credentials[f.name]) && def.config.filter((f) => f.required).every((f) => secrets.config[f.name])
+    if (!secrets || !complete) throw new AdminError(`Connect and switch on your ${name} account in Settings > Couriers first.`)
+
+    const input: BookingInput = {
+      orderNumber: order.number,
+      customerName: order.customerName,
+      email: order.customerEmail ?? '',
+      phone: order.customerPhone.startsWith('+92') ? `0${order.customerPhone.slice(3)}` : order.customerPhone,
+      address: [order.landmark, order.localityName].filter(Boolean).join(', '),
+      city: order.cityName,
+      codAmount: Math.max(0, order.total.toNumber() - order.amountPaid.toNumber()),
+      itemCount: order.items.reduce((n, i) => n + i.quantity, 0),
+      itemsSummary: order.items.map((i) => `${i.name}${i.variantLabel ? ` ${i.variantLabel}` : ''} x${i.quantity}`).join(', '),
+      shipper: { name: settings?.displayName ?? 'Store', phone: settings?.supportPhone ?? '', email: settings?.supportEmail ?? '' },
+    }
+    const result = await adapter.book(input, secrets.credentials, secrets.config)
+    if (!result.ok) throw new AdminError(result.error) // nothing was changed here
+    await recordServiceResult(admin.storeId, courier, null)
+
+    try {
+      return { ...(await addShipment(admin, orderId, courier, result.trackingNo, result.raw)), name }
+    } catch (e) {
+      // The courier HAS the parcel but saving failed: say so loudly, so it is never booked a second time.
+      console.error('[book shipment] booked but not saved', courier, result.trackingNo, e)
+      throw new AdminError(`The parcel WAS booked with ${name} (tracking no. ${result.trackingNo}) but could not be saved here. Use “Add shipment” with this number so it is not booked twice.`)
+    }
+  } finally {
+    booking.delete(orderId)
+  }
 }

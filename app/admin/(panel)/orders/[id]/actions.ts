@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { adminOrError } from '@/lib/auth/guard'
 import { audit } from '@/lib/audit'
-import { AdminError, addShipment, cancelOrder, changeOrderStatus, confirmPayment, rejectPayment } from '@/lib/admin/orders'
+import { AdminError, addShipment, bookShipment, cancelOrder, changeOrderStatus, confirmPayment, rejectPayment } from '@/lib/admin/orders'
 import type { OrderStatus } from '@/lib/admin/order-rules'
 import type { ActionState } from '@/components/admin/ActionForm'
 
@@ -61,5 +61,16 @@ export async function shipmentAction(_: ActionState, fd: FormData): Promise<Acti
     const r = await addShipment(g.admin, orderId, str(fd, 'courier'), str(fd, 'trackingNo'))
     await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'order.shipment', entity: 'Order', entityId: orderId, after: { courier: r.courier, trackingNo: r.trackingNo } })
     return done(orderId, 'Shipment added; the customer can now see it when tracking.')
+  } catch (e) { return fail(e) }
+}
+
+/** Books the parcel through the courier's API (the store's own account), then records it. */
+export async function bookCourierAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const g = await adminOrError('orders.update'); if ('error' in g) return g
+  const orderId = str(fd, 'orderId')
+  try {
+    const r = await bookShipment(g.admin, orderId, str(fd, 'courier'))
+    await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'order.shipment.auto', entity: 'Order', entityId: orderId, after: { courier: r.courier, trackingNo: r.trackingNo } })
+    return done(orderId, `Booked with ${r.name}. Tracking number ${r.trackingNo} was saved and the customer can see it.`)
   } catch (e) { return fail(e) }
 }

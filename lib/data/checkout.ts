@@ -42,6 +42,8 @@ export interface CheckoutConfig {
   maxQuantity: number
   trackingEnabled: boolean
   trackingRequiresPhoneLast4: boolean
+  /** The store makes customers verify their phone with a code before ordering. */
+  phoneVerification: boolean
 }
 
 function parseWallets(extra: unknown): Wallet[] {
@@ -101,6 +103,7 @@ export async function getCheckoutConfig(store: { id: string; slug: string }): Pr
     maxQuantity,
     trackingEnabled: settings?.orderTrackingEnabled ?? true,
     trackingRequiresPhoneLast4: settings?.trackingRequiresPhoneLast4 ?? true,
+    phoneVerification: settings?.phoneVerificationEnabled ?? false,
   }
 }
 

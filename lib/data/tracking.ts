@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { lastFour, maskedName } from '@/lib/phone'
+import { courierName, readCourierConfig, trackingLink } from '@/lib/couriers/config'
 
 export const STATUS_STEPS = ['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'] as const
 
@@ -14,7 +15,6 @@ export const STATUS_LABEL: Record<string, string> = {
   RETURNED: 'Returned',
 }
 
-const COURIER_NAME: Record<string, string> = { tcs: 'TCS', leopards: 'Leopards Courier', postex: 'PostEx' }
 
 export interface TrackedOrder {
   number: string
@@ -26,7 +26,7 @@ export interface TrackedOrder {
   total: number
   amountDue: number
   paymentNote: string
-  courier: { name: string; trackingNo: string | null } | null
+  courier: { name: string; trackingNo: string | null; link: string | null } | null
   timeline: { status: string; label: string; note: string | null; at: string }[]
 }
 
@@ -45,7 +45,7 @@ export async function lookupOrder(
   opts: { requirePhoneLast4: boolean; phoneLast4?: string; timezone?: string }
 ): Promise<TrackedOrder | null> {
   const tz = opts.timezone ?? 'Asia/Karachi'
-  const order = await db.order.findFirst({
+  const [order, settings] = await Promise.all([db.order.findFirst({
     where: { storeId, trackingCode: code },
     include: {
       items: { select: { name: true, variantLabel: true, quantity: true } },
@@ -53,7 +53,7 @@ export async function lookupOrder(
       shipments: { orderBy: { bookedAt: 'desc' }, take: 1 },
       payments: { select: { method: true, purpose: true, status: true, amount: true }, orderBy: { createdAt: 'asc' } },
     },
-  })
+  }), db.storeSettings.findUnique({ where: { storeId }, select: { extra: true } })])
   if (!order) return null
   if (opts.requirePhoneLast4 && (opts.phoneLast4 ?? '') !== lastFour(order.customerPhone)) return null
 
@@ -66,6 +66,7 @@ export async function lookupOrder(
   else paymentNote = 'Cash on delivery'
 
   const shipment = order.shipments[0]
+  const courierConfig = readCourierConfig(settings?.extra)
   return {
     number: order.number,
     customerLabel: maskedName(order.customerName),
@@ -76,7 +77,7 @@ export async function lookupOrder(
     total: order.total.toNumber(),
     amountDue: order.amountDue.toNumber(),
     paymentNote,
-    courier: shipment ? { name: COURIER_NAME[shipment.courier] ?? shipment.courier, trackingNo: shipment.courierTrackingNo } : null,
+    courier: shipment ? { name: courierName(courierConfig, shipment.courier), trackingNo: shipment.courierTrackingNo, link: trackingLink(courierConfig, shipment.courier, shipment.courierTrackingNo) } : null,
     timeline: order.history.map((h) => ({ status: h.status, label: STATUS_LABEL[h.status] ?? h.status, note: h.note, at: fmt(h.createdAt, tz) })),
   }
 }

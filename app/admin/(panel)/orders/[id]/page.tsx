@@ -5,10 +5,12 @@ import { can } from '@/lib/auth/permissions'
 import { db } from '@/lib/db'
 import { formatPrice } from '@/lib/format'
 import { formatPkt } from '@/lib/admin/dates'
-import { COURIERS, NEXT_STATUSES, label, type OrderStatus } from '@/lib/admin/order-rules'
+import { NEXT_STATUSES, label, type OrderStatus } from '@/lib/admin/order-rules'
 import StatusBadge from '@/components/admin/StatusBadge'
 import ActionForm from '@/components/admin/ActionForm'
-import { cancelAction, paymentAction, shipmentAction, statusAction } from './actions'
+import { courierName, courierOptions, trackingLink } from '@/lib/couriers/config'
+import { loadCourierSetup } from '@/lib/couriers/store'
+import { bookCourierAction, cancelAction, paymentAction, shipmentAction, statusAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 const btn = 'rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50'
@@ -16,6 +18,7 @@ const btn = 'rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50'
 export default async function OrderDetail({ params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin('orders.view')
   const { id } = await params
+  const setupPromise = loadCourierSetup(admin.storeId)
   // Scoped by storeId: another store's order id simply "does not exist".
   const order = await db.order.findFirst({
     where: { id, storeId: admin.storeId },
@@ -25,6 +28,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
     },
   })
   if (!order) notFound()
+  const { config: courierConfig, connected } = await setupPromise
+  const couriers = courierOptions(courierConfig, connected)
 
   const canUpdate = can(admin.role, 'orders.update')
   const canCancel = can(admin.role, 'orders.cancel')
@@ -95,17 +100,40 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
 
           <section className="rounded-xl bg-white border border-slate-200 p-5">
             <h2 className="font-semibold mb-3">Shipments</h2>
-            {order.shipments.map((s) => (
-              <p key={s.id} className="text-sm mb-1">{COURIERS.find((c) => c.key === s.courier)?.name ?? s.courier} · <span className="font-mono">{s.courierTrackingNo}</span></p>
-            ))}
+            {order.shipments.map((s) => {
+              const link = trackingLink(courierConfig, s.courier, s.courierTrackingNo)
+              return (
+                <p key={s.id} className="text-sm mb-1">
+                  {courierName(courierConfig, s.courier)} · <span className="font-mono">{s.courierTrackingNo}</span>
+                  {link && <a href={link} target="_blank" rel="noopener noreferrer" className="ml-2 underline text-slate-600">Track on courier site</a>}
+                </p>
+              )
+            })}
             {order.shipments.length === 0 && <p className="text-sm text-slate-500 mb-2">Not shipped yet.</p>}
-            {canShip && (
+            {canShip && couriers.length === 0 && (
+              <p className="text-sm text-amber-700">No courier is switched on. Turn one on in Settings, then Couriers.</p>
+            )}
+            {canShip && couriers.length > 0 && order.shipments.length === 0 && couriers.some((c) => c.auto) && (
+              <div className="mt-3 rounded-lg bg-slate-50 border border-slate-200 p-3">
+                <p className="text-sm font-medium mb-2">Book automatically (uses your own courier account)</p>
+                <div className="flex flex-wrap gap-2">
+                  {couriers.filter((c) => c.auto).map((c) => (
+                    <ActionForm key={c.key} action={bookCourierAction} confirm={`Book this parcel with ${c.name} now? Cash to collect: ${formatPrice(order.total.toNumber() - order.amountPaid.toNumber())}.`}>
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input type="hidden" name="courier" value={c.key} />
+                      <button className={`${btn} bg-emerald-700 text-white`}>Book with {c.name}</button>
+                    </ActionForm>
+                  ))}
+                </div>
+              </div>
+            )}
+            {canShip && couriers.length > 0 && (
               <ActionForm action={shipmentAction} className="mt-3 flex flex-wrap gap-2 items-start">
                 <input type="hidden" name="orderId" value={order.id} />
-                <select name="courier" required className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                  {COURIERS.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
+                <select name="courier" required defaultValue={couriers[0].key} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" aria-label="Courier">
+                  {couriers.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
                 </select>
-                <input name="trackingNo" required placeholder="Tracking number" maxLength={40} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                <input name="trackingNo" required placeholder="Tracking number (booked on the courier’s site)" maxLength={40} className="rounded-lg border border-slate-300 px-3 py-2 text-sm min-w-64" />
                 <button className={`${btn} bg-slate-900 text-white`}>Add shipment</button>
               </ActionForm>
             )}

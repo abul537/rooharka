@@ -50,11 +50,4 @@ export function afterPaymentReceived(total: number, alreadyPaid: number, receive
   return { amountPaid, amountDue, paymentStatus: amountDue <= 0 ? 'PAID' : amountPaid > 0 ? 'PARTIALLY_PAID' : 'UNPAID' }
 }
 
-export const COURIERS = [
-  { key: 'tcs', name: 'TCS' },
-  { key: 'leopards', name: 'Leopards Courier' },
-  { key: 'postex', name: 'PostEx' },
-  { key: 'other', name: 'Other courier' },
-] as const
-
 export const isValidTrackingNo = (v: string) => /^[A-Za-z0-9\-_/]{4,40}$/.test(v)

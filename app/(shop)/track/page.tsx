@@ -115,6 +115,7 @@ export default async function TrackPage({ searchParams }: Props) {
               <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm">
                 <p className="font-medium text-emerald-900">With courier: {order.courier.name}</p>
                 {order.courier.trackingNo && <p className="text-emerald-800">Courier tracking number: <span className="font-mono">{order.courier.trackingNo}</span></p>}
+                {order.courier.link && <p><a href={order.courier.link} target="_blank" rel="noopener noreferrer" className="text-emerald-900 underline">Track on the courier’s website</a></p>}
               </div>
             )}
 

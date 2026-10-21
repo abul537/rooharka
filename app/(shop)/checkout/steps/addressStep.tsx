@@ -20,6 +20,8 @@ interface AddressStepProps {
   initialData?: Partial<AddressFormData>;
   /** Field errors reported by the server (shown under the matching input). */
   serverErrors?: Partial<Record<string, string>>;
+  /** The number was verified by a code: it cannot be edited here (the server only accepts this number). */
+  phoneLocked?: boolean;
 }
 
 type Errors = Partial<Record<keyof AddressFormData, string>>;
@@ -32,7 +34,7 @@ const inputClass = (hasError: boolean) =>
 const selectClass = (hasError: boolean, disabled: boolean) =>
   `${inputClass(hasError)} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
 
-export default function AddressStep({ fields, onNext, initialData, serverErrors }: AddressStepProps) {
+export default function AddressStep({ fields, onNext, initialData, serverErrors, phoneLocked }: AddressStepProps) {
   const [formData, setFormData] = useState<AddressFormData>({
     firstName: initialData?.firstName || '',
     lastName: initialData?.lastName || '',
@@ -173,7 +175,9 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors 
           <Label htmlFor="phone" text={fields.phone.label} required />
           <input id="phone" type="tel" inputMode="tel" autoComplete="tel" value={formData.phone}
             onChange={(e) => handleChange('phone', e.target.value)} onBlur={() => markTouched('phone')}
-            className={inputClass(!!errorFor('phone', 'phone'))} placeholder="03001234567" />
+            readOnly={phoneLocked}
+            className={`${inputClass(!!errorFor('phone', 'phone'))} ${phoneLocked ? 'bg-gray-50 text-gray-700' : ''}`} placeholder="03001234567" />
+          {phoneLocked && <p className="mt-1 text-xs text-emerald-700">✓ Number verified. To use another number, <a href="/verify" className="underline">verify it first</a>.</p>}
           <ValidationMessage message={errorFor('phone', 'phone')} />
         </div>
       </div>

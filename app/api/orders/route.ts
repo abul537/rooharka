@@ -1,4 +1,6 @@
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { isPhoneVerified, otpCookieName, otpCookieOptions } from '@/lib/otp/service'
 import { getCurrentStore } from '@/lib/store'
 import { getCheckoutConfig } from '@/lib/data/checkout'
 import { validateOrderRequest } from '@/lib/orders/validate'
@@ -41,8 +43,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Please check the highlighted details.', fields: parsed.errors }, { status: 400 })
     }
 
+    // The OTP gate is enforced HERE, not only on the page: skipping the page and calling this API gets nothing.
+    if (config.phoneVerification) {
+      const jar = await cookies()
+      if (!isPhoneVerified(jar.get(otpCookieName())?.value, store.id, parsed.value.customer.phone)) {
+        return NextResponse.json({ error: 'Please verify your mobile number first.', code: 'PHONE_NOT_VERIFIED' }, { status: 403 })
+      }
+    }
+
     const order = await createOrder(config, parsed.value, { ip })
-    return NextResponse.json(order, { status: 201 })
+    const res = NextResponse.json(order, { status: 201 })
+    // One verification covers one order: the next purchase asks again.
+    if (config.phoneVerification) res.cookies.set(otpCookieName(), '', { ...otpCookieOptions(), maxAge: 0 })
+    return res
   } catch (error) {
     if (error instanceof OrderError) {
       const status = error.code === 'BLOCKED' ? 403 : 409

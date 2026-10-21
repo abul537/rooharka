@@ -4,6 +4,11 @@ import { LOCKED_FIELDS, TRUST_ICONS } from '@/lib/admin/settings-rules'
 import ActionForm from '@/components/admin/ActionForm'
 import ServiceCard from '@/components/admin/ServiceCard'
 import { loadServiceViews } from '@/lib/services/store-services'
+import { loadCourierConfig } from '@/lib/couriers/store'
+import CourierSettings from '@/components/admin/CourierSettings'
+import OtpSettings from '@/components/admin/OtpSettings'
+import { loadOtpSettings } from '@/lib/otp/service'
+import { DEFAULT_OTP_SETTINGS } from '@/lib/otp/rules'
 import { SERVICES } from '@/lib/services/registry'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveTrackingAction } from './actions'
@@ -23,7 +28,7 @@ const POLICY_TEXT: Record<string, string> = {
 
 export default async function SettingsPage() {
   const admin = await requireAdmin('settings.edit')
-  const [{ settings: s, wallets, fields, productPage: pp }, services] = await Promise.all([loadSettings(admin.storeId), loadServiceViews(admin.storeId)])
+  const [{ settings: s, wallets, fields, productPage: pp }, services, courierConfig, otp] = await Promise.all([loadSettings(admin.storeId), loadServiceViews(admin.storeId), loadCourierConfig(admin.storeId), loadOtpSettings(admin.storeId)])
   if (!s) return <p>Store settings are missing. Run the seed again.</p>
 
   return (
@@ -94,6 +99,10 @@ export default async function SettingsPage() {
           <button className={primaryBtn}>Save checkout form</button>
         </ActionForm>
       </Card>
+
+      <OtpSettings otp={otp ?? DEFAULT_OTP_SETTINGS} views={services} />
+
+      <CourierSettings config={courierConfig} views={services} />
 
       <Card title="Order tracking" hint="Customers track orders at /track with their tracking code.">
         <ActionForm action={saveTrackingAction} className="space-y-3">

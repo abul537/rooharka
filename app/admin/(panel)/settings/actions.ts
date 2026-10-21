@@ -5,6 +5,12 @@ import { adminOrError } from '@/lib/auth/guard'
 import { audit } from '@/lib/audit'
 import * as rules from '@/lib/admin/settings-rules'
 import * as svc from '@/lib/admin/settings'
+import { parseCourierForm } from '@/lib/couriers/config'
+import { saveCourierConfig } from '@/lib/couriers/store'
+import { parseOtpSettings, resolveProvider } from '@/lib/otp/rules'
+import { saveOtpSettings, sendTestMessage } from '@/lib/otp/service'
+import { loadServiceViews } from '@/lib/services/store-services'
+import { rateLimit } from '@/lib/rate-limit'
 import type { ActionState } from '@/components/admin/ActionForm'
 
 /** Same pipeline for every section: permission -> validate -> save -> audit -> refresh pages. */
@@ -48,4 +54,42 @@ export async function saveTrackingAction(_: ActionState, fd: FormData): Promise<
 }
 export async function saveProductPageAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run('product-page', fd, rules.parseProductPage, svc.saveProductPage, ['/admin/settings', '/product'], 'Product page saved.')
+}
+export async function saveCouriersAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('couriers', fd, parseCourierForm, saveCourierConfig, ['/admin/settings', '/admin/orders'], 'Couriers saved. They are available on the order page now.')
+}
+
+/** Saves the phone-verification switch. It cannot be switched ON without a working message provider behind it. */
+export async function saveOtpAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const g = await adminOrError('settings.edit'); if ('error' in g) return g
+  const parsed = parseOtpSettings(fd)
+  if (!parsed.ok) return { error: parsed.error }
+  try {
+    if (parsed.value.enabled) {
+      const provider = resolveProvider((await loadServiceViews(g.admin.storeId)).values(), parsed.value.channel)
+      if ('problem' in provider) return { error: `Not switched on. ${provider.problem}` }
+    }
+    await saveOtpSettings(g.admin.storeId, parsed.value)
+  } catch (e) {
+    console.error('[settings otp]', e)
+    return { error: 'Could not save. Nothing was changed; please try again.' }
+  }
+  await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'settings.otp', entity: 'StoreSettings', after: parsed.value })
+  for (const p of ['/admin/settings', '/checkout', '/verify']) revalidatePath(p)
+  return { ok: parsed.value.enabled ? 'Phone verification is ON. Customers must verify their number before checkout.' : 'Phone verification is OFF.' }
+}
+
+export async function testOtpAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const g = await adminOrError('settings.edit'); if ('error' in g) return g
+  // Every test is a real, billed message: slow down accidental repeats.
+  const limit = rateLimit(`otp-test:${g.admin.id}`, 5, 10 * 60 * 1000)
+  if (!limit.ok) return { error: 'Too many test messages. Please wait a few minutes.' }
+  try {
+    const channel = String(fd.get('otpChannel') ?? '') === 'WHATSAPP' ? 'WHATSAPP' : 'SMS'
+    const r = await sendTestMessage(g.admin.storeId, fd.get('testPhone'), channel)
+    return r.ok ? { ok: 'Test message sent. Check your phone.' } : { error: r.error }
+  } catch (e) {
+    console.error('[otp test]', e)
+    return { error: 'The test could not be completed. Please try again.' }
+  }
 }

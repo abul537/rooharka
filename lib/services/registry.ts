@@ -44,7 +44,7 @@ export const SERVICES: ServiceDef[] = [
     credentials: [{ name: 'secretValue', label: 'API key / password (optional)', secret: true, help: 'Inserted wherever your link or body says {secret}.' }],
     config: [
       { name: 'method', label: 'Method', required: true, placeholder: 'GET or POST', pattern: /^(GET|POST)$/, patternHint: 'GET or POST' },
-      { name: 'url', label: 'Address (https only)', required: true, placeholder: 'https://sms.example.pk/api?key={secret}&to={to}&text={message}', help: 'Use {to} for the phone number, {message} for the text and {secret} for your key.' },
+      { name: 'url', label: 'Address (https only)', required: true, placeholder: 'https://sms.example.pk/api?key={secret}&to={to}&text={message}', pattern: /^https:\/\/\S{4,500}$/i, patternHint: 'It must start with https:// and contain no spaces.', help: 'Use {to} for the number as 923001234567 (or {to_local} for 03001234567), {message} for the text and {secret} for your key.' },
       { name: 'body', label: 'POST body (optional)', placeholder: 'to={to}&message={message}&key={secret}', help: 'Form-style text. Leave empty for GET.' },
       { name: 'successText', label: 'Success text (optional)', placeholder: 'OK', help: 'If set, the provider reply must contain this text, otherwise it is treated as failed.' },
     ],

@@ -1,4 +1,5 @@
 import type { SavedFields } from '@/lib/services/registry'
+import { ADAPTERS } from '@/lib/couriers/adapters'
 
 export type TestResult = { ok: true; message: string } | { ok: false; error: string }
 type Fetch = typeof fetch
@@ -25,6 +26,9 @@ export async function testConnection(key: string, c: SavedFields, config: SavedF
       if (r.ok) return { ok: true, message: 'Connected to Twilio.' }
       return { ok: false, error: r.status === 401 ? 'Twilio rejected the Account SID or Auth token.' : `Twilio answered with an error (${r.status}).` }
     }
+    case 'postex':
+    case 'leopards':
+      return ADAPTERS[key].check(c, config, f) // read-only: nothing is booked
     default:
       return { ok: false, error: 'This service is tested by sending a real message or booking; use its own test button.' }
   }
