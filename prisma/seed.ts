@@ -69,8 +69,9 @@ async function seedProduct(storeId: string) {
     })
   }
 
-  // Sections are re-created every time so this file stays the single source of the starter copy.
-  await db.productSection.deleteMany({ where: { productId: product.id } })
+  // Starter copy is added only while the product has no sections, so running the seed again never wipes
+  // what the store owner edited in the admin.
+  if ((await db.productSection.count({ where: { productId: product.id } })) > 0) return
   await db.productSection.createMany({
     data: [
       { type: 'KEY_BENEFITS', tab: null, title: 'Key Benefits:', sortOrder: 0, items: li(
@@ -121,7 +122,7 @@ async function seedProduct(storeId: string) {
         { title: 'Can I use it with other medications?', text: "Darwaish is for external use only and generally safe. However, if you're on blood thinners or have sensitive medical conditions, consult your physician before use." },
         { title: 'How often should I apply?', text: '2-3 times daily for best results. Apply after showering for better absorption. For maintenance, once daily is sufficient.' },
         { title: 'What makes Darwaish different from other oils?', text: 'Our sacred formula combines traditional herbs with spiritual intention, focusing on reviving dormant muscles rather than just masking pain. We maintain ancestral preparation methods.' }] },
-    ],
+    ].map((section) => ({ productId: product.id, ...section })),
   })
 }
 
