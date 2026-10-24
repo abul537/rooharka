@@ -84,7 +84,7 @@ Run it again with the same email to reset a password (all of that person's sessi
 
 **Security design:** passwords hashed with scrypt; random session token in an httpOnly cookie (only its hash is stored); 5 wrong passwords lock the account 15 minutes; every page and action checks the signed-in user's role and filters data by their own store; every change is written to the audit log; admin pages are `noindex` and never cached.
 
-**Not built yet:** two-factor login (TOTP), password change screen (use `pnpm admin:create`), automatic courier status updates, CSMI owner dashboard.
+**Not built yet:** two-factor login (TOTP), password change screen (use `pnpm admin:create`), automatic courier status updates, per-store web addresses (one running site serves the store named in `DEFAULT_STORE_SLUG`).
 
 **Tests:** `pnpm test` runs the pure business-rule tests (order status rules, payment policies, validation, settings, passwords). Database code is verified by running the app.
 
@@ -113,3 +113,27 @@ Settings > **Couriers**. The owner chooses which companies they use (TCS, Leopar
 - **One-click booking** exists for PostEx and Leopards after the owner connects their own merchant account (keys are encrypted with `APP_SECRET`). A parcel is recorded only if the courier returns a valid tracking number; any other reply becomes a readable message and nothing is changed.
 - Adding another courier API later means one new adapter in `lib/couriers/adapters.ts`; nothing else changes.
 - **Beta notice:** the PostEx and Leopards calls follow the merchant API as documented to merchants but could not be tried against a live merchant account when they were written. Use "Test connection", then book one real parcel and check it with the courier before relying on it.
+
+## CSMI: the platform owner's dashboard (`/csmi`)
+
+Your own view across ALL stores. It is separate from the store dashboards: a store owner can never open it, and your login cannot open a store dashboard.
+
+**Create your login** (after `pnpm db:push`): `pnpm admin:create`, type `platform` as the store, then `owner` (full control) or `support` (can look, cannot change money or stores).
+
+| Page | What it shows or does |
+|---|---|
+| Overview | Monthly recurring revenue (MRR), yearly, profit and margin, collected this month, unpaid and overdue, at-risk and trial money, stores by status, who needs attention, top stores. 7 / 30 / 90 day views |
+| Stores | All stores with plan, monthly revenue, orders, sales, last order and health flags; filter and search. Add a store |
+| Store page | Plan and agreed price, status (suspend with a reason), that store's profit, services and their errors, invoices |
+| Billing | **Run billing** (safe to repeat), invoices, mark paid (bank / JazzCash / EasyPaisa / cash), cancel |
+| Plans | Your plans and prices |
+| Costs and profit | Your monthly running costs. Profit = MRR minus costs; a cost can belong to one store or be shared |
+| Services | Every service, how many stores use it, how many are failing, and your add-on fee per store |
+| Reports | One row per store, with CSV download |
+
+**How the numbers are decided** (all in `lib/csmi/rules.ts`, unit-tested):
+- MRR counts only stores that are **active with an active subscription**. Trials, past-due and suspended stores are shown separately, never inside MRR. A yearly plan counts as one twelfth per month. Add-on fees count for those stores too.
+- Costs are monthly. A store's own costs hit that store; shared costs are split equally across live stores.
+- A store needing attention: overdue invoice, failing integration (the owner's SMS, courier or photo account), no orders for 14 days, 30%+ cancelled or returned, open ticket, or active without a subscription.
+- Run billing: moves finished periods on, creates exactly one invoice per store per period, marks unpaid invoices past due as overdue and the store as past due. It never suspends a store by itself. Past-due stores are not billed again until settled. There is no scheduler yet: press the button, or call `runBilling()` from a scheduled job later.
+- Numbers come live from orders, so there is no nightly job to forget. Suspending a store closes its shop to customers within 30 seconds.

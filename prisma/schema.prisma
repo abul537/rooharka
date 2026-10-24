@@ -198,6 +198,7 @@ model Store {
   tickets       SupportTicket[]
   metrics       DailyStoreMetric[]
   usage         UsageRecord[]
+  costs         PlatformCost[]
   checkoutFields CheckoutField[]
   themes        StoreTheme[]
   contentBlocks ContentBlock[]
@@ -345,6 +346,24 @@ model UsageRecord {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([storeId, serviceKey, occurredAt])
+}
+
+/// YOUR monthly running costs (hosting, database, domains, support time), used for profit on the CSMI dashboard.
+/// storeId set = a cost of serving that one store; null = shared overhead, split equally across live stores.
+model PlatformCost {
+  id            String   @id @default(cuid())
+  storeId       String?
+  name          String
+  category      String   @default("other") // hosting | database | domain | messaging | support | other
+  monthlyAmount Decimal  @db.Decimal(12, 2)
+  isActive      Boolean  @default(true)
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  store Store? @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
 }
 
 /// Nightly roll-up so CSMI charts load instantly instead of scanning orders.

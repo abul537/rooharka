@@ -42,20 +42,25 @@ function ask(question: string, hidden = false): Promise<string> {
 }
 
 async function main() {
-  const slug = (await ask('Store slug [mppmhk]: ')).trim() || 'mppmhk'
-  const store = await db.store.findUnique({ where: { slug }, select: { id: true, name: true } })
-  if (!store) throw new Error(`No store with slug "${slug}". Run "pnpm db:seed" first.`)
+  const slug = (await ask('Store slug, or "platform" for the platform-owner (CSMI) login [mppmhk]: ')).trim().toLowerCase() || 'mppmhk'
+  const platform = slug === 'platform'
+  const store = platform ? null : await db.store.findUnique({ where: { slug }, select: { id: true, name: true } })
+  if (!platform && !store) throw new Error(`No store with slug "${slug}". Run "pnpm db:seed" first.`)
+  const storeId = store?.id ?? null
 
   const email = (await ask('Email: ')).trim().toLowerCase()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('That does not look like an email address.')
 
   const existing = await db.user.findUnique({ where: { email }, select: { id: true, storeId: true } })
-  if (existing && existing.storeId !== store.id) throw new Error('That email already belongs to another account.')
+  if (existing && existing.storeId !== storeId) throw new Error('That email already belongs to another account.')
 
-  const name = existing ? undefined : (await ask('Full name: ')).trim() || 'Store owner'
-  const roleInput = existing ? '' : (await ask('Role (owner / manager / staff) [owner]: ')).trim().toLowerCase() || 'owner'
-  const role = ({ owner: 'STORE_OWNER', manager: 'STORE_MANAGER', staff: 'STORE_STAFF' } as const)[roleInput as 'owner']
-  if (!existing && !role) throw new Error('Role must be owner, manager or staff.')
+  const name = existing ? undefined : (await ask('Full name: ')).trim() || (platform ? 'Platform owner' : 'Store owner')
+  const roles = platform
+    ? ({ owner: 'PLATFORM_OWNER', support: 'PLATFORM_SUPPORT' } as const)
+    : ({ owner: 'STORE_OWNER', manager: 'STORE_MANAGER', staff: 'STORE_STAFF' } as const)
+  const roleInput = existing ? '' : (await ask(`Role (${Object.keys(roles).join(' / ')}) [owner]: `)).trim().toLowerCase() || 'owner'
+  const role = (roles as unknown as Record<string, string>)[roleInput]
+  if (!existing && !role) throw new Error(`Role must be one of: ${Object.keys(roles).join(', ')}.`)
 
   const password = await ask('Password (at least 12 characters, hidden): ', true)
   const problem = passwordProblem(password, email)
@@ -68,8 +73,10 @@ async function main() {
     await db.session.deleteMany({ where: { userId: existing.id } }) // signs the user out everywhere
     console.log(`Password updated for ${email}. All their sessions were signed out.`)
   } else {
-    await db.user.create({ data: { email, name: name!, role: role!, passwordHash, storeId: store.id } })
-    console.log(`Created ${roleInput} login ${email} for store "${store.name}". Sign in at /admin/login`)
+    await db.user.create({ data: { email, name: name!, role: role as never, passwordHash, storeId } })
+    console.log(platform
+      ? `Created ${roleInput} login ${email} for the platform. Sign in at /csmi/login`
+      : `Created ${roleInput} login ${email} for store "${store!.name}". Sign in at /admin/login`)
   }
 }
 
