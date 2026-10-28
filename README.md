@@ -25,6 +25,7 @@ Multi-tenant e-commerce storefront + admin platform (Next.js 16, Prisma 7, Neon 
 | `pnpm db:studio` | Browse the database in your browser |
 | `pnpm db:push` | Sync the Prisma schema to the database (development) |
 | `pnpm db:seed` | Insert starter data (safe to repeat) |
+| `pnpm admin:reset-2fa you@example.com` | Switch off two-factor protection for a login whose phone AND recovery codes are lost |
 
 ## Project layout
 
@@ -84,7 +85,7 @@ Run it again with the same email to reset a password (all of that person's sessi
 
 **Security design:** passwords hashed with scrypt; random session token in an httpOnly cookie (only its hash is stored); 5 wrong passwords lock the account 15 minutes; every page and action checks the signed-in user's role and filters data by their own store; every change is written to the audit log; admin pages are `noindex` and never cached.
 
-**Not built yet:** two-factor login (TOTP), password change screen (use `pnpm admin:create`), automatic courier status updates, per-store web addresses (one running site serves the store named in `DEFAULT_STORE_SLUG`).
+**Not built yet:** automatic courier status updates, a scheduled billing job, a QR code on the two-factor setup screen (the setup key is typed instead).
 
 **Tests:** `pnpm test` runs the pure business-rule tests (order status rules, payment policies, validation, settings, passwords). Database code is verified by running the app.
 
@@ -137,3 +138,13 @@ Your own view across ALL stores. It is separate from the store dashboards: a sto
 - A store needing attention: overdue invoice, failing integration (the owner's SMS, courier or photo account), no orders for 14 days, 30%+ cancelled or returned, open ticket, or active without a subscription.
 - Run billing: moves finished periods on, creates exactly one invoice per store per period, marks unpaid invoices past due as overdue and the store as past due. It never suspends a store by itself. Past-due stores are not billed again until settled. There is no scheduler yet: press the button, or call `runBilling()` from a scheduled job later.
 - Numbers come live from orders, so there is no nightly job to forget. Suspending a store closes its shop to customers within 30 seconds.
+
+## Account security (both dashboards: "My security")
+
+- **Two-factor protection (TOTP).** Any login can turn it on from **My security**: add the setup key to an authenticator app (Google/Microsoft Authenticator, Authy, 1Password), type the 6-digit code once to prove it works, and save the 8 one-time **recovery codes** (shown only once). From then on, signing in needs the password **and** a code. A used code cannot be replayed; five wrong codes lock the login for 15 minutes; turning it off or renewing recovery codes needs the password and a current code. The CSMI shows a reminder bar to the platform owner until it is on. Lost phone and recovery codes: run `pnpm admin:reset-2fa you@example.com` on a computer that can reach the database.
+- **Change password.** Needs the current password, the same strength rules as account creation (12+ characters), and signs every other browser out.
+- Secrets are encrypted with `APP_SECRET` (changing it makes saved two-factor keys unreadable: nobody with two-factor on could sign in until reset).
+
+## Per-store web addresses
+
+Each store can have up to 5 web addresses (CSMI, open a store, **Web addresses**). Flow: add `shop.example.pk`, point the domain's DNS at your hosting (the hosting company shows the exact record, and the domain must also be added there), use **Check** to see what it points to, then **Switch live**. The shop then opens that store for anyone visiting that address (`www.` is optional). An address that is off never opens a shop. A suspended store's address shows no shop. Addresses that match nothing (localhost, preview links) use `DEFAULT_STORE_SLUG`. Changes take effect within 30 seconds. The store's dashboard (`/admin`) works on any of the addresses.

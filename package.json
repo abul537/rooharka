@@ -12,6 +12,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "admin:create": "tsx scripts/create-admin.ts",
+    "admin:reset-2fa": "tsx scripts/reset-2fa.ts",
     "test": "node --import ./tests/register.mjs --experimental-strip-types --test tests/*.test.ts",
     "db:ping": "tsx scripts/db-ping.ts",
     "address:check": "tsx scripts/check-address-data.ts"

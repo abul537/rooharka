@@ -432,6 +432,8 @@ model User {
   isActive      Boolean   @default(true)
   twoFactorSecretEnc String? // TOTP secret, encrypted
   twoFactorEnabled   Boolean @default(false)
+  twoFactorRecovery  String[] @default([]) // keyed hashes of the unused single-use recovery codes
+  twoFactorLastStep  Int?     // newest authenticator time step already accepted (stops code replay)
   failedLogins  Int       @default(0)
   lockedUntil   DateTime?
   lastLoginAt   DateTime?

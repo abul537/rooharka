@@ -70,3 +70,9 @@ export async function destroyCurrentSession() {
 
 /** Signs a user out everywhere (used after a password change). */
 export const destroyAllSessions = (userId: string) => db.session.deleteMany({ where: { userId } })
+
+/** Signs a user out everywhere EXCEPT this browser (used after a password change, so a stolen session dies but the person stays in). */
+export async function destroyOtherSessions(userId: string) {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value
+  await db.session.deleteMany({ where: { userId, ...(token ? { tokenHash: { not: sha256(token) } } : {}) } })
+}

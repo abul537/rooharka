@@ -30,7 +30,7 @@ export default async function NewStorePage() {
           <div className="sm:col-span-2"><button className={primaryBtn}>Add store</button></div>
         </ActionForm>
       </Card>
-      <p className="text-sm text-slate-600">Note: one running website serves one store until each store gets its own web address (set with DEFAULT_STORE_SLUG for now).</p>
+      <p className="text-sm text-slate-600">After adding the store, open it to give it a plan and its own web address.</p>
     </div>
   )
 }

@@ -11,6 +11,7 @@ const ITEMS = [
   { href: '/csmi/costs', label: 'Costs and profit' },
   { href: '/csmi/services', label: 'Services' },
   { href: '/csmi/reports', label: 'Reports' },
+  { href: '/csmi/security', label: 'My security' },
 ]
 
 export default function CsmiNav() {

@@ -4,8 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit'
 import { platformOrError } from '@/lib/csmi/guard'
-import { CsmiError, createStore, deleteCost, markInvoicePaid, runBilling, saveCost, savePlan, saveSubscription, setServiceFee, setStoreStatus, voidInvoice } from '@/lib/csmi/manage'
+import { CsmiError, addDomain, createStore, removeDomain, setDomainLive, deleteCost, markInvoicePaid, runBilling, saveCost, savePlan, saveSubscription, setServiceFee, setStoreStatus, voidInvoice } from '@/lib/csmi/manage'
 import { parseCost, parseMarkPaid, parseNewStore, parsePlan, parseServiceFee, parseStoreStatus, parseSubscription } from '@/lib/csmi/forms'
+import { parseDomainInput } from '@/lib/domains'
+import { lookupDomain } from '@/lib/dns-check'
 import type { Parsed } from '@/lib/admin/settings-rules'
 import type { ActionState } from '@/components/admin/ActionForm'
 
@@ -120,4 +122,41 @@ export async function voidInvoiceAction(_: ActionState, fd: FormData): Promise<A
     const r = await voidInvoice(id)
     return { message: `Invoice ${r.number} cancelled.`, storeId: r.storeId, entity: 'Invoice', entityId: id }
   }, ['/csmi/billing', '/csmi/stores'])
+}
+
+// ------------------------------------------------------------ web addresses
+export async function addDomainAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const storeId = str(fd, 'storeId')
+  return manage('domain.add', async () => {
+    const p = parseDomainInput(str(fd, 'host'))
+    if (!p.ok) throw new CsmiError(p.error)
+    const d = await addDomain(storeId, p.host)
+    return { message: `${d.host} added. It is OFF until you point it at the platform and switch it live.`, storeId, entity: 'StoreDomain', entityId: d.id, after: { host: d.host } }
+  }, [`/csmi/stores/${storeId}`])
+}
+
+export async function setDomainLiveAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const storeId = str(fd, 'storeId'), id = str(fd, 'domainId'), live = str(fd, 'live') === '1'
+  return manage('domain.live', async () => {
+    await setDomainLive(storeId, id, live)
+    return { message: live ? 'Live. Customers can now reach the shop on this address (within 30 seconds).' : 'Switched off. The address no longer opens the shop (within 30 seconds).', storeId, entity: 'StoreDomain', entityId: id, after: { live } }
+  }, [`/csmi/stores/${storeId}`])
+}
+
+export async function removeDomainAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const storeId = str(fd, 'storeId'), id = str(fd, 'domainId')
+  return manage('domain.remove', async () => {
+    const host = await removeDomain(storeId, id)
+    return { message: `${host} removed.`, storeId, entity: 'StoreDomain', entityId: id, after: { host } }
+  }, [`/csmi/stores/${storeId}`])
+}
+
+/** Read-only: shows where the address points. View permission is enough. */
+export async function checkDomainAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const g = await platformOrError('csmi.view'); if ('error' in g) return g
+  const p = parseDomainInput(str(fd, 'host'))
+  if (!p.ok) return { error: p.error }
+  const r = await lookupDomain(p.host)
+  if (!r.cname.length && !r.a.length) return { error: `${p.host} does not point anywhere yet (or DNS has not updated). DNS changes can take from a few minutes to a day.` }
+  return { ok: `${p.host} points to: ${[...r.cname.map((c) => `CNAME ${c}`), ...r.a.map((a) => `A ${a}`)].join(', ')}. Compare this with what your hosting company asks for.` }
 }

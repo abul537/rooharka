@@ -10,6 +10,7 @@ const ITEMS = [
   { href: '/admin/categories', label: 'Categories' },
   { href: '/admin/customers', label: 'Customers' },
   { href: '/admin/settings', label: 'Settings' },
+  { href: '/admin/security', label: 'My security' },
 ]
 
 export default function AdminNav({ allowed }: { allowed: string[] }) {

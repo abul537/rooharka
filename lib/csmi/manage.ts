@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import type { CostFormInput, NewStoreInput, PlanInput, StatusInput, SubscriptionInput } from '@/lib/csmi/forms'
+import { MAX_DOMAINS_PER_STORE } from '@/lib/domains'
 import { addPeriod, intervalOf, invoiceLines, invoiceTotals, nextInvoiceNumber, periodPrice, type BillingInterval } from '@/lib/csmi/rules'
 
 /** A problem whose message is safe to show to the platform owner. */
@@ -45,6 +46,39 @@ export async function setStoreStatus(storeId: string, input: StatusInput) {
     data: { status: input.status, suspendedAt: input.status === 'SUSPENDED' ? new Date() : null, ...(input.status === 'ACTIVE' ? { onboardedAt: new Date() } : {}) },
   })
   return { before: store.status, after: input.status, name: store.name }
+}
+
+// ------------------------------------------------------------ web addresses
+/** Adds a web address to a store. It starts switched OFF (not live) until the owner has pointed the domain at the platform. */
+export async function addDomain(storeId: string, host: string) {
+  const store = await db.store.findUnique({ where: { id: storeId }, select: { id: true, _count: { select: { domains: true } } } })
+  if (!store) throw new CsmiError('Store not found.')
+  if (store._count.domains >= MAX_DOMAINS_PER_STORE) throw new CsmiError(`A store can have at most ${MAX_DOMAINS_PER_STORE} web addresses.`)
+  try {
+    return await db.storeDomain.create({ data: { storeId, host, isPrimary: store._count.domains === 0 }, select: { id: true, host: true } })
+  } catch (e) {
+    if (isUnique(e)) throw new CsmiError('That web address is already used by a store.')
+    throw e
+  }
+}
+
+/** Switches an address live (customers reach the shop on it) or off. Scoped to the store, so an id from another store cannot be touched. */
+export async function setDomainLive(storeId: string, domainId: string, live: boolean) {
+  const r = await db.storeDomain.updateMany({ where: { id: domainId, storeId }, data: { verifiedAt: live ? new Date() : null } })
+  if (r.count === 0) throw new CsmiError('Web address not found.')
+}
+
+export async function removeDomain(storeId: string, domainId: string) {
+  const row = await db.storeDomain.findFirst({ where: { id: domainId, storeId }, select: { id: true, host: true, isPrimary: true } })
+  if (!row) throw new CsmiError('Web address not found.')
+  await db.$transaction(async (tx) => {
+    await tx.storeDomain.delete({ where: { id: row.id } })
+    if (row.isPrimary) { // keep one primary if any address is left
+      const next = await tx.storeDomain.findFirst({ where: { storeId }, orderBy: { createdAt: 'asc' }, select: { id: true } })
+      if (next) await tx.storeDomain.update({ where: { id: next.id }, data: { isPrimary: true } })
+    }
+  })
+  return row.host
 }
 
 // ------------------------------------------------------------ subscriptions

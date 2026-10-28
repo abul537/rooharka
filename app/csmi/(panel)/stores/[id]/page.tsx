@@ -9,7 +9,7 @@ import { formatPkt } from '@/lib/admin/dates'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { Flags, Pill, Stat, pct } from '@/components/csmi/Pills'
-import { saveSubscriptionAction, setStatusAction } from '../../actions'
+import { addDomainAction, checkDomainAction, removeDomainAction, saveSubscriptionAction, setDomainLiveAction, setStatusAction } from '../../actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,13 +17,14 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
   const user = await requirePlatform()
   const { id } = await params
   const manage = canPlatform(user.role, 'csmi.manage')
-  const [p, plans, invoices, services, sub, costs] = await Promise.all([
+  const [p, plans, invoices, services, sub, costs, domains] = await Promise.all([
     loadPlatform(30),
     db.plan.findMany({ orderBy: { monthlyPrice: 'asc' }, select: { id: true, name: true, isActive: true } }),
     db.invoice.findMany({ where: { storeId: id }, orderBy: { createdAt: 'desc' }, take: 12 }),
     db.storeService.findMany({ where: { storeId: id }, include: { service: { select: { name: true, type: true } } }, orderBy: { serviceKey: 'asc' } }),
     db.subscription.findUnique({ where: { storeId: id } }),
     db.platformCost.findMany({ where: { storeId: id }, orderBy: { createdAt: 'desc' } }),
+    db.storeDomain.findMany({ where: { storeId: id }, orderBy: { createdAt: 'asc' } }),
   ])
   const r = p.rows.find((x) => x.id === id)
   if (!r) notFound()
@@ -119,6 +120,37 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
           )}
         </section>
       </div>
+
+      <Card title="Web addresses" hint="Each store opens on its own address, such as shop.example.pk. Add it here, point the domain at your hosting (the hosting company shows the exact DNS record), then switch it live. An address that is off never opens the shop. Until a store has a live address, it is served only where DEFAULT_STORE_SLUG points.">
+        {domains.length === 0 ? <p className="text-sm text-slate-500 mb-3">No web address yet.</p> : (
+          <ul className="divide-y divide-slate-100 text-sm mb-4">
+            {domains.map((d) => (
+              <li key={d.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium break-all">{d.host}{d.isPrimary && <span className="ml-2 text-xs text-slate-500">main</span>} <span className={d.verifiedAt ? 'text-emerald-700 text-xs' : 'text-amber-700 text-xs'}>{d.verifiedAt ? 'live' : 'off'}</span></span>
+                {manage && (
+                  <span className="flex items-center gap-3">
+                    <ActionForm action={setDomainLiveAction}><input type="hidden" name="storeId" value={r.id} /><input type="hidden" name="domainId" value={d.id} /><input type="hidden" name="live" value={d.verifiedAt ? '0' : '1'} /><button className="underline">{d.verifiedAt ? 'Switch off' : 'Switch live'}</button></ActionForm>
+                    <ActionForm action={removeDomainAction} confirm={`Remove ${d.host}?`}><input type="hidden" name="storeId" value={r.id} /><input type="hidden" name="domainId" value={d.id} /><button className="underline text-red-700">Remove</button></ActionForm>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="grid sm:grid-cols-2 gap-4">
+          {manage && (
+            <ActionForm action={addDomainAction} className="space-y-2">
+              <input type="hidden" name="storeId" value={r.id} />
+              <Field label="Add a web address"><input name="host" placeholder="shop.example.pk" required maxLength={253} className={inputCls} /></Field>
+              <button className={primaryBtn}>Add address</button>
+            </ActionForm>
+          )}
+          <ActionForm action={checkDomainAction} className="space-y-2">
+            <Field label="Check where an address points" hint="Shows its DNS records. Nothing is changed."><input name="host" placeholder="shop.example.pk" defaultValue={domains[0]?.host ?? ''} required maxLength={253} className={inputCls} /></Field>
+            <button className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium hover:bg-slate-50">Check</button>
+          </ActionForm>
+        </div>
+      </Card>
 
       {costs.length > 0 && (
         <section className="rounded-xl bg-white border border-slate-200 p-5">

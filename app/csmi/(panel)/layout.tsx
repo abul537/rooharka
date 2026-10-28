@@ -1,10 +1,13 @@
 import { requirePlatform } from '@/lib/csmi/guard'
 import { csmiLogoutAction } from '../login/actions'
 import CsmiNav from '@/components/csmi/CsmiNav'
+import Link from 'next/link'
+import { twoFactorStatus } from '@/lib/auth/twofactor'
 
 // Every page inside this group requires a signed-in platform owner or support member.
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const user = await requirePlatform()
+  const twoFactor = await twoFactorStatus(user.id)
   return (
     <div className="lg:flex min-h-screen">
       <aside className="lg:w-60 lg:shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-4 lg:p-5">
@@ -22,7 +25,14 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           <form action={csmiLogoutAction}><button className="text-slate-600 underline">Sign out</button></form>
         </div>
       </aside>
-      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-10">{children}</main>
+      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-10">
+        {!twoFactor.enabled && (
+          <div role="note" className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+            <strong>Protect this login.</strong> It controls every store and all the money. <Link href="/csmi/security" className="underline font-medium">Turn on two-factor protection</Link> (takes two minutes).
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   )
 }
