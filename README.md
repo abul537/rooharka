@@ -85,7 +85,7 @@ Run it again with the same email to reset a password (all of that person's sessi
 
 **Security design:** passwords hashed with scrypt; random session token in an httpOnly cookie (only its hash is stored); 5 wrong passwords lock the account 15 minutes; every page and action checks the signed-in user's role and filters data by their own store; every change is written to the audit log; admin pages are `noindex` and never cached.
 
-**Not built yet:** automatic courier status updates, a scheduled billing job, a QR code on the two-factor setup screen (the setup key is typed instead).
+**Not built yet:** a QR code on the two-factor setup screen (the setup key is typed instead), automatic status for TCS and custom couriers (they have no API here: update those orders by hand).
 
 **Tests:** `pnpm test` runs the pure business-rule tests (order status rules, payment policies, validation, settings, passwords). Database code is verified by running the app.
 
@@ -136,7 +136,7 @@ Your own view across ALL stores. It is separate from the store dashboards: a sto
 - MRR counts only stores that are **active with an active subscription**. Trials, past-due and suspended stores are shown separately, never inside MRR. A yearly plan counts as one twelfth per month. Add-on fees count for those stores too.
 - Costs are monthly. A store's own costs hit that store; shared costs are split equally across live stores.
 - A store needing attention: overdue invoice, failing integration (the owner's SMS, courier or photo account), no orders for 14 days, 30%+ cancelled or returned, open ticket, or active without a subscription.
-- Run billing: moves finished periods on, creates exactly one invoice per store per period, marks unpaid invoices past due as overdue and the store as past due. It never suspends a store by itself. Past-due stores are not billed again until settled. There is no scheduler yet: press the button, or call `runBilling()` from a scheduled job later.
+- Run billing: moves finished periods on, creates exactly one invoice per store per period, marks unpaid invoices past due as overdue and the store as past due. It never suspends a store by itself. Past-due stores are not billed again until settled. It also runs by itself every day (see Scheduled jobs below); the button does the same work.
 - Numbers come live from orders, so there is no nightly job to forget. Suspending a store closes its shop to customers within 30 seconds.
 
 ## Account security (both dashboards: "My security")
@@ -148,3 +148,21 @@ Your own view across ALL stores. It is separate from the store dashboards: a sto
 ## Per-store web addresses
 
 Each store can have up to 5 web addresses (CSMI, open a store, **Web addresses**). Flow: add `shop.example.pk`, point the domain's DNS at your hosting (the hosting company shows the exact record, and the domain must also be added there), use **Check** to see what it points to, then **Switch live**. The shop then opens that store for anyone visiting that address (`www.` is optional). An address that is off never opens a shop. A suspended store's address shows no shop. Addresses that match nothing (localhost, preview links) use `DEFAULT_STORE_SLUG`. Changes take effect within 30 seconds. The store's dashboard (`/admin`) works on any of the addresses.
+
+## Scheduled jobs (billing and courier status)
+
+Two jobs run by themselves. Both are web addresses the hosting scheduler calls; both refuse to run without the secret, so the internet can never trigger them.
+
+| Job | Address | What it does | Default schedule (`vercel.json`) |
+|---|---|---|---|
+| Billing | `/api/cron/billing` | Same as CSMI "Run billing": one invoice per store per period, marks late invoices overdue | daily, 02:00 Pakistan time |
+| Courier status | `/api/cron/courier-sync` | Asks PostEx / Leopards where in-flight parcels are (read-only) | daily, 10:00 Pakistan time |
+
+**Set up once:** add `CRON_SECRET` (24+ random characters, `openssl rand -base64 32`) to the server's environment and redeploy. On Vercel the scheduler then sends it automatically. On other hosting (or for more frequent courier checks on a plan that allows it), call the address with the header `Authorization: Bearer <CRON_SECRET>` from any scheduler (for example cron-job.org). Courier checks can run as often as every 30 minutes; billing once a day is plenty.
+
+**Safety:** a job never overlaps itself (a database lock: pressing the button while the schedule runs does nothing twice), one failing store or parcel never stops the rest, and every run is saved. CSMI Billing shows "Automatic billing: working / late / failed" and the latest run.
+
+### Courier status updates
+- For **PostEx and Leopards** parcels (booked here or typed in), the courier's news is saved on the parcel and the order page shows it. **Refresh from courier** on an order asks right now and shows exactly what the courier said.
+- **Orders move by themselves only if the owner switches on** "Update my orders automatically from the courier" (Settings, Couriers; off by default). Then out for delivery / delivered / returned follow the courier. Delivered records the cash collected, exactly as pressing Delivered by hand. Cancelled or already finished orders are never touched, and a parcel status never goes backwards.
+- Beta: the courier tracking formats are written from the couriers' merchant documentation and tested with sample replies, but only a real merchant account proves them. That is why orders do not move on their own until the owner has checked a few "Refresh from courier" results. TCS and custom couriers have no tracking API here: update those orders by hand.

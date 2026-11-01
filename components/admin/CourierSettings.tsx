@@ -42,6 +42,8 @@ export default function CourierSettings({ config, views }: { config: CourierConf
               {config.custom.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
             </select>
           </Field>
+          <Check name="autoUpdate" label="Update my orders automatically from the courier" defaultChecked={config.autoUpdate}
+            hint="For PostEx and Leopards parcels: when the courier reports out for delivery, delivered or returned, the order status follows (delivered also records the cash collected). Leave off until you have tried “Refresh from courier” on a few real parcels and the news looks right. Parcel news is always saved either way; this only decides whether orders move by themselves." />
           <button className={primaryBtn}>Save couriers</button>
         </ActionForm>
 

@@ -10,7 +10,7 @@ import StatusBadge from '@/components/admin/StatusBadge'
 import ActionForm from '@/components/admin/ActionForm'
 import { courierName, courierOptions, trackingLink } from '@/lib/couriers/config'
 import { loadCourierSetup } from '@/lib/couriers/store'
-import { bookCourierAction, cancelAction, paymentAction, shipmentAction, statusAction } from './actions'
+import { bookCourierAction, cancelAction, paymentAction, refreshCourierAction, shipmentAction, statusAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 const btn = 'rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50'
@@ -103,12 +103,25 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             {order.shipments.map((s) => {
               const link = trackingLink(courierConfig, s.courier, s.courierTrackingNo)
               return (
-                <p key={s.id} className="text-sm mb-1">
-                  {courierName(courierConfig, s.courier)} · <span className="font-mono">{s.courierTrackingNo}</span>
-                  {link && <a href={link} target="_blank" rel="noopener noreferrer" className="ml-2 underline text-slate-600">Track on courier site</a>}
-                </p>
+                <div key={s.id} className="text-sm mb-2">
+                  <p>
+                    {courierName(courierConfig, s.courier)} · <span className="font-mono">{s.courierTrackingNo}</span>
+                    {link && <a href={link} target="_blank" rel="noopener noreferrer" className="ml-2 underline text-slate-600">Track on courier site</a>}
+                  </p>
+                  {(s.syncedAt || s.syncError) && (
+                    <p className={`text-xs ${s.syncError ? 'text-amber-700' : 'text-slate-500'}`}>
+                      {s.syncError ? `Could not refresh: ${s.syncError}` : `Courier status: ${s.status.toLowerCase().replace(/_/g, ' ')}`} · checked {formatPkt(s.syncedAt ?? new Date())}
+                    </p>
+                  )}
+                </div>
               )
             })}
+            {order.shipments.some((s) => ['SHIPPED', 'OUT_FOR_DELIVERY'].includes(order.status) && (s.courier === 'postex' || s.courier === 'leopards')) && (
+              <ActionForm action={refreshCourierAction} className="mb-2">
+                <input type="hidden" name="orderId" value={order.id} />
+                <button className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Refresh from courier</button>
+              </ActionForm>
+            )}
             {order.shipments.length === 0 && <p className="text-sm text-slate-500 mb-2">Not shipped yet.</p>}
             {canShip && couriers.length === 0 && (
               <p className="text-sm text-amber-700">No courier is switched on. Turn one on in Settings, then Couriers.</p>

@@ -20,7 +20,7 @@ export async function saveCourierConfig(storeId: string, config: CourierConfig) 
   await db.$transaction(async (tx) => {
     const current = await tx.storeSettings.findUnique({ where: { storeId }, select: { extra: true } })
     // Keep every other key in `extra` (wallets etc.); only replace the courier list.
-    const extra = { ...((current?.extra ?? {}) as Record<string, unknown>), couriers: { enabled: config.enabled, default: config.defaultKey, custom: config.custom } } as Prisma.InputJsonValue
+    const extra = { ...((current?.extra ?? {}) as Record<string, unknown>), couriers: { enabled: config.enabled, default: config.defaultKey, custom: config.custom, autoUpdate: config.autoUpdate } } as Prisma.InputJsonValue
     await tx.storeSettings.update({ where: { storeId }, data: { extra } })
   })
 }

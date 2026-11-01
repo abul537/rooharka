@@ -12,6 +12,7 @@
  */
 import type { SavedFields } from '@/lib/services/registry'
 import { isValidTrackingNo } from '@/lib/admin/order-rules'
+import { mapCourierStatus, parseCourierDate, type TrackEvent } from '@/lib/couriers/status'
 
 export interface BookingInput {
   orderNumber: string
@@ -32,6 +33,7 @@ export interface BookingInput {
 
 export type BookingResult = { ok: true; trackingNo: string; raw: unknown } | { ok: false; error: string }
 export type CheckResult = { ok: true; message: string } | { ok: false; error: string }
+export type TrackResult = { ok: true; statusText: string; events: TrackEvent[] } | { ok: false; error: string }
 type Fetch = typeof fetch
 
 export interface CourierAdapter {
@@ -39,19 +41,55 @@ export interface CourierAdapter {
   book(input: BookingInput, credentials: SavedFields, config: SavedFields, f?: Fetch): Promise<BookingResult>
   /** Harmless read-only call that proves the saved credentials work. */
   check(credentials: SavedFields, config: SavedFields, f?: Fetch): Promise<CheckResult>
+  /** Read-only: asks the courier where a parcel is. Never changes anything at the courier. */
+  track(trackingNo: string, credentials: SavedFields, config: SavedFields, f?: Fetch): Promise<TrackResult>
 }
 
 const TIMEOUT_MS = 20_000
 const NETWORK_ERROR = 'Could not reach the courier. Nothing was booked; please try again in a moment.'
+const TRACK_NETWORK_ERROR = 'Could not reach the courier. We will ask again later.'
 
 /** One place for network + JSON handling so each adapter stays about the courier's rules only. */
-async function request(f: Fetch, url: string, init: RequestInit): Promise<{ status: number; json: unknown } | { error: string }> {
+async function request(f: Fetch, url: string, init: RequestInit, reading = false): Promise<{ status: number; json: unknown } | { error: string }> {
   let res: Response
-  try { res = await f(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS) }) } catch { return { error: NETWORK_ERROR } }
+  try { res = await f(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS) }) } catch { return { error: reading ? TRACK_NETWORK_ERROR : NETWORK_ERROR } }
   const raw = await res.text().catch(() => '')
   try { return { status: res.status, json: JSON.parse(raw.slice(0, 200_000)) } } catch {
-    return { error: `The courier sent a reply we could not read (status ${res.status}). Nothing was booked.` }
+    return { error: `The courier sent a reply we could not read (status ${res.status}).${reading ? '' : ' Nothing was booked.'}` }
   }
+}
+const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+
+/** Builds one tracking event; the status is read from the courier's wording. */
+const makeEvent = (text: string, at: unknown, location: string | null = null): TrackEvent => ({ status: mapCourierStatus(text), text: shorten(text, 160), location: location || null, at: parseCourierDate(at) })
+
+/**
+ * PostEx tracking reply -> our shape. Defensive: anything missing gives an empty result, never a crash.
+ * Expected: { statusCode: "200", dist: { transactionStatus, transactionStatusHistory: [{ transactionStatusMessage, updatedAt }] } }
+ */
+export function parsePostexTrack(json: unknown): { statusText: string; events: TrackEvent[] } | null {
+  const body = obj(json)
+  if (str(body.statusCode) !== '200') return null
+  const dist = obj(body.dist)
+  const statusText = str(dist.transactionStatus)
+  const events = arr(dist.transactionStatusHistory).map(obj).map((h) => makeEvent(str(h.transactionStatusMessage), str(h.updatedAt))).filter((e) => e.text)
+  return statusText || events.length ? { statusText, events } : null
+}
+
+/**
+ * Leopards tracking reply -> our shape.
+ * Expected: { status: 1, packet_list: [{ booked_packet_status, "Tracking Detail": [{ Status, Reason, Activity_Date, Activity_Time, Location }] }] }
+ */
+export function parseLeopardsTrack(json: unknown): { statusText: string; events: TrackEvent[] } | null {
+  const body = obj(json)
+  if (str(body.status) !== '1') return null
+  const packet = obj(arr(body.packet_list)[0])
+  const statusText = str(packet.booked_packet_status)
+  const events = arr(packet['Tracking Detail']).map(obj).map((d) => {
+    const text = [str(d.Status), str(d.Reason)].filter(Boolean).join(': ')
+    return makeEvent(text, str(d.Activity_datetime) || `${str(d.Activity_Date)} ${str(d.Activity_Time)}`.trim(), str(d.Location) || null)
+  }).filter((e) => e.text)
+  return statusText || events.length ? { statusText, events } : null
 }
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const str = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '')
@@ -97,6 +135,15 @@ export const postexAdapter: CourierAdapter = {
     if (r.status === 401 || r.status === 403) return { ok: false, error: 'PostEx rejected your API token.' }
     if (r.status >= 200 && r.status < 300 && str(obj(r.json).statusCode) === '200') return { ok: true, message: 'Connected to PostEx.' }
     return { ok: false, error: `PostEx answered with an unexpected reply (status ${r.status}).` }
+  },
+
+  async track(tn, c, _cfg, f = fetch) {
+    const r = await request(f, `${POSTEX}/v1/track-order/${encodeURIComponent(tn)}`, { headers: { token: c.apiToken } }, true)
+    if ('error' in r) return { ok: false, error: r.error }
+    if (r.status === 401 || r.status === 403) return { ok: false, error: 'PostEx rejected your API token. Check it in Settings > Couriers.' }
+    const parsed = parsePostexTrack(r.json)
+    if (!parsed) return { ok: false, error: shorten(`PostEx has no tracking news for ${tn} yet${str(obj(r.json).statusMessage) ? `: ${str(obj(r.json).statusMessage)}` : ''}.`) }
+    return { ok: true, ...parsed }
   },
 }
 
@@ -165,6 +212,16 @@ export const leopardsAdapter: CourierAdapter = {
     const body = obj(r.json)
     if (str(body.status) === '1') return { ok: true, message: 'Connected to Leopards.' }
     return { ok: false, error: 'Leopards rejected your API key or password.' }
+  },
+
+  async track(tn, c, _cfg, f = fetch) {
+    const r = await request(f, `${LEOPARDS}/trackBookedPacket/format/json/`, { method: 'POST', headers: FORM_HEADERS, body: form({ api_key: c.apiKey, api_password: c.apiPassword, track_numbers: tn }) }, true)
+    if ('error' in r) return { ok: false, error: r.error }
+    const body = obj(r.json)
+    if (str(body.status) !== '1') return { ok: false, error: shorten(`Leopards has no tracking news for ${tn}: ${str(body.error) || 'check your API key and password in Settings > Couriers'}.`) }
+    const parsed = parseLeopardsTrack(r.json)
+    if (!parsed) return { ok: false, error: `Leopards has no tracking news for ${tn} yet.` }
+    return { ok: true, ...parsed }
   },
 }
 

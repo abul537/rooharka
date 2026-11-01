@@ -13,8 +13,11 @@ export class AdminError extends Error {}
 
 const note = (v: string | undefined | null) => (v ?? '').trim().slice(0, 300) || null
 
+/** Who is changing an order: a signed-in staff member, or the system itself (`id: null`, e.g. a courier update). */
+export interface Actor { storeId: string; id: string | null }
+
 /** Loads an order ONLY if it belongs to the admin's own store. */
-async function loadOrder(tx: Pick<typeof db, 'order'>, admin: StoreAdmin, orderId: string) {
+async function loadOrder(tx: Pick<typeof db, 'order'>, admin: { storeId: string }, orderId: string) {
   const order = await tx.order.findFirst({
     where: { id: orderId, storeId: admin.storeId },
     include: { payments: true, items: true },
@@ -24,7 +27,7 @@ async function loadOrder(tx: Pick<typeof db, 'order'>, admin: StoreAdmin, orderI
 }
 
 /** Move an order forward (not cancel: that has its own function with restocking). */
-export async function changeOrderStatus(admin: StoreAdmin, orderId: string, to: OrderStatus, publicNote?: string) {
+export async function changeOrderStatus(admin: Actor, orderId: string, to: OrderStatus, publicNote?: string) {
   return db.$transaction(async (tx) => {
     const order = await loadOrder(tx, admin, orderId)
     if (to === 'CANCELLED') throw new AdminError('Use “Cancel order” to cancel.')

@@ -972,6 +972,21 @@ model Payment {
   @@index([method, status])
 }
 
+/// One run of a background job (billing, courier sync): how it was started and how it ended.
+/// Also stops two runs of the same job overlapping.
+model JobRun {
+  id         String    @id @default(cuid())
+  name       String
+  trigger    String    // "cron" | "manual"
+  status     String    @default("RUNNING") // RUNNING | OK | FAILED
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  result     Json?
+  error      String?
+
+  @@index([name, startedAt])
+}
+
 model Shipment {
   id               String         @id @default(cuid())
   orderId          String
@@ -984,10 +999,13 @@ model Shipment {
   bookedAt         DateTime       @default(now())
   deliveredAt      DateTime?
   rawResponse      Json?
+  syncedAt         DateTime?      // last time the courier was asked for news (automatic or "Refresh")
+  syncError        String?        // why the last ask failed, shown to the store owner
 
   order  Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   events ShipmentEvent[]
 
+  @@index([status, syncedAt])
   @@index([orderId])
   @@index([courier, courierTrackingNo])
 }

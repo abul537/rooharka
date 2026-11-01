@@ -194,7 +194,7 @@ export async function voidInvoice(invoiceId: string, now = new Date()) {
   })
 }
 
-export interface BillingRun { invoicesCreated: number; periodsRolled: number; markedOverdue: number; skippedFree: number }
+export interface BillingRun { invoicesCreated: number; periodsRolled: number; markedOverdue: number; skippedFree: number; failed: number }
 
 /**
  * "Run billing". Safe to press as often as you like (and later to call from a scheduled job):
@@ -204,7 +204,7 @@ export interface BillingRun { invoicesCreated: number; periodsRolled: number; ma
  * Nothing is ever suspended automatically: that stays your decision.
  */
 export async function runBilling(now = new Date()): Promise<BillingRun> {
-  const run: BillingRun = { invoicesCreated: 0, periodsRolled: 0, markedOverdue: 0, skippedFree: 0 }
+  const run: BillingRun = { invoicesCreated: 0, periodsRolled: 0, markedOverdue: 0, skippedFree: 0, failed: 0 }
   const subs = await db.subscription.findMany({
     where: { status: 'ACTIVE', store: { status: { in: ['ACTIVE', 'PAST_DUE'] } } },
     include: { plan: true, store: { select: { id: true, services: { where: { enabled: true }, select: { platformFee: true, service: { select: { name: true, platformFee: true } } } } } } },
@@ -212,7 +212,8 @@ export async function runBilling(now = new Date()): Promise<BillingRun> {
   const year = now.getUTCFullYear()
   let numbers = (await db.invoice.findMany({ where: { number: { startsWith: `INV-${year}-` } }, select: { number: true } })).map((i) => i.number)
 
-  for (const sub of subs) {
+  // One store's problem must never stop everyone else's invoice: each store is billed on its own and failures are counted.
+  const billOne = async (sub: (typeof subs)[number]) => {
     const interval = intervalOf(sub.currentPeriodStart, sub.currentPeriodEnd)
     let start = sub.currentPeriodStart, end = sub.currentPeriodEnd, rolled = false
     for (let guard = 0; end.getTime() <= now.getTime() && guard < 60; guard++) { start = end; end = addPeriod(start, interval); rolled = true }
@@ -221,13 +222,13 @@ export async function runBilling(now = new Date()): Promise<BillingRun> {
       run.periodsRolled++
     }
 
-    if (await db.invoice.count({ where: { subscriptionId: sub.id, periodStart: start, status: { not: 'VOID' } } })) continue
+    if (await db.invoice.count({ where: { subscriptionId: sub.id, periodStart: start, status: { not: 'VOID' } } })) return
 
     const price = periodPrice({ monthlyPrice: num(sub.plan.monthlyPrice), yearlyPrice: sub.plan.yearlyPrice ? num(sub.plan.yearlyPrice) : null }, interval, sub.priceOverride ? num(sub.priceOverride) : null)
     const addOns = sub.store.services.map((s) => ({ name: s.service.name, monthlyFee: s.platformFee ? num(s.platformFee) : num(s.service.platformFee) }))
     const lines = invoiceLines(sub.plan.name, price, interval, addOns)
     const totals = invoiceTotals(lines)
-    if (totals.total <= 0) { run.skippedFree++; continue }
+    if (totals.total <= 0) { run.skippedFree++; return }
 
     for (let attempt = 0; attempt < 4; attempt++) {
       const number = nextInvoiceNumber(numbers, year)
@@ -248,6 +249,9 @@ export async function runBilling(now = new Date()): Promise<BillingRun> {
         numbers = (await db.invoice.findMany({ where: { number: { startsWith: `INV-${year}-` } }, select: { number: true } })).map((i) => i.number)
       }
     }
+  }
+  for (const sub of subs) {
+    try { await billOne(sub) } catch (e) { run.failed++; console.error('[billing] store failed', sub.storeId, e) }
   }
 
   // Overdue sweep.

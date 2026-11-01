@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit'
+import { runJob } from '@/lib/jobs'
 import { platformOrError } from '@/lib/csmi/guard'
 import { CsmiError, addDomain, createStore, removeDomain, setDomainLive, deleteCost, markInvoicePaid, runBilling, saveCost, savePlan, saveSubscription, setServiceFee, setStoreStatus, voidInvoice } from '@/lib/csmi/manage'
 import { parseCost, parseMarkPaid, parseNewStore, parsePlan, parseServiceFee, parseStoreStatus, parseSubscription } from '@/lib/csmi/forms'
@@ -99,9 +100,12 @@ export async function setServiceFeeAction(_: ActionState, fd: FormData): Promise
 
 export async function runBillingAction(_: ActionState): Promise<ActionState> {
   return manage('billing.run', async () => {
-    const r = await runBilling()
+    const o = await runJob('billing', 'manual', () => runBilling())
+    if (o.status === 'busy') throw new CsmiError('Billing is already running (started a moment ago). Please wait a minute and refresh.')
+    if (o.status === 'failed') throw new CsmiError(`Billing stopped with a problem: ${o.error}`)
+    const r = o.result
     return {
-      message: `Billing done: ${r.invoicesCreated} invoice(s) created, ${r.periodsRolled} period(s) moved on, ${r.markedOverdue} marked overdue${r.skippedFree ? `, ${r.skippedFree} free skipped` : ''}.`,
+      message: `Billing done: ${r.invoicesCreated} invoice(s) created, ${r.periodsRolled} period(s) moved on, ${r.markedOverdue} marked overdue${r.skippedFree ? `, ${r.skippedFree} free skipped` : ''}${r.failed ? `. ${r.failed} store(s) could not be billed: check the server log and run billing again` : ''}.`,
       entity: 'Invoice', after: r,
     }
   }, ['/csmi/billing', '/csmi/stores'])

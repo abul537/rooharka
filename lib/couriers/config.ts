@@ -8,7 +8,7 @@
  *    connects their own account in Settings. Everything else is booked on the courier's own
  *    website/app and the tracking number is typed in. Both ways end up as the same Shipment.
  *
- * Stored in StoreSettings.extra.couriers = { enabled: string[], default: string|null, custom: CustomCourier[] }.
+ * Stored in StoreSettings.extra.couriers = { enabled: string[], default: string|null, custom: CustomCourier[], autoUpdate: boolean }.
  */
 import type { Getter, Parsed } from '@/lib/admin/settings-rules'
 
@@ -21,7 +21,8 @@ export const BUILTIN_COURIERS: readonly BuiltinCourier[] = [
 ]
 
 export interface CustomCourier { key: string; name: string; trackingUrl: string | null }
-export interface CourierConfig { enabled: string[]; defaultKey: string | null; custom: CustomCourier[] }
+/** `autoUpdate`: let courier news (out for delivery / delivered / returned) change the ORDER status by itself. Off by default. */
+export interface CourierConfig { enabled: string[]; defaultKey: string | null; custom: CustomCourier[]; autoUpdate: boolean }
 
 export const MAX_CUSTOM_COURIERS = 5
 const CUSTOM_KEY = /^c-[a-z0-9-]{1,30}$/
@@ -29,7 +30,7 @@ const CUSTOM_KEY = /^c-[a-z0-9-]{1,30}$/
 export const TRACKING_PLACEHOLDER = '{tn}'
 
 /** What a store that never touched the setting gets: the three named couriers plus "Other". */
-export const DEFAULT_COURIER_CONFIG: CourierConfig = { enabled: BUILTIN_COURIERS.map((c) => c.key), defaultKey: null, custom: [] }
+export const DEFAULT_COURIER_CONFIG: CourierConfig = { enabled: BUILTIN_COURIERS.map((c) => c.key), defaultKey: null, custom: [], autoUpdate: false }
 
 const isBuiltin = (key: string) => BUILTIN_COURIERS.some((c) => c.key === key)
 
@@ -50,7 +51,7 @@ export function readCourierConfig(extra: unknown): CourierConfig {
   const known = new Set([...BUILTIN_COURIERS.map((c) => c.key), ...custom.map((c) => c.key)])
   const enabled = Array.isArray(raw.enabled) ? [...new Set(raw.enabled.filter((k): k is string => typeof k === 'string' && known.has(k)))] : []
   const defaultKey = typeof raw.default === 'string' && enabled.includes(raw.default) ? raw.default : null
-  return { enabled, defaultKey, custom }
+  return { enabled, defaultKey, custom, autoUpdate: raw.autoUpdate === true }
 }
 
 export interface CourierOption { key: string; name: string; custom: boolean; isDefault: boolean; auto: boolean }
@@ -133,7 +134,7 @@ export function parseCourierForm(g: Getter): Parsed<CourierConfig> {
 
   const wanted = text(g, 'defaultCourier')
   const defaultKey = enabled.includes(wanted) ? wanted : null
-  return { ok: true, value: { enabled, defaultKey, custom } }
+  return { ok: true, value: { enabled, defaultKey, custom, autoUpdate: g.get('autoUpdate') === 'on' } }
 }
 
 export const isKnownCourier = (config: CourierConfig, key: string) => isBuiltin(key) || config.custom.some((c) => c.key === key)

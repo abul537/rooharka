@@ -5,6 +5,7 @@ import { adminOrError } from '@/lib/auth/guard'
 import { audit } from '@/lib/audit'
 import { AdminError, addShipment, bookShipment, cancelOrder, changeOrderStatus, confirmPayment, rejectPayment } from '@/lib/admin/orders'
 import type { OrderStatus } from '@/lib/admin/order-rules'
+import { syncOrder } from '@/lib/couriers/sync'
 import type { ActionState } from '@/components/admin/ActionForm'
 
 const STATUSES = ['CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'RETURNED']
@@ -72,5 +73,16 @@ export async function bookCourierAction(_: ActionState, fd: FormData): Promise<A
     const r = await bookShipment(g.admin, orderId, str(fd, 'courier'))
     await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'order.shipment.auto', entity: 'Order', entityId: orderId, after: { courier: r.courier, trackingNo: r.trackingNo } })
     return done(orderId, `Booked with ${r.name}. Tracking number ${r.trackingNo} was saved and the customer can see it.`)
+  } catch (e) { return fail(e) }
+}
+
+/** Asks the courier where the parcel is right now (read-only towards the courier) and shows what it said. */
+export async function refreshCourierAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const g = await adminOrError('orders.update'); if ('error' in g) return g
+  const orderId = str(fd, 'orderId')
+  try {
+    const r = await syncOrder(g.admin, orderId)
+    done(orderId, '')
+    return { ok: r.lines.join(' ') }
   } catch (e) { return fail(e) }
 }

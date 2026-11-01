@@ -2,6 +2,9 @@ import Link from 'next/link'
 import { requirePlatform } from '@/lib/csmi/guard'
 import { canPlatform } from '@/lib/csmi/rules'
 import { listInvoices } from '@/lib/csmi/data'
+import { jobHistory } from '@/lib/jobs'
+import { jobHealth } from '@/lib/job-rules'
+import { checkCronAuth } from '@/lib/cron-auth'
 import { formatPrice } from '@/lib/format'
 import { formatPkt } from '@/lib/admin/dates'
 import ActionForm from '@/components/admin/ActionForm'
@@ -17,7 +20,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const manage = canPlatform(user.role, 'csmi.manage')
   const { f } = await searchParams
   const filter = FILTERS.find(([k]) => k === f)?.[0] ?? 'open'
-  const invoices = await listInvoices(filter)
+  const [invoices, jobs] = await Promise.all([listInvoices(filter), jobHistory('billing', 5)])
+  const health = jobHealth(jobs.runs[0] ?? null, jobs.lastOk, 24)
+  const cronReady = checkCronAuth('Bearer x', process.env.CRON_SECRET) !== 'unconfigured'
+  const last = jobs.runs[0]
 
   return (
     <div className="max-w-6xl space-y-5">
@@ -30,6 +36,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         )}
       </div>
       <p className="text-sm text-slate-600">Run billing creates one invoice per store for its current period (never two), moves finished periods on, and marks unpaid invoices past their due date as overdue. Stores with overdue invoices show as “past due”; nothing is suspended automatically.</p>
+      <section className={`rounded-xl border p-4 text-sm ${health === 'ok' || health === 'running' ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`} aria-label="Automatic billing">
+        <p className="font-medium">
+          Automatic billing: {health === 'ok' ? 'working' : health === 'running' ? 'running now' : health === 'failed' ? 'the last run failed' : health === 'late' ? 'is overdue (it has not succeeded recently)' : 'has not run yet'}
+        </p>
+        <p className="text-slate-700 mt-1">
+          It runs every day at 02:00 Pakistan time and does exactly what the button does.
+          {last ? ` Last run: ${formatPkt(last.startedAt)} (${last.trigger === 'cron' ? 'automatic' : 'by hand'}, ${last.status.toLowerCase()}${last.error ? `: ${last.error}` : ''}).` : ''}
+        </p>
+        {!cronReady && <p className="mt-1 text-amber-800">The schedule is switched off because <code>CRON_SECRET</code> is not set on the server. Add it (24+ random characters) and redeploy; until then use the button.</p>}
+      </section>
       <nav aria-label="Filter" className="flex gap-1 text-sm">
         {FILTERS.map(([k, label]) => <Link key={k} href={`/csmi/billing?f=${k}`} className={`rounded-lg px-3 py-1.5 border ${k === filter ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-300'}`}>{label}</Link>)}
       </nav>
