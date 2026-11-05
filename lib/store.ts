@@ -3,13 +3,15 @@ import { headers } from 'next/headers'
 import { db } from '@/lib/db'
 import { memoKeyed } from '@/lib/memo'
 import { hostCandidates, isValidDomain, normalizeHost } from '@/lib/domains'
+import { subdomainOf } from '@/lib/platform-host'
 
 /**
  * Which store (tenant) is this request for?
  *
  * 1. The web address the visitor typed (the Host header) is looked up in the StoreDomain table. Only addresses
  *    the platform owner has switched live (verifiedAt set) route; "www." is optional.
- * 2. Anything else (localhost, a preview link, an unknown address) falls back to DEFAULT_STORE_SLUG
+ * 2. A store's free address, <store>.<PLATFORM_HOST>, picks that store directly (unknown or suspended: no shop).
+ * 3. Anything else (localhost, a preview link, an unknown address) falls back to DEFAULT_STORE_SLUG
  *    (default "mppmhk"), so development and the first store keep working with no setup.
  * A live address whose store is suspended shows NO shop (it does not fall back to another store).
  * Wrapped in React `cache` so it hits the database once per request.
@@ -43,6 +45,9 @@ export const getCurrentStore = cache(async () => {
       const slug = await slugForHost(candidate)
       if (slug) return loadStore(slug)
     }
+    // slug.<platform address>: every store gets one for free (needs the wildcard DNS record, see README).
+    const sub = subdomainOf(host)
+    if (sub) return loadStore(sub)
   }
   return loadStore(process.env.DEFAULT_STORE_SLUG ?? 'mppmhk')
 })

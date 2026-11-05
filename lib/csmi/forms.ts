@@ -23,7 +23,9 @@ export const COST_CATEGORIES = ['hosting', 'database', 'domain', 'messaging', 's
 export const PAY_METHODS = ['bank', 'jazzcash', 'easypaisa', 'cash', 'other'] as const
 
 // ------------------------------------------------------------------- plans
-export interface PlanInput { name: string; monthlyPrice: number; yearlyPrice: number | null; isActive: boolean }
+/** Limits and wording shown on the public pricing page. A blank limit means unlimited. NOT enforced by the platform yet. */
+export interface PlanShow { products: number | null; ordersPerMonth: number | null; staff: number | null; tagline: string; popular: boolean }
+export interface PlanInput { name: string; monthlyPrice: number; yearlyPrice: number | null; isActive: boolean; show: PlanShow }
 export function parsePlan(g: Getter): Parsed<PlanInput> {
   const name = text(g, 'name')
   if (name.length < 2 || name.length > 40) return { ok: false, error: 'The plan name must be 2 to 40 characters.' }
@@ -31,7 +33,16 @@ export function parsePlan(g: Getter): Parsed<PlanInput> {
   if (monthly === null || Number.isNaN(monthly)) return { ok: false, error: 'Enter the monthly price in rupees, like 3000.' }
   const yearly = parseMoney(text(g, 'yearlyPrice'))
   if (yearly !== null && (Number.isNaN(yearly) || yearly <= 0)) return { ok: false, error: 'The yearly price must be a number above 0, or left empty.' }
-  return { ok: true, value: { name, monthlyPrice: monthly, yearlyPrice: yearly, isActive: flag(g, 'isActive') } }
+  const limit = (k: string, label: string): number | null | undefined => {
+    const v = text(g, k)
+    if (v === '') return null
+    return /^\d{1,7}$/.test(v) && Number(v) > 0 ? Number(v) : undefined
+  }
+  const products = limit('limitProducts', 'products'), ordersPerMonth = limit('limitOrders', 'orders'), staff = limit('limitStaff', 'staff')
+  if (products === undefined || ordersPerMonth === undefined || staff === undefined) return { ok: false, error: 'Limits must be whole numbers above 0, or empty for unlimited.' }
+  const tagline = text(g, 'tagline')
+  if (tagline.length > 90) return { ok: false, error: 'The tagline must be 90 characters or fewer.' }
+  return { ok: true, value: { name, monthlyPrice: monthly, yearlyPrice: yearly, isActive: flag(g, 'isActive'), show: { products, ordersPerMonth, staff, tagline, popular: flag(g, 'popular') } } }
 }
 
 // ------------------------------------------------------------------- costs

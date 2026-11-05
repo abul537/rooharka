@@ -1,5 +1,6 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit'
@@ -9,6 +10,11 @@ import { CsmiError, addDomain, createStore, removeDomain, setDomainLive, deleteC
 import { parseCost, parseMarkPaid, parseNewStore, parsePlan, parseServiceFee, parseStoreStatus, parseSubscription } from '@/lib/csmi/forms'
 import { parseDomainInput } from '@/lib/domains'
 import { lookupDomain } from '@/lib/dns-check'
+import { normalizeHost } from '@/lib/domains'
+import { platformOrigin } from '@/lib/platform-host'
+import { parseSettingsForm } from '@/lib/signup/settings'
+import { savePlatformSettings } from '@/lib/signup/store'
+import { approveSignup, rejectSignup } from '@/lib/signup/service'
 import type { Parsed } from '@/lib/admin/settings-rules'
 import type { ActionState } from '@/components/admin/ActionForm'
 
@@ -105,7 +111,7 @@ export async function runBillingAction(_: ActionState): Promise<ActionState> {
     if (o.status === 'failed') throw new CsmiError(`Billing stopped with a problem: ${o.error}`)
     const r = o.result
     return {
-      message: `Billing done: ${r.invoicesCreated} invoice(s) created, ${r.periodsRolled} period(s) moved on, ${r.markedOverdue} marked overdue${r.skippedFree ? `, ${r.skippedFree} free skipped` : ''}${r.failed ? `. ${r.failed} store(s) could not be billed: check the server log and run billing again` : ''}.`,
+      message: `Billing done: ${r.invoicesCreated} invoice(s) created, ${r.trialsConverted} trial(s) ended and moved to paid, ${r.periodsRolled} period(s) moved on, ${r.markedOverdue} marked overdue${r.skippedFree ? `, ${r.skippedFree} free skipped` : ''}${r.failed ? `. ${r.failed} store(s) could not be billed: check the server log and run billing again` : ''}.`,
       entity: 'Invoice', after: r,
     }
   }, ['/csmi/billing', '/csmi/stores'])
@@ -163,4 +169,30 @@ export async function checkDomainAction(_: ActionState, fd: FormData): Promise<A
   const r = await lookupDomain(p.host)
   if (!r.cname.length && !r.a.length) return { error: `${p.host} does not point anywhere yet (or DNS has not updated). DNS changes can take from a few minutes to a day.` }
   return { ok: `${p.host} points to: ${[...r.cname.map((c) => `CNAME ${c}`), ...r.a.map((a) => `A ${a}`)].join(', ')}. Compare this with what your hosting company asks for.` }
+}
+
+// ---------------------------------------------------------------- sign-ups
+export async function saveSignupSettingsAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return manage('signup.settings', async () => {
+    const v = must(parseSettingsForm(fd))
+    await savePlatformSettings(v)
+    return { message: v.signupsOpen ? 'Saved. Sign-ups are OPEN: the public site accepts new stores.' : 'Saved. Sign-ups are CLOSED: the public site shows a "closed" notice.', entity: 'PlatformSetting', entityId: 'platform', after: { signupsOpen: v.signupsOpen, requireApproval: v.requireApproval, trialDays: v.trialDays, dailyCap: v.dailyCap } }
+  }, ['/csmi/signup'])
+}
+
+export async function approveSignupAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const id = str(fd, 'requestId')
+  const origin = platformOrigin(normalizeHost((await headers()).get('host')))
+  return manage('signup.approve', async () => {
+    const r = await approveSignup(id, origin)
+    return { message: `${r.name}'s store was created and is on its free trial. ${r.notified ? 'We emailed them.' : 'Email was not sent: tell them yourself that they can sign in at /admin/login with the email and password they chose.'}`, storeId: r.storeId, entity: 'SignupRequest', entityId: id, after: { slug: r.slug } }
+  }, ['/csmi/signup', '/csmi/stores'])
+}
+
+export async function rejectSignupAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const id = str(fd, 'requestId')
+  return manage('signup.reject', async () => {
+    const r = await rejectSignup(id, str(fd, 'reason'))
+    return { message: `Request from ${r.ownerName} rejected. ${r.notified ? 'We emailed them.' : 'Email was not sent: tell them yourself if you want them to know.'}`, entity: 'SignupRequest', entityId: id, after: { reason: str(fd, 'reason').slice(0, 200) } }
+  }, ['/csmi/signup'])
 }

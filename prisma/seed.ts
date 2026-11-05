@@ -2,6 +2,7 @@
 // Run with:  pnpm db:seed
 import 'dotenv/config'
 import { db } from '../lib/db'
+import { CHECKOUT_FIELD_DEFAULTS } from '../lib/store-defaults'
 
 const SERVICES = [
   { key: 'jazzcash', name: 'JazzCash', type: 'PAYMENT' },
@@ -14,18 +15,7 @@ const SERVICES = [
   { key: 'order-tracking', name: 'Customer order tracking page', type: 'FEATURE', requiresOwnCredentials: false },
 ] as const
 
-// Mirrors how the current checkout form behaves (everything required except landmark).
-const CHECKOUT_FIELDS = [
-  { fieldKey: 'firstName', label: 'First name', required: true },
-  { fieldKey: 'lastName', label: 'Last name', required: true },
-  { fieldKey: 'email', label: 'Email', required: true },
-  { fieldKey: 'phone', label: 'Phone number', required: true },
-  { fieldKey: 'province', label: 'Province', required: true },
-  { fieldKey: 'city', label: 'City', required: true },
-  { fieldKey: 'locality', label: 'Locality', required: true },
-  { fieldKey: 'landmark', label: 'Nearest landmark', required: false },
-  { fieldKey: 'addressType', label: 'Address type', required: true },
-]
+const CHECKOUT_FIELDS = CHECKOUT_FIELD_DEFAULTS // shared with sign-up (lib/store-defaults.ts)
 
 
 // ---------------------------------------------------------------------------

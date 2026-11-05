@@ -122,7 +122,9 @@ export async function saveSubscription(storeId: string, input: SubscriptionInput
 
 // -------------------------------------------------------------------- plans
 export async function savePlan(id: string | null, input: PlanInput) {
-  const data = { name: input.name, monthlyPrice: input.monthlyPrice, yearlyPrice: input.yearlyPrice, isActive: input.isActive }
+  const { products, ordersPerMonth, staff, tagline, popular } = input.show
+  const limits = { ...(products ? { products } : {}), ...(ordersPerMonth ? { ordersPerMonth } : {}), ...(staff ? { staff } : {}), ...(tagline ? { tagline } : {}), ...(popular ? { popular: true } : {}) }
+  const data = { name: input.name, monthlyPrice: input.monthlyPrice, yearlyPrice: input.yearlyPrice, isActive: input.isActive, limits: limits as Prisma.InputJsonValue }
   try {
     if (id) {
       const r = await db.plan.updateMany({ where: { id }, data })
@@ -194,7 +196,25 @@ export async function voidInvoice(invoiceId: string, now = new Date()) {
   })
 }
 
-export interface BillingRun { invoicesCreated: number; periodsRolled: number; markedOverdue: number; skippedFree: number; failed: number }
+/**
+ * Trials that have run out become paying subscriptions: a fresh billing period starts today (monthly, or yearly if the
+ * store chose that when signing up) and the normal pass below creates its first invoice. Nothing is suspended: an unpaid
+ * invoice only turns the store "past due", and suspending stays the owner's decision.
+ */
+async function convertEndedTrials(now: Date): Promise<number> {
+  const ended = await db.subscription.findMany({ where: { status: 'TRIALING', trialEndsAt: { lte: now }, store: { status: { in: ['TRIAL', 'ACTIVE'] } } }, select: { id: true, storeId: true } })
+  if (!ended.length) return 0
+  const chosen = new Map((await db.signupRequest.findMany({ where: { storeId: { in: ended.map((e) => e.storeId) }, status: 'COMPLETED' }, select: { storeId: true, interval: true } })).map((r) => [r.storeId, r.interval]))
+  let n = 0
+  for (const s of ended) {
+    const interval: BillingInterval = chosen.get(s.storeId) === 'YEARLY' ? 'YEARLY' : 'MONTHLY'
+    const claimed = await db.subscription.updateMany({ where: { id: s.id, status: 'TRIALING' }, data: { status: 'ACTIVE', trialEndsAt: null, currentPeriodStart: now, currentPeriodEnd: addPeriod(now, interval) } })
+    if (claimed.count === 1) { await db.store.updateMany({ where: { id: s.storeId, status: 'TRIAL' }, data: { status: 'ACTIVE', onboardedAt: now } }); n++ }
+  }
+  return n
+}
+
+export interface BillingRun { invoicesCreated: number; periodsRolled: number; markedOverdue: number; skippedFree: number; failed: number; trialsConverted: number }
 
 /**
  * "Run billing". Safe to press as often as you like (and later to call from a scheduled job):
@@ -204,7 +224,8 @@ export interface BillingRun { invoicesCreated: number; periodsRolled: number; ma
  * Nothing is ever suspended automatically: that stays your decision.
  */
 export async function runBilling(now = new Date()): Promise<BillingRun> {
-  const run: BillingRun = { invoicesCreated: 0, periodsRolled: 0, markedOverdue: 0, skippedFree: 0, failed: 0 }
+  const run: BillingRun = { invoicesCreated: 0, periodsRolled: 0, markedOverdue: 0, skippedFree: 0, failed: 0, trialsConverted: 0 }
+  run.trialsConverted = await convertEndedTrials(now)
   const subs = await db.subscription.findMany({
     where: { status: 'ACTIVE', store: { status: { in: ['ACTIVE', 'PAST_DUE'] } } },
     include: { plan: true, store: { select: { id: true, services: { where: { enabled: true }, select: { platformFee: true, service: { select: { name: true, platformFee: true } } } } } } },

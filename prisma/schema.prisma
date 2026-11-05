@@ -972,6 +972,44 @@ model Payment {
   @@index([method, status])
 }
 
+/// Switches and text the platform owner controls from CSMI (is sign-up open, trial days, contact details...).
+/// One row per group; today only key "platform".
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+/// A store owner's sign-up, kept here until the email is verified (and, if the owner wants, approved).
+/// NO store or login exists until then, so nobody can squat a store address or someone else's email.
+model SignupRequest {
+  id           String    @id @default(cuid())
+  email        String
+  ownerName    String
+  phone        String
+  storeName    String
+  slug         String
+  planId       String
+  interval     String    @default("MONTHLY") // MONTHLY | YEARLY: how the owner chose to pay after the trial
+  passwordHash String    // hashed before anything is saved; the plain password is never stored
+  tokenHash    String?   @unique // SHA-256 of the emailed link's secret; cleared once used
+  status       String    @default("PENDING_EMAIL") // PENDING_EMAIL | PENDING_APPROVAL | COMPLETED | REJECTED | EXPIRED
+  emailVerified Boolean  @default(false)
+  termsVersion String
+  ip           String?
+  userAgent    String?
+  expiresAt    DateTime
+  verifiedAt   DateTime?
+  decidedAt    DateTime?
+  decisionNote String?
+  storeId      String?   // set when the store was created
+  createdAt    DateTime  @default(now())
+
+  @@index([email, status])
+  @@index([slug, status])
+  @@index([status, createdAt])
+}
+
 /// One run of a background job (billing, courier sync): how it was started and how it ended.
 /// Also stops two runs of the same job overlapping.
 model JobRun {

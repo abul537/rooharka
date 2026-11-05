@@ -200,7 +200,10 @@ test('money parsing: rupees with up to 2 decimals, nothing else', () => {
 
 test('plan form', () => {
   const ok = parsePlan(form({ name: 'Growth', monthlyPrice: '3000', yearlyPrice: '30000', isActive: 'on' }))
-  assert.deepEqual(ok.ok && ok.value, { name: 'Growth', monthlyPrice: 3000, yearlyPrice: 30000, isActive: true })
+  assert.deepEqual(ok.ok && ok.value, { name: 'Growth', monthlyPrice: 3000, yearlyPrice: 30000, isActive: true, show: { products: null, ordersPerMonth: null, staff: null, tagline: '', popular: false } })
+  const shown = parsePlan(form({ name: 'Pro', monthlyPrice: '5000', limitProducts: '100', limitStaff: '3', tagline: 'For growing shops', popular: 'on' }))
+  assert.deepEqual(shown.ok && shown.value.show, { products: 100, ordersPerMonth: null, staff: 3, tagline: 'For growing shops', popular: true })
+  for (const bad of [{ limitProducts: '0' }, { limitProducts: '-5' }, { limitOrders: '1e3' }, { limitStaff: 'many' }, { tagline: 'x'.repeat(91) }]) assert.equal(parsePlan(form({ name: 'Pro', monthlyPrice: '5000', ...bad })).ok, false, JSON.stringify(bad))
   assert.equal(parsePlan(form({ name: 'Free', monthlyPrice: '0' })).ok, true)           // a free plan is allowed
   assert.equal(parsePlan(form({ name: 'G', monthlyPrice: '3000' })).ok, false)
   assert.equal(parsePlan(form({ name: 'Growth', monthlyPrice: '' })).ok, false)

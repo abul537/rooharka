@@ -3,15 +3,23 @@ import { can } from '@/lib/auth/permissions'
 import { getStoreName } from '@/lib/store'
 import { logoutAction } from '../login/actions'
 import AdminNav from '@/components/admin/AdminNav'
+import Link from 'next/link'
+import { db } from '@/lib/db'
 
 // Every page inside this group requires a signed-in store admin.
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin()
-  const storeName = await getStoreName(admin.storeId)
+  const [storeName, sub, overdue] = await Promise.all([
+    getStoreName(admin.storeId),
+    db.subscription.findUnique({ where: { storeId: admin.storeId }, select: { status: true, trialEndsAt: true } }),
+    db.invoice.count({ where: { storeId: admin.storeId, status: { in: ['OPEN', 'OVERDUE'] }, dueDate: { lt: new Date() } } }),
+  ])
+  const trialLeft = sub?.status === 'TRIALING' && sub.trialEndsAt ? Math.max(0, Math.ceil((sub.trialEndsAt.getTime() - Date.now()) / 86_400_000)) : null
+  const canBill = can(admin.role, 'settings.edit')
 
   const allowed = ['/admin', '/admin/orders', '/admin/customers', '/admin/security']
   if (can(admin.role, 'products.view')) allowed.push('/admin/products', '/admin/categories')
-  if (can(admin.role, 'settings.edit')) allowed.push('/admin/settings')
+  if (can(admin.role, 'settings.edit')) allowed.push('/admin/settings', '/admin/billing')
 
   return (
     <div className="lg:flex min-h-screen">
@@ -32,7 +40,11 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           <form action={logoutAction}><button className="text-slate-600 underline">Sign out</button></form>
         </div>
       </aside>
-      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-10">{children}</main>
+      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-10">
+        {canBill && overdue > 0 && <div role="alert" className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm"><strong>{overdue} invoice{overdue === 1 ? ' is' : 's are'} overdue.</strong> <Link href="/admin/billing" className="underline font-medium">See how to pay</Link></div>}
+        {canBill && overdue === 0 && trialLeft !== null && <div role="note" className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">Free trial: <strong>{trialLeft} day{trialLeft === 1 ? '' : 's'} left</strong>. <Link href="/admin/billing" className="underline font-medium">Plan and billing</Link></div>}
+        {children}
+      </main>
     </div>
   )
 }

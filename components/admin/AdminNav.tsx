@@ -10,6 +10,7 @@ const ITEMS = [
   { href: '/admin/categories', label: 'Categories' },
   { href: '/admin/customers', label: 'Customers' },
   { href: '/admin/settings', label: 'Settings' },
+  { href: '/admin/billing', label: 'Plan and billing' },
   { href: '/admin/security', label: 'My security' },
 ]
 
