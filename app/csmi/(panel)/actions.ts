@@ -15,6 +15,7 @@ import { platformOrigin } from '@/lib/platform-host'
 import { parseSettingsForm } from '@/lib/signup/settings'
 import { savePlatformSettings } from '@/lib/signup/store'
 import { approveSignup, rejectSignup } from '@/lib/signup/service'
+import { decideService, decideShop } from '@/lib/approvals/service'
 import type { Parsed } from '@/lib/admin/settings-rules'
 import type { ActionState } from '@/components/admin/ActionForm'
 
@@ -98,9 +99,9 @@ export async function deleteCostAction(_: ActionState, fd: FormData): Promise<Ac
 
 export async function setServiceFeeAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return manage('service.fee', async () => {
-    const { key, fee } = must(parseServiceFee(fd))
-    await setServiceFee(key, fee)
-    return { message: 'Add-on fee saved. It is counted in revenue for stores that use this service.', entity: 'ServiceCatalog', entityId: key, after: { fee } }
+    const { key, fee, requiresApproval } = must(parseServiceFee(fd))
+    await setServiceFee(key, fee, requiresApproval)
+    return { message: `Saved. ${requiresApproval ? 'Stores must ask you before using this service.' : 'Stores can switch this service on themselves.'} The fee is counted in revenue for stores that use it.`, entity: 'ServiceCatalog', entityId: key, after: { fee, requiresApproval } }
   }, ['/csmi/services'])
 }
 
@@ -177,7 +178,7 @@ export async function saveSignupSettingsAction(_: ActionState, fd: FormData): Pr
     const v = must(parseSettingsForm(fd))
     await savePlatformSettings(v)
     return { message: v.signupsOpen ? 'Saved. Sign-ups are OPEN: the public site accepts new stores.' : 'Saved. Sign-ups are CLOSED: the public site shows a "closed" notice.', entity: 'PlatformSetting', entityId: 'platform', after: { signupsOpen: v.signupsOpen, requireApproval: v.requireApproval, trialDays: v.trialDays, dailyCap: v.dailyCap } }
-  }, ['/csmi/signup'])
+  }, ['/csmi/signup', '/csmi/approvals'])
 }
 
 export async function approveSignupAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -186,7 +187,7 @@ export async function approveSignupAction(_: ActionState, fd: FormData): Promise
   return manage('signup.approve', async () => {
     const r = await approveSignup(id, origin)
     return { message: `${r.name}'s store was created and is on its free trial. ${r.notified ? 'We emailed them.' : 'Email was not sent: tell them yourself that they can sign in at /admin/login with the email and password they chose.'}`, storeId: r.storeId, entity: 'SignupRequest', entityId: id, after: { slug: r.slug } }
-  }, ['/csmi/signup', '/csmi/stores'])
+  }, ['/csmi/signup', '/csmi/approvals', '/csmi/stores'])
 }
 
 export async function rejectSignupAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -194,5 +195,25 @@ export async function rejectSignupAction(_: ActionState, fd: FormData): Promise<
   return manage('signup.reject', async () => {
     const r = await rejectSignup(id, str(fd, 'reason'))
     return { message: `Request from ${r.ownerName} rejected. ${r.notified ? 'We emailed them.' : 'Email was not sent: tell them yourself if you want them to know.'}`, entity: 'SignupRequest', entityId: id, after: { reason: str(fd, 'reason').slice(0, 200) } }
-  }, ['/csmi/signup'])
+  }, ['/csmi/signup', '/csmi/approvals'])
+}
+
+// ---------------------------------------------------------------- approvals (shop go-live, services)
+const notified = (n: { emailed: boolean; whatsapp: string | null }) =>
+  n.emailed ? ' We emailed the store owner.' : n.whatsapp ? ' Email is not set up: open "Recently decided" below to send them the message on WhatsApp.' : ' Email is not set up and there is no phone number: tell them yourself.'
+
+export async function decideShopAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const storeId = str(fd, 'storeId'); const approve = str(fd, 'decision') === 'approve'
+  return manage('shop.decide', async () => {
+    const r = await decideShop(storeId, approve, str(fd, 'reason'))
+    return { message: `${r.name}'s shop is now ${approve ? 'OPEN to customers' : 'CLOSED to customers'} (within 30 seconds).${notified(r.notice)}`, storeId, entity: 'Store', entityId: storeId, after: { shop: r.after, reason: r.reason } }
+  }, ['/csmi/approvals', '/csmi/stores', `/csmi/stores/${storeId}`])
+}
+
+export async function decideServiceAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const storeId = str(fd, 'storeId'); const key = str(fd, 'serviceKey'); const approve = str(fd, 'decision') === 'approve'
+  return manage('service.decide', async () => {
+    const r = await decideService(storeId, key, approve, str(fd, 'reason'))
+    return { message: `${r.serviceName} is now ${approve ? 'APPROVED' : 'BLOCKED'} for this store.${notified(r.notice)}`, storeId, entity: 'StoreService', entityId: key, after: { service: key, approval: r.after, reason: r.reason } }
+  }, ['/csmi/approvals', `/csmi/stores/${storeId}`])
 }

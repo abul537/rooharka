@@ -157,8 +157,8 @@ export async function deleteCost(id: string) {
   if (r.count === 0) throw new CsmiError('Cost not found.')
 }
 
-export async function setServiceFee(key: string, fee: number) {
-  const r = await db.serviceCatalog.updateMany({ where: { key }, data: { platformFee: fee } })
+export async function setServiceFee(key: string, fee: number, requiresApproval: boolean) {
+  const r = await db.serviceCatalog.updateMany({ where: { key }, data: { platformFee: fee, requiresApproval } })
   if (r.count === 0) throw new CsmiError('Service not found.')
 }
 

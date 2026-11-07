@@ -1,4 +1,5 @@
 import ActionForm from '@/components/admin/ActionForm'
+import { approvalLabel } from '@/lib/approvals/rules'
 import { Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import type { FieldDef, ServiceDef, ServiceView } from '@/lib/services/registry'
 import { removeServiceAction, saveServiceAction, testServiceAction } from '@/app/admin/(panel)/settings/service-actions'
@@ -21,8 +22,8 @@ export default function ServiceCard({ def, view, showDefault }: { def: ServiceDe
       />
     </Field>
   )
-  const status = !view.configured ? 'Not connected' : view.enabled ? (view.lastError ? 'Problem' : 'Connected') : 'Saved, switched off'
-  const tone = !view.configured ? 'bg-slate-100 text-slate-700' : view.lastError ? 'bg-red-100 text-red-800' : view.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+  const status = view.approval === 'DENIED' ? 'Not approved' : view.approval === 'PENDING' && view.switchedOn ? 'Waiting for approval' : !view.configured ? 'Not connected' : view.enabled ? (view.lastError ? 'Problem' : 'Connected') : 'Saved, switched off'
+  const tone = view.approval === 'DENIED' ? 'bg-red-100 text-red-800' : view.approval === 'PENDING' && view.switchedOn ? 'bg-amber-100 text-amber-800' : !view.configured ? 'bg-slate-100 text-slate-700' : view.lastError ? 'bg-red-100 text-red-800' : view.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
 
   return (
     <div className="rounded-lg border border-slate-200 p-4 space-y-3">
@@ -33,6 +34,8 @@ export default function ServiceCard({ def, view, showDefault }: { def: ServiceDe
         </div>
         <span className={`text-xs font-medium rounded-full px-2.5 py-0.5 ${tone}`}>{status}</span>
       </div>
+      {view.approval === 'DENIED' && <p role="alert" className="text-sm text-red-700">{approvalLabel('DENIED', view.decisionNote)}. Contact the platform owner if you think this is a mistake.</p>}
+      {view.approval === 'PENDING' && view.switchedOn && <p className="text-sm text-amber-800">{approvalLabel('PENDING')}. It starts working as soon as it is approved.</p>}
       {view.lastError && <p role="alert" className="text-sm text-red-700">Last problem: {view.lastError}</p>}
 
       <ActionForm action={saveServiceAction} className="space-y-3">
@@ -42,7 +45,7 @@ export default function ServiceCard({ def, view, showDefault }: { def: ServiceDe
           {def.config.map((f) => field(f, false))}
         </div>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
-          <Check name="enabled" label="Switch on" defaultChecked={view.enabled} />
+          <Check name="enabled" label="Switch on" defaultChecked={view.switchedOn} />
           {showDefault && <Check name="isDefault" label="Use as my default" defaultChecked={view.isDefault} />}
         </div>
         <button className={primaryBtn}>Save {def.name.split(' (')[0]}</button>

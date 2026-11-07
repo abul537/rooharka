@@ -9,7 +9,7 @@ import { formatPkt } from '@/lib/admin/dates'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { Flags, Pill, Stat, pct } from '@/components/csmi/Pills'
-import { addDomainAction, checkDomainAction, removeDomainAction, saveSubscriptionAction, setDomainLiveAction, setStatusAction } from '../../actions'
+import { addDomainAction, checkDomainAction, removeDomainAction, saveSubscriptionAction, setDomainLiveAction, setStatusAction, decideServiceAction, decideShopAction } from '../../actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +17,7 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
   const user = await requirePlatform()
   const { id } = await params
   const manage = canPlatform(user.role, 'csmi.manage')
-  const [p, plans, invoices, services, sub, costs, domains] = await Promise.all([
+  const [p, plans, invoices, services, sub, costs, domains, gate] = await Promise.all([
     loadPlatform(30),
     db.plan.findMany({ orderBy: { monthlyPrice: 'asc' }, select: { id: true, name: true, isActive: true } }),
     db.invoice.findMany({ where: { storeId: id }, orderBy: { createdAt: 'desc' }, take: 12 }),
@@ -25,6 +25,7 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
     db.subscription.findUnique({ where: { storeId: id } }),
     db.platformCost.findMany({ where: { storeId: id }, orderBy: { createdAt: 'desc' } }),
     db.storeDomain.findMany({ where: { storeId: id }, orderBy: { createdAt: 'asc' } }),
+    db.store.findUnique({ where: { id }, select: { shopApproval: true, shopDecisionNote: true } }),
   ])
   const r = p.rows.find((x) => x.id === id)
   if (!r) notFound()
@@ -91,6 +92,18 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
         </Card>
       </div>
 
+      <Card title="Shop visibility" hint="Open: customers can browse and order. Closed: customers see a plain 'not open yet' page. The owner can always sign in and set up. Closing needs a reason, which the store owner reads and is told.">
+        <p className="text-sm mb-3">Now: <strong>{gate?.shopApproval === 'APPROVED' ? 'Open to customers' : gate?.shopApproval === 'PENDING' ? 'Waiting for your approval' : 'Closed by you'}</strong>{gate?.shopApproval === 'DENIED' && gate.shopDecisionNote ? ` · “${gate.shopDecisionNote}”` : ''}</p>
+        {manage && (
+          <ActionForm action={decideShopAction} className="flex flex-wrap items-center gap-2">
+            <input type="hidden" name="storeId" value={r.id} />
+            <input name="reason" maxLength={300} placeholder="Reason (required to close)" aria-label="Reason" className="rounded border border-slate-300 px-2 py-1.5 text-sm w-72" />
+            <button name="decision" value="approve" className="rounded-lg bg-emerald-700 text-white px-4 py-2 text-sm font-medium">Open the shop</button>
+            <button name="decision" value="deny" className="rounded-lg border border-red-300 text-red-700 px-4 py-2 text-sm font-medium">Close the shop</button>
+          </ActionForm>
+        )}
+      </Card>
+
       <div className="grid lg:grid-cols-2 gap-6">
         <section className="rounded-xl bg-white border border-slate-200 p-5">
           <h2 className="font-semibold mb-3">Services this store uses</h2>
@@ -98,7 +111,16 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
             <ul className="divide-y divide-slate-100 text-sm">
               {services.map((s) => (
                 <li key={s.id} className="py-2">
-                  <div className="flex items-center justify-between gap-2"><span>{s.service.name}</span><span className={s.enabled ? 'text-emerald-700' : 'text-slate-500'}>{s.enabled ? 'on' : 'off'}</span></div>
+                  <div className="flex items-center justify-between gap-2"><span>{s.service.name}</span><span className={s.approval === 'DENIED' ? 'text-red-700' : s.approval === 'PENDING' ? 'text-amber-700' : s.enabled ? 'text-emerald-700' : 'text-slate-500'}>{s.approval === 'DENIED' ? 'blocked' : s.approval === 'PENDING' ? 'waiting for you' : s.enabled ? 'on' : 'off'}</span></div>
+                  {s.approval === 'DENIED' && s.decisionNote && <p className="text-xs text-slate-500">Reason given: {s.decisionNote}</p>}
+                  {manage && (
+                    <ActionForm action={decideServiceAction} className="mt-1 flex flex-wrap items-center gap-2">
+                      <input type="hidden" name="storeId" value={r.id} /><input type="hidden" name="serviceKey" value={s.serviceKey} />
+                      <input name="reason" maxLength={300} placeholder="Reason (required to block)" aria-label="Reason" className="rounded border border-slate-300 px-2 py-1 text-xs w-52" />
+                      {s.approval !== 'APPROVED' && <button name="decision" value="approve" className="rounded bg-emerald-700 text-white px-2.5 py-1 text-xs">Approve</button>}
+                      {s.approval !== 'DENIED' && <button name="decision" value="deny" className="rounded border border-red-300 text-red-700 px-2.5 py-1 text-xs">Block</button>}
+                    </ActionForm>
+                  )}
                   {s.lastError && <p className="text-xs text-red-700">Problem: {s.lastError}</p>}
                 </li>
               ))}

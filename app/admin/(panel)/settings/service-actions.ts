@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { adminOrError } from '@/lib/auth/guard'
 import { audit } from '@/lib/audit'
 import { serviceDef, parseServiceForm } from '@/lib/services/registry'
-import { getServiceSecrets, recordServiceResult, removeService, saveService } from '@/lib/services/store-services'
+import { ServiceBlockedError, getServiceSecrets, recordServiceResult, removeService, saveService } from '@/lib/services/store-services'
 import { testConnection } from '@/lib/services/connection-test'
 import type { ActionState } from '@/components/admin/ActionForm'
 
@@ -20,11 +20,13 @@ export async function saveServiceAction(_: ActionState, fd: FormData): Promise<A
     const parsed = parseServiceForm(def, fd, existing?.credentials)
     if (!parsed.ok) return { error: parsed.error }
     const enabled = fd.get('enabled') === 'on'
-    await saveService(g.admin.storeId, def, parsed.value, { enabled, isDefault: fd.get('isDefault') === 'on' })
-    await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'service.save', entity: 'StoreService', entityId: def.key, after: { enabled } }) // never the keys
-    revalidatePath('/admin/settings')
+    const { requested } = await saveService(g.admin.storeId, def, parsed.value, { enabled, isDefault: fd.get('isDefault') === 'on' })
+    await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: requested ? 'service.request' : 'service.save', entity: 'StoreService', entityId: def.key, after: { enabled, requested } }) // never the keys
+    revalidatePath('/admin/settings'); revalidatePath('/csmi/approvals')
+    if (requested) return { ok: `${def.name} saved. It needs the platform owner's approval before it starts working; you will see the answer here.` }
     return { ok: `${def.name} saved${enabled ? ' and switched on' : ''}.` }
   } catch (e) {
+    if (e instanceof ServiceBlockedError) return { error: e.message }
     console.error('[service save]', e)
     return { error: 'Could not save. Nothing was changed; please try again.' }
   }

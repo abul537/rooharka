@@ -46,7 +46,7 @@ test('Pakistan day boundaries (UTC+5)', () => {
 import { pickService, parseServiceForm, serviceDef, SERVICES, type ServiceView } from '@/lib/services/registry'
 import { encryptJson, decryptJson, signToken, verifyToken, maskSecret } from '@/lib/secrets'
 
-const view = (key: string, o: Partial<ServiceView> = {}): ServiceView => ({ key, enabled: true, isDefault: false, values: {}, masked: {}, configured: true, lastError: null, lastCheckedAt: null, ...o })
+const view = (key: string, o: Partial<ServiceView> = {}): ServiceView => ({ key, enabled: true, isDefault: false, values: {}, masked: {}, configured: true, lastError: null, lastCheckedAt: null, switchedOn: true, approval: 'APPROVED', decisionNote: null, ...o })
 test('pickService: default wins; a single enabled service is used; unconfigured/disabled are skipped', () => {
   assert.equal(pickService([view('postex'), view('leopards', { isDefault: true })], 'COURIER'), 'leopards')
   assert.equal(pickService([view('postex'), view('leopards', { enabled: false })], 'COURIER'), 'postex')

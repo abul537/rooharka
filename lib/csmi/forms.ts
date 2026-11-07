@@ -103,12 +103,12 @@ export function parseSubscription(g: Getter): Parsed<SubscriptionInput> {
 }
 
 // ----------------------------------------------------------------- services
-export function parseServiceFee(g: Getter): Parsed<{ key: string; fee: number }> {
+export function parseServiceFee(g: Getter): Parsed<{ key: string; fee: number; requiresApproval: boolean }> {
   const key = text(g, 'serviceKey')
   if (!/^[a-z0-9-]{2,40}$/.test(key)) return { ok: false, error: 'Unknown service.' }
   const fee = parseMoney(text(g, 'fee') || '0')
   if (fee === null || Number.isNaN(fee) || fee > 1_000_000) return { ok: false, error: 'The monthly fee must be a number in rupees, from 0 up.' }
-  return { ok: true, value: { key, fee } }
+  return { ok: true, value: { key, fee, requiresApproval: g.get('requiresApproval') === 'on' } }
 }
 
 // ----------------------------------------------------------------- invoices

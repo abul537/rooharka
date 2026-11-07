@@ -32,6 +32,13 @@ enum Role {
   STORE_STAFF
 }
 
+/// Owner decisions on a store's shop or a service. Existing rows default to APPROVED so nothing already live closes.
+enum ApprovalState {
+  APPROVED
+  PENDING
+  DENIED
+}
+
 enum StoreStatus {
   TRIAL
   ACTIVE
@@ -186,6 +193,9 @@ model Store {
   timezone      String      @default("Asia/Karachi")
   onboardedAt   DateTime?
   suspendedAt   DateTime?
+  shopApproval  ApprovalState @default(APPROVED) // may customers see the shop?
+  shopDecisionNote String?  // the owner's reason, shown to the store owner
+  shopDecidedAt DateTime?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -304,6 +314,7 @@ model ServiceCatalog {
   platformFee  Decimal     @default(0) @db.Decimal(12, 2) // your monthly add-on fee
   requiresOwnCredentials Boolean @default(true) // store owner brings own API keys
   isActive     Boolean     @default(true)
+  requiresApproval Boolean @default(false) // true: a store must ask, and you approve each one
 
   storeServices StoreService[]
 }
@@ -316,6 +327,9 @@ model StoreService {
   storeId         String
   serviceKey      String
   enabled         Boolean  @default(false)
+  approval        ApprovalState @default(APPROVED) // PENDING: asked and waiting; DENIED: blocked by you
+  decisionNote    String?  // your reason, shown to the store owner
+  decidedAt       DateTime?
   isDefault       Boolean  @default(false) // e.g. default courier
   credentialsEnc  String?  // AES-256-GCM encrypted JSON, key in env/KMS – never plaintext
   config          Json     @default("{}")  // non-secret options

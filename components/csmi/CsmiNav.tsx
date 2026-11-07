@@ -6,7 +6,8 @@ import { usePathname } from 'next/navigation'
 const ITEMS = [
   { href: '/csmi', label: 'Overview', exact: true },
   { href: '/csmi/stores', label: 'Stores' },
-  { href: '/csmi/signup', label: 'Sign-ups' },
+  { href: '/csmi/approvals', label: 'Approvals' },
+  { href: '/csmi/signup', label: 'Sign-up settings' },
   { href: '/csmi/billing', label: 'Billing' },
   { href: '/csmi/plans', label: 'Plans' },
   { href: '/csmi/costs', label: 'Costs and profit' },

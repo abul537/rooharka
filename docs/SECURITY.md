@@ -50,3 +50,10 @@ The rules this platform keeps. Read this before changing sign-in, sign-up, billi
 - After pulling schema changes: `pnpm db:push` then `pnpm exec prisma generate`.
 - Turn on two-factor protection for the owner login.
 - Have a lawyer review the Terms and Privacy pages before relying on them.
+
+## Approvals (platform owner is the only authority)
+- Three gates: new account (sign-up queue), shop go-live (`Store.shopApproval`), service use (`StoreService.approval`, plus `ServiceCatalog.requiresApproval`).
+- Enforced in ONE place each: `getCurrentStore()` returns null for a shop that is not APPROVED (pages, APIs and checkout all close together); `getServiceSecrets()` reports a service as off unless approval is APPROVED, so a held or blocked service never runs even if the store ticked it.
+- Every refusal needs a reason (5-300 chars, `reasonProblem`). The reason goes to the store owner (dashboard banner, service card, email or WhatsApp link) and is NEVER shown to shop customers.
+- Decisions need `csmi.manage` and are audited (`csmi.shop.decide`, `csmi.service.decide`, `csmi.signup.*`) with the reason.
+- Existing stores/services default to APPROVED so nothing live closes on upgrade.

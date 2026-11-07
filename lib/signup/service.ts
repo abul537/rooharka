@@ -12,6 +12,7 @@ import { storeAddress } from '@/lib/platform-host'
 import { rateLimit } from '@/lib/rate-limit'
 import { REQUEST_HOURS, TERMS_VERSION, hashToken, needsApproval, newVerifyToken, requestExpiry, signupGate, splitVerifyToken, trialEnd, type SignupInput } from '@/lib/signup/rules'
 import { getPlatformSettings } from '@/lib/signup/store'
+import { cleanReason, reasonProblem } from '@/lib/approvals/rules'
 import type { PlatformSettings } from '@/lib/signup/settings'
 
 /** A problem whose message is safe to show to the person signing up (or the owner in CSMI). */
@@ -145,7 +146,7 @@ async function provision(requestId: string, from: 'PENDING_EMAIL' | 'PENDING_APP
       const end = days > 0 ? trialEnd(now, days) : addPeriod(now, interval)
       const store = await tx.store.create({
         data: {
-          name: req.storeName, slug: req.slug, status: days > 0 ? 'TRIAL' : 'ACTIVE', ownerName: req.ownerName, ownerEmail: req.email, ownerPhone: req.phone,
+          name: req.storeName, slug: req.slug, status: days > 0 ? 'TRIAL' : 'ACTIVE', shopApproval: settings.requireShopApproval ? 'PENDING' : 'APPROVED', ownerName: req.ownerName, ownerEmail: req.email, ownerPhone: req.phone,
           onboardedAt: days > 0 ? null : now,
           settings: { create: { displayName: req.storeName, supportEmail: req.email } },
           checkoutFields: { create: CHECKOUT_FIELD_DEFAULTS.map((f, i) => ({ ...f, sortOrder: i, enabled: true })) },
@@ -182,7 +183,9 @@ export async function approveSignup(requestId: string, origin: string) {
 }
 
 export async function rejectSignup(requestId: string, reason: string) {
-  const note = reason.trim().slice(0, 200)
+  const problem = reasonProblem(reason)
+  if (problem) throw new SignupError(problem)
+  const note = cleanReason(reason)
   const settings = await getPlatformSettings()
   const res = await db.signupRequest.updateMany({ where: { id: requestId, status: 'PENDING_APPROVAL' }, data: { status: 'REJECTED', decidedAt: new Date(), decisionNote: note || null, tokenHash: null } })
   if (res.count !== 1) throw new SignupError('This request is no longer waiting for a decision.')

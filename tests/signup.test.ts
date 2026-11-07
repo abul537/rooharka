@@ -114,7 +114,7 @@ test('settings form: limits and messages', () => {
   const ok = { brandName: 'Rooharka', trialDays: '14', dailyCap: '20', supportEmail: 'hi@x.pk', supportWhatsapp: '0300 1234567', signupsOpen: 'on' }
   const r = parseSettingsForm(form(ok))
   assert.ok(r.ok)
-  if (r.ok) { assert.equal(r.value.signupsOpen, true); assert.equal(r.value.requireApproval, false); assert.equal(r.value.supportWhatsapp, '+923001234567') }
+  if (r.ok) { assert.equal(r.value.signupsOpen, true); assert.equal(r.value.requireApproval, false); assert.equal(r.value.requireShopApproval, false); assert.equal(r.value.supportWhatsapp, '+923001234567') }
   const bad: [Record<string, string>, RegExp][] = [
     [{ trialDays: '-1' }, /Trial days/], [{ trialDays: '91' }, /Trial days/], [{ trialDays: '1e2' }, /Trial days/], [{ trialDays: '' }, /Trial days/],
     [{ dailyCap: '0' }, /daily/], [{ dailyCap: '1001' }, /daily/], [{ brandName: 'x' }, /brand/], [{ supportEmail: 'nope' }, /email/], [{ supportWhatsapp: '123' }, /WhatsApp/],

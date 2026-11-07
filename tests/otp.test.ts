@@ -10,7 +10,7 @@ import type { ServiceView } from '@/lib/services/registry'
 
 const form = (o: Record<string, string>) => ({ get: (k: string) => o[k] ?? null })
 const view = (key: string, p: Partial<ServiceView> = {}): ServiceView =>
-  ({ key, enabled: true, isDefault: false, values: {}, masked: {}, configured: true, lastError: null, lastCheckedAt: null, ...p })
+  ({ key, enabled: true, isDefault: false, values: {}, masked: {}, configured: true, lastError: null, lastCheckedAt: null, switchedOn: true, approval: 'APPROVED', decisionNote: null, ...p })
 
 // ---------------------------------------------------------------- settings
 test('OTP settings: defaults, switch and limits', () => {

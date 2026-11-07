@@ -92,6 +92,11 @@ export function parseServiceForm(def: ServiceDef, g: Getter, existing: SavedFiel
 /** What the settings page may see. Secrets never leave the server: only their last 4 characters do. */
 export interface ServiceView {
   key: string
+  /** The platform owner's decision: APPROVED (or never needed), PENDING (asked, waiting) or DENIED (blocked, with a reason). */
+  /** What the store owner ticked (may be true while waiting for approval); `enabled` below is what really runs. */
+  switchedOn: boolean
+  approval: 'APPROVED' | 'PENDING' | 'DENIED'
+  decisionNote: string | null
   enabled: boolean
   isDefault: boolean
   /** Non-secret values (credentials that are not secret, plus options), safe to pre-fill. */

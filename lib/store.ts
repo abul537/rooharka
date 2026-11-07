@@ -19,7 +19,7 @@ import { subdomainOf } from '@/lib/platform-host'
 const loadStore = memoKeyed(30_000, async (slug: string) => {
   const store = await db.store.findUnique({
     where: { slug },
-    select: { id: true, name: true, slug: true, status: true, settings: { select: { currency: true, displayName: true } } },
+    select: { id: true, name: true, slug: true, status: true, shopApproval: true, shopDecisionNote: true, settings: { select: { currency: true, displayName: true } } },
   })
   if (!store || store.status === 'SUSPENDED' || store.status === 'CANCELLED') return null
   return {
@@ -27,6 +27,8 @@ const loadStore = memoKeyed(30_000, async (slug: string) => {
     name: store.settings?.displayName ?? store.name,
     slug: store.slug,
     currency: store.settings?.currency ?? 'PKR',
+    approval: store.shopApproval,
+    note: store.shopDecisionNote,
   }
 })
 
@@ -38,7 +40,8 @@ const slugForHost = memoKeyed(30_000, async (host: string) => {
   return row?.verifiedAt ? row.store.slug : null
 }, 2000)
 
-export const getCurrentStore = cache(async () => {
+/** Resolves the store for this address, whatever its approval state (used by the shop shell to explain a closed shop). */
+const resolveStore = cache(async () => {
   const host = normalizeHost((await headers()).get('host'))
   if (host && isValidDomain(host)) {
     for (const candidate of hostCandidates(host)) {
@@ -50,6 +53,21 @@ export const getCurrentStore = cache(async () => {
     if (sub) return loadStore(sub)
   }
   return loadStore(process.env.DEFAULT_STORE_SLUG ?? 'mppmhk')
+})
+
+/**
+ * The store customers may use right now. A shop the platform owner has not approved (or has put on hold) returns
+ * null, exactly like an unknown address, so every page, API route and checkout is closed with one rule.
+ */
+export const getCurrentStore = cache(async () => {
+  const store = await resolveStore()
+  return store && store.approval === 'APPROVED' ? store : null
+})
+
+/** For the shop shell only: why the shop is closed (waiting for approval, or not approved with the owner's reason). */
+export const getShopClosure = cache(async () => {
+  const store = await resolveStore()
+  return store && store.approval !== 'APPROVED' ? { name: store.name, approval: store.approval, note: store.note } : null
 })
 
 /** Store name for the dashboard header: remembered for 30 seconds. */

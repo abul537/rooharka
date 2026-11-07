@@ -8,6 +8,8 @@ export interface PlatformSettings {
   signupsOpen: boolean
   /** Even when email works, the owner approves each new store himself. */
   requireApproval: boolean
+  /** New stores start with their shop CLOSED to customers until the owner opens it (the go-live gate). */
+  requireShopApproval: boolean
   trialDays: number
   /** Most new sign-ups accepted per day (Pakistan time): a brake against floods. */
   dailyCap: number
@@ -21,7 +23,7 @@ export interface PlatformSettings {
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
-  signupsOpen: false, requireApproval: false, trialDays: 14, dailyCap: 20, brandName: 'Rooharka',
+  signupsOpen: false, requireApproval: false, requireShopApproval: false, trialDays: 14, dailyCap: 20, brandName: 'Rooharka',
   supportEmail: '', supportWhatsapp: '', paymentInstructions: '', announcement: '',
 }
 
@@ -33,7 +35,7 @@ export function readSettings(value: unknown): PlatformSettings {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
   const d = DEFAULT_SETTINGS
   return {
-    signupsOpen: v.signupsOpen === true, requireApproval: v.requireApproval === true,
+    signupsOpen: v.signupsOpen === true, requireApproval: v.requireApproval === true, requireShopApproval: v.requireShopApproval === true,
     trialDays: int(v.trialDays, 0, 90, d.trialDays), dailyCap: int(v.dailyCap, 1, 1000, d.dailyCap),
     brandName: str(v.brandName, 40) || d.brandName, supportEmail: str(v.supportEmail, 120), supportWhatsapp: str(v.supportWhatsapp, 20),
     paymentInstructions: str(v.paymentInstructions, 1000), announcement: str(v.announcement, 160),
@@ -59,5 +61,5 @@ export function parseSettingsForm(g: Getter): Parsed<PlatformSettings> {
   if (paymentInstructions.length > 1000) return { ok: false, error: 'The payment instructions are too long (1000 characters at most).' }
   const announcement = text(g, 'announcement')
   if (announcement.length > 160) return { ok: false, error: 'The announcement must be 160 characters or fewer.' }
-  return { ok: true, value: { signupsOpen: g.get('signupsOpen') === 'on', requireApproval: g.get('requireApproval') === 'on', trialDays, dailyCap, brandName, supportEmail, supportWhatsapp: supportWhatsapp ?? '', paymentInstructions, announcement } }
+  return { ok: true, value: { signupsOpen: g.get('signupsOpen') === 'on', requireApproval: g.get('requireApproval') === 'on', requireShopApproval: g.get('requireShopApproval') === 'on', trialDays, dailyCap, brandName, supportEmail, supportWhatsapp: supportWhatsapp ?? '', paymentInstructions, announcement } }
 }

@@ -9,7 +9,7 @@ import { getPlatformSettings } from '@/lib/signup/store'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { Pill, Stat } from '@/components/csmi/Pills'
-import { approveSignupAction, rejectSignupAction, saveSignupSettingsAction } from '../actions'
+import { saveSignupSettingsAction } from '../actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,40 +57,14 @@ export default async function SignupAdminPage() {
         <Stat title="Never confirmed or rejected" value={String(count('EXPIRED') + count('REJECTED'))} sub={`${count('PENDING_EMAIL')} still confirming`} />
       </div>
 
-      <Card title={`Waiting for your approval (${pending.length})`} hint="Approving creates the store on its free trial and the person signs in with the email and password they chose. Check the details first: you can phone them.">
-        {pending.length === 0 ? <p className="text-sm text-slate-500">Nobody is waiting.</p> : (
-          <ul className="divide-y divide-slate-100">
-            {pending.map((r) => (
-              <li key={r.id} className="py-4 grid gap-3 lg:grid-cols-[1fr_auto]">
-                <div className="text-sm">
-                  <p className="font-semibold">{r.storeName} <span className="font-normal text-slate-500">/{r.slug}</span></p>
-                  <p>{r.ownerName} · {r.email} · {r.phone}</p>
-                  <p className="text-slate-500">{planName.get(r.planId) ?? 'Plan removed'} ({r.interval.toLowerCase()}) · {formatPkt(r.createdAt)} · email {r.emailVerified ? 'confirmed' : 'NOT confirmed (email is off)'}{r.ip ? ` · ${r.ip}` : ''}</p>
-                </div>
-                {manage && (
-                  <div className="space-y-2">
-                    <ActionForm action={approveSignupAction} confirm={`Create the store “${r.storeName}” now?`}>
-                      <input type="hidden" name="requestId" value={r.id} />
-                      <button className="rounded-lg bg-emerald-700 text-white px-4 py-2 text-sm font-medium w-full">Approve</button>
-                    </ActionForm>
-                    <ActionForm action={rejectSignupAction} confirm={`Reject ${r.ownerName}?`} className="flex gap-2">
-                      <input type="hidden" name="requestId" value={r.id} />
-                      <input name="reason" maxLength={200} placeholder="Reason (they may see it)" aria-label="Reason" className="rounded border border-slate-300 px-2 py-1 text-xs w-44" />
-                      <button className="rounded border border-red-300 text-red-700 px-3 py-1 text-xs">Reject</button>
-                    </ActionForm>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm">{pending.length > 0 ? <><strong>{pending.length}</strong> waiting for your decision. </> : 'Nobody is waiting. '}<Link href="/csmi/approvals" className="underline font-medium">Open Approvals</Link></p>
 
       <Card title="Settings">
         <ActionForm action={saveSignupSettingsAction} className="space-y-5">
           <fieldset disabled={!manage} className="space-y-4">
             <Check name="signupsOpen" label="Accept new sign-ups" hint="Your kill switch. Off: the public site says sign-ups are closed. Stores that already exist are not affected." defaultChecked={s.signupsOpen} />
             <Check name="requireApproval" label="I approve every new store myself" hint={mail ? 'People still confirm their email first; then they wait for you.' : 'Always on while email is not set up.'} defaultChecked={s.requireApproval || !mail} />
+            <Check name="requireShopApproval" label="New shops stay closed to customers until I open them" hint="The owner can log in and set up, but customers see 'not open yet' until you approve it in Approvals." defaultChecked={s.requireShopApproval} />
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Free trial (days)" hint="0 = no trial: the first invoice is created straight away."><input name="trialDays" inputMode="numeric" defaultValue={s.trialDays} required className={inputCls} /></Field>
               <Field label="Most sign-ups per day" hint="A brake against floods (Pakistan time)."><input name="dailyCap" inputMode="numeric" defaultValue={s.dailyCap} required className={inputCls} /></Field>

@@ -17,10 +17,10 @@ export default async function ServicesPage() {
   return (
     <div className="max-w-5xl space-y-5">
       <h1 className="text-2xl font-bold">Services</h1>
-      <p className="text-sm text-slate-600">Every service stores can connect. Store owners connect their own accounts and pay those companies directly. The add-on fee is what <em>you</em> charge per store each month for having the service switched on (leave 0 for free). It is added to the store's revenue and its invoices.</p>
+      <p className="text-sm text-slate-600">Every service stores can connect. Store owners connect their own accounts and pay those companies directly. The add-on fee is what <em>you</em> charge per store each month for having the service switched on (leave 0 for free). Tick "Needs my approval" and a store that switches the service on is held until you approve it on the Approvals page. It is added to the store's revenue and its invoices.</p>
       <div className="overflow-x-auto rounded-xl bg-white border border-slate-200">
         <table className="w-full text-sm">
-          <thead className="text-left text-slate-500 border-b border-slate-200"><tr><th className="p-3">Service</th><th className="p-3">Type</th><th className="p-3 text-right">Stores using it</th><th className="p-3 text-right">Failing</th><th className="p-3">Your monthly fee per store</th></tr></thead>
+          <thead className="text-left text-slate-500 border-b border-slate-200"><tr><th className="p-3">Service</th><th className="p-3">Type</th><th className="p-3 text-right">Stores using it</th><th className="p-3 text-right">Failing</th><th className="p-3">Your monthly fee and approval</th></tr></thead>
           <tbody className="divide-y divide-slate-100 align-top">
             {catalog.map((s) => {
               const u = usage.get(s.key)
@@ -32,9 +32,10 @@ export default async function ServicesPage() {
                   <td className={`p-3 text-right ${u?.failing ? 'text-red-700 font-semibold' : ''}`}>{u?.failing ?? 0}</td>
                   <td className="p-3">
                     {manage ? (
-                      <ActionForm action={setServiceFeeAction} className="flex gap-2">
+                      <ActionForm action={setServiceFeeAction} className="flex flex-wrap items-center gap-2">
                         <input type="hidden" name="serviceKey" value={s.key} />
                         <input name="fee" inputMode="decimal" defaultValue={s.platformFee.toNumber()} aria-label={`Monthly fee for ${s.name}`} className="rounded border border-slate-300 px-2 py-1 w-28" />
+                        <label className="text-xs flex items-center gap-1"><input type="checkbox" name="requiresApproval" defaultChecked={s.requiresApproval} /> Needs my approval</label>
                         <button className="rounded bg-slate-900 text-white px-3 py-1 text-xs">Save</button>
                       </ActionForm>
                     ) : formatPrice(s.platformFee.toNumber())}

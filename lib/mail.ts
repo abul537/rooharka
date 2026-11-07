@@ -68,3 +68,13 @@ export function rejectedMail(o: { brand: string; name: string; to: string; reaso
     html: shell(o.brand, 'About your sign-up', `<p style="line-height:1.6">Hello ${escapeHtml(o.name)}, we could not approve your sign-up${o.reason ? `: ${escapeHtml(o.reason)}` : '.'}</p>${o.contact ? `<p style="color:#57534e">Questions? ${escapeHtml(o.contact)}</p>` : ''}`),
   }
 }
+
+/** "Your shop / service was approved or not approved", with the owner's reason on a refusal. */
+export function decisionMail(o: { brand: string; name: string; to: string; subject: string; heading: string; approved: boolean; what: string; reason: string; contact: string }): Mail {
+  const body = o.approved ? `${o.what} has been approved.` : `we could not approve ${o.what} at this time.${o.reason ? ` Reason: ${o.reason}` : ''}`
+  return {
+    to: o.to, subject: o.subject.slice(0, 150),
+    text: `Hello ${o.name},\n\n${o.approved ? 'Good news: ' : ''}${body}\n${!o.approved ? 'If you have fixed the issue or think this is a mistake, reply to this email and we will look again.\n' : ''}${o.contact ? `Questions? ${o.contact}\n` : ''}\n${o.brand}`,
+    html: shell(o.brand, o.heading, `<p style="line-height:1.6">Hello ${escapeHtml(o.name)}, ${o.approved ? 'good news: ' : ''}${escapeHtml(body)}</p>${!o.approved ? '<p style="color:#57534e">If you have fixed the issue or think this is a mistake, reply to this email and we will look again.</p>' : ''}${o.contact ? `<p style="color:#57534e">Questions? ${escapeHtml(o.contact)}</p>` : ''}`),
+  }
+}

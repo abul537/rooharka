@@ -9,10 +9,11 @@ import { db } from '@/lib/db'
 // Every page inside this group requires a signed-in store admin.
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin()
-  const [storeName, sub, overdue] = await Promise.all([
+  const [storeName, sub, overdue, shop] = await Promise.all([
     getStoreName(admin.storeId),
     db.subscription.findUnique({ where: { storeId: admin.storeId }, select: { status: true, trialEndsAt: true } }),
     db.invoice.count({ where: { storeId: admin.storeId, status: { in: ['OPEN', 'OVERDUE'] }, dueDate: { lt: new Date() } } }),
+    db.store.findUnique({ where: { id: admin.storeId }, select: { shopApproval: true, shopDecisionNote: true } }),
   ])
   const trialLeft = sub?.status === 'TRIALING' && sub.trialEndsAt ? Math.max(0, Math.ceil((sub.trialEndsAt.getTime() - Date.now()) / 86_400_000)) : null
   const canBill = can(admin.role, 'settings.edit')
@@ -41,6 +42,8 @@ export default async function PanelLayout({ children }: { children: React.ReactN
         </div>
       </aside>
       <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-10">
+        {shop?.shopApproval === 'PENDING' && <div role="note" className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm"><strong>Your shop is not open to customers yet.</strong> Set up your products and details meanwhile; the platform owner reviews new shops and will tell you when it opens.</div>}
+        {shop?.shopApproval === 'DENIED' && <div role="alert" className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm"><strong>Your shop is closed to customers.</strong> {shop.shopDecisionNote ? `Reason: ${shop.shopDecisionNote}. ` : ''}Contact the platform owner once you have fixed this.</div>}
         {canBill && overdue > 0 && <div role="alert" className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm"><strong>{overdue} invoice{overdue === 1 ? ' is' : 's are'} overdue.</strong> <Link href="/admin/billing" className="underline font-medium">See how to pay</Link></div>}
         {canBill && overdue === 0 && trialLeft !== null && <div role="note" className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">Free trial: <strong>{trialLeft} day{trialLeft === 1 ? '' : 's'} left</strong>. <Link href="/admin/billing" className="underline font-medium">Plan and billing</Link></div>}
         {children}
