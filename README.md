@@ -187,3 +187,12 @@ Everything below is controlled by you in `/csmi`; no code change or redeploy is 
 - **Banners** (`/csmi/banners`): notices for visitors, store owners or both, between dates, in three styles.
 - **Public site** (`/csmi/site`): headline, features (with icons), FAQ and which sections appear on the home page. **Clients** (`/csmi/clients`): the "Trusted by" logos and testimonials (show only businesses that agreed), plus an optional real store counter.
 - After pulling these changes run `pnpm db:push` then `pnpm exec prisma generate` (new tables: Offer, Banner, ShowcaseClient; new fields on Store, StoreService, ServiceCatalog, Plan, Subscription, SignupRequest). Existing stores and services stay approved, so nothing live closes.
+
+## The storefront (what your clients' customers see)
+Every word and colour on a store's public site is controlled by its owner in the dashboard; nothing is shared between stores or hard-coded.
+- **Storefront** (`/admin/storefront`): layout (modern many-product shop, or the **original single-product layout**, kept as a ready-made starting point), colour and heading style, logo, announcement bar, footer, social links, home page (headline, highlights, story, benefits, which sections show), questions, About text, Contact details and four policy pages. Changes show within 15 seconds.
+- **Settings** still owns the store name, phone, WhatsApp, email, payments, delivery, tracking and the product page; the storefront reads them (header, footer, Contact page).
+- **Pages**: Home `/`, Shop `/shop` (search, categories, sort, paging), Product `/product/<slug>` (breadcrumbs, gallery, sizes, reviews, related products), About `/about`, Contact `/contact` (message form), Track order `/track`, policies `/policies/<shipping|returns|privacy|terms>` (only linked when written), Checkout.
+- **Messages** (`/admin/messages`): what customers send from the Contact page, with call, WhatsApp and email buttons and an unread count.
+- Reviews on the home page are only real, approved customer reviews. There is no cart yet (one product per order), so the header has none.
+- First store: `pnpm db:seed` gives it the original single-product (Darwaish) storefront if it has none; any store can load either starting point with one click.

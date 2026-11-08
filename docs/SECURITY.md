@@ -70,3 +70,9 @@ The rules this platform keeps. Read this before changing sign-in, sign-up, billi
 ## Public site content and clients
 - Home-page text is stored as JSON and re-validated on read (`readSite`): bad or missing data falls back to the built-in wording. Text containing `<` or `>` is refused; React escapes everything else.
 - Client logos and links must be `https://` (`httpsUrl`); logos load with `referrerPolicy="no-referrer"`, links open with `rel="noopener noreferrer nofollow"`. A client cannot be saved without confirming it agreed to be shown. The live-store counter is counted from the database, never typed in.
+
+## Storefront and Contact page
+- All storefront text is plain text (React escapes it) and `<`/`>` are refused on save. Images and links must be `https://` (or a path on the shop): `javascript:`, `data:` and `//host` are rejected when saved AND when read back (`readStorefront`), so a damaged record cannot inject anything.
+- Colours are chosen from a fixed list and applied as CSS variables; the owner never writes CSS.
+- Contact form: hidden honeypot field (bots get a fake success, nothing stored), 5 messages per 15 minutes per visitor address, 3 per hour per phone number, 100 per store per day, Pakistani mobile required, at most 2 links, 1000 characters. Messages are always read and deleted scoped to the signed-in store.
+- A shop the platform owner has not approved shows only a neutral notice; the storefront shell never renders for it.

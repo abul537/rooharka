@@ -83,3 +83,10 @@ export function pageWindow(page: number, pages: number): (number | '…')[] {
   }
   return out
 }
+
+/** "You may also like": same category first, then featured and newest, never the product itself, sold-out last. */
+export function relatedItems(items: CatalogItem[], slug: string, limit = 4): CatalogItem[] {
+  const me = items.find((i) => i.slug === slug)
+  const rank = (i: CatalogItem) => (i.soldOut ? 4 : 0) + (me?.categorySlug && i.categorySlug === me.categorySlug ? 0 : 2) + (i.isFeatured ? 0 : 1)
+  return items.filter((i) => i.slug !== slug).sort((a, b) => rank(a) - rank(b) || b.createdAt - a.createdAt).slice(0, limit)
+}

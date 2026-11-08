@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import MediaImage from '@/components/media/MediaImage'
-import { Play } from 'lucide-react'
+import { Package, Play } from 'lucide-react'
 import type { MediaDTO } from '@/lib/data/product'
 
 /**
@@ -16,13 +16,13 @@ export default function Gallery({ media, productName }: { media: MediaDTO[]; pro
   const current = items[active]
 
   return (
-    <div className="lg:sticky lg:top-28">
+    <div className="lg:sticky lg:top-24">
       <div className="relative">
-        <div className="relative w-full aspect-square rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-brand-100 to-emerald-100 flex items-center justify-center">
+        <div className="relative w-full aspect-square rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-brand-100 to-brand-50 flex items-center justify-center">
           {!current && (
             <div className="text-center">
               <div className="w-48 h-48 sm:w-64 sm:h-64 mx-auto mb-6 rounded-full bg-gradient-to-r from-brand-200 to-brand-600 shadow-2xl flex items-center justify-center">
-                <span className="text-white text-7xl" aria-hidden>🫙</span>
+                <Package className="h-20 w-20 text-white" aria-hidden />
               </div>
               <p className="text-brand-800 font-medium text-lg">{productName}</p>
             </div>

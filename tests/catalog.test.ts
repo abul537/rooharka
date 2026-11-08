@@ -53,3 +53,14 @@ test('page window', () => {
   assert.deepEqual(pageWindow(1, 1), [1]); assert.deepEqual(pageWindow(1, 3), [1, 2, 3])
   assert.deepEqual(pageWindow(10, 20), [1, '…', 9, 10, 11, '…', 20]); assert.deepEqual(pageWindow(2, 20), [1, 2, 3, '…', 20])
 })
+
+test('related products: same category first, never itself, sold-out last', async () => {
+  const { relatedItems } = await import('@/lib/catalog')
+  const mk = (slug: string, o: Partial<import('@/lib/catalog').CatalogItem> = {}) => ({ id: slug, slug, name: slug, subtitle: null, categorySlug: null, isFeatured: false, createdAt: 1, imageUrl: null, imageAlt: null, minPrice: 1, maxPrice: 1, compareAt: null, soldOut: false, rating: null, ratingCount: 0, haystack: slug, ...o })
+  const items = [mk('me', { categorySlug: 'oils' }), mk('same', { categorySlug: 'oils' }), mk('other', { categorySlug: 'tea', isFeatured: true }), mk('gone', { categorySlug: 'oils', soldOut: true }), mk('plain')]
+  const r = relatedItems(items, 'me', 3).map((i) => i.slug)
+  assert.deepEqual(r, ['same', 'other', 'plain'])
+  assert.equal(r.includes('me'), false)
+  assert.deepEqual(relatedItems(items, 'missing', 10).length, 5)
+  assert.deepEqual(relatedItems([mk('only')], 'only'), [])
+})
