@@ -102,7 +102,7 @@ test('settings: safe defaults (closed) and defensive reading', () => {
   assert.equal(DEFAULT_SETTINGS.signupsOpen, false)
   assert.deepEqual(readSettings(null), DEFAULT_SETTINGS)
   assert.deepEqual(readSettings('garbage'), DEFAULT_SETTINGS)
-  const s = readSettings({ signupsOpen: 'yes', trialDays: 999, dailyCap: -1, brandName: '', announcement: 5 })
+  const s = readSettings({ signupsOpen: 'yes', trialDays: 999, dailyCap: -1, brandName: '' })
   assert.equal(s.signupsOpen, false) // only a real true counts
   assert.equal(s.trialDays, 14)
   assert.equal(s.dailyCap, 20)
@@ -118,7 +118,7 @@ test('settings form: limits and messages', () => {
   const bad: [Record<string, string>, RegExp][] = [
     [{ trialDays: '-1' }, /Trial days/], [{ trialDays: '91' }, /Trial days/], [{ trialDays: '1e2' }, /Trial days/], [{ trialDays: '' }, /Trial days/],
     [{ dailyCap: '0' }, /daily/], [{ dailyCap: '1001' }, /daily/], [{ brandName: 'x' }, /brand/], [{ supportEmail: 'nope' }, /email/], [{ supportWhatsapp: '123' }, /WhatsApp/],
-    [{ announcement: 'a'.repeat(161) }, /announcement/], [{ paymentInstructions: 'a'.repeat(1001) }, /payment/],
+    [{ paymentInstructions: 'a'.repeat(1001) }, /payment/],
   ]
   for (const [patch, re] of bad) { const x = parseSettingsForm(form({ ...ok, ...patch })); assert.equal(x.ok, false, JSON.stringify(patch)); if (!x.ok) assert.match(x.error, re) }
   assert.equal(parseSettingsForm(form({ ...ok, trialDays: '0' })).ok, true)

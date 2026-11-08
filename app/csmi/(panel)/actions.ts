@@ -17,6 +17,8 @@ import { savePlatformSettings } from '@/lib/signup/store'
 import { approveSignup, rejectSignup } from '@/lib/signup/service'
 import { decideService, decideShop } from '@/lib/approvals/service'
 import { parseOffer } from '@/lib/offers/rules'
+import { parseBanner } from '@/lib/banners/rules'
+import { deleteBanner, saveBanner } from '@/lib/banners/service'
 import { saveOffer } from '@/lib/offers/service'
 import type { Parsed } from '@/lib/admin/settings-rules'
 import type { ActionState } from '@/components/admin/ActionForm'
@@ -228,4 +230,22 @@ export async function saveOfferAction(_: ActionState, fd: FormData): Promise<Act
     const saved = await saveOffer(id, input)
     return { message: id ? `Offer ${input.code} saved.` : `Offer ${input.code} created. Share the link /signup?offer=${input.code}`, entity: 'Offer', entityId: saved, after: input }
   }, ['/csmi/offers'])
+}
+
+// ---------------------------------------------------------------- banners
+export async function saveBannerAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const id = str(fd, 'bannerId') || null
+  return manage('banner.save', async () => {
+    const input = must(parseBanner(fd))
+    const saved = await saveBanner(id, input)
+    return { message: id ? 'Banner saved.' : 'Banner added.', entity: 'Banner', entityId: saved, after: input }
+  }, ['/csmi/banners'])
+}
+
+export async function deleteBannerAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const id = str(fd, 'bannerId')
+  return manage('banner.delete', async () => {
+    await deleteBanner(id)
+    return { message: 'Banner deleted.', entity: 'Banner', entityId: id }
+  }, ['/csmi/banners'])
 }

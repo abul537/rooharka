@@ -74,7 +74,6 @@ export default async function SignupAdminPage() {
               <Field label="Support email"><input name="supportEmail" type="email" defaultValue={s.supportEmail} maxLength={120} className={inputCls} /></Field>
               <Field label="Support WhatsApp"><input name="supportWhatsapp" defaultValue={s.supportWhatsapp} placeholder="0300 1234567" className={inputCls} /></Field>
             </div>
-            <Field label="Announcement bar (public site)" hint="One short line shown above every public page. Empty = none."><input name="announcement" defaultValue={s.announcement} maxLength={160} className={inputCls} /></Field>
             <Field label="How store owners pay you" hint="Shown on their Billing page next to each invoice: bank account, JazzCash or EasyPaisa number, name to pay."><textarea name="paymentInstructions" rows={4} maxLength={1000} defaultValue={s.paymentInstructions} className={inputCls} /></Field>
           </fieldset>
           {manage && <button className={primaryBtn}>Save settings</button>}

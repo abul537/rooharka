@@ -62,3 +62,7 @@ The rules this platform keeps. Read this before changing sign-in, sign-up, billi
 - Private (tailor-made) plans: `Plan.isPublic=false` is excluded from the pricing page AND rejected by `startSignup`, so a visitor can never pick one by editing the form.
 - Offer codes are validated twice (at sign-up for a clear message, and again inside the store-creation transaction). One use is claimed with a single atomic `UPDATE ... WHERE usedCount < maxUses`, so the last use cannot be taken twice. A code that stops applying never blocks the sign-up; the store just starts without the discount.
 - The discount is its own negative invoice line on the plan fee only; one discounted period is used up per billed period (`discountPeriodsLeft`, decremented atomically). Add-ons are never discounted, and services the owner holds or blocks are not billed.
+
+## Banners
+- Text is plain text (React escapes it; `<` and `>` are refused). Links must be `https://` or a path on this site (`safeLink`), checked when saved AND again when drawn, so `javascript:` or `//evil.com` can never appear.
+- Only users with `csmi.manage` can change banners; every change is audited. The single old "announcement" setting was replaced by banners.

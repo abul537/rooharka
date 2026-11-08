@@ -1178,3 +1178,19 @@ model Locality {
   @@index([cityId])
   @@map("localities")
 }
+
+/// A notice you control from CSMI: shown on the public site, inside store dashboards, or both, between two dates.
+model Banner {
+  id        String    @id @default(cuid())
+  text      String    // one short line
+  tone      String    @default("INFO") // INFO | OFFER | WARNING
+  linkUrl   String?   // https://... or /path
+  linkLabel String?
+  audience  String    @default("PUBLIC") // PUBLIC | STORES | BOTH
+  startsAt  DateTime?
+  endsAt    DateTime?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  @@index([isActive, audience])
+}

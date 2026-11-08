@@ -19,12 +19,11 @@ export interface PlatformSettings {
   /** Shown to store owners on their Billing page: how to pay the platform. */
   paymentInstructions: string
   /** One short line shown above the public site; empty = none. */
-  announcement: string
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
   signupsOpen: false, requireApproval: false, requireShopApproval: false, trialDays: 14, dailyCap: 20, brandName: 'Rooharka',
-  supportEmail: '', supportWhatsapp: '', paymentInstructions: '', announcement: '',
+  supportEmail: '', supportWhatsapp: '', paymentInstructions: '',
 }
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
@@ -38,7 +37,7 @@ export function readSettings(value: unknown): PlatformSettings {
     signupsOpen: v.signupsOpen === true, requireApproval: v.requireApproval === true, requireShopApproval: v.requireShopApproval === true,
     trialDays: int(v.trialDays, 0, 90, d.trialDays), dailyCap: int(v.dailyCap, 1, 1000, d.dailyCap),
     brandName: str(v.brandName, 40) || d.brandName, supportEmail: str(v.supportEmail, 120), supportWhatsapp: str(v.supportWhatsapp, 20),
-    paymentInstructions: str(v.paymentInstructions, 1000), announcement: str(v.announcement, 160),
+    paymentInstructions: str(v.paymentInstructions, 1000),
   }
 }
 
@@ -59,7 +58,5 @@ export function parseSettingsForm(g: Getter): Parsed<PlatformSettings> {
   if (wa && !supportWhatsapp) return { ok: false, error: 'The WhatsApp number must be a Pakistani mobile, like 0300 1234567.' }
   const paymentInstructions = text(g, 'paymentInstructions')
   if (paymentInstructions.length > 1000) return { ok: false, error: 'The payment instructions are too long (1000 characters at most).' }
-  const announcement = text(g, 'announcement')
-  if (announcement.length > 160) return { ok: false, error: 'The announcement must be 160 characters or fewer.' }
-  return { ok: true, value: { signupsOpen: g.get('signupsOpen') === 'on', requireApproval: g.get('requireApproval') === 'on', requireShopApproval: g.get('requireShopApproval') === 'on', trialDays, dailyCap, brandName, supportEmail, supportWhatsapp: supportWhatsapp ?? '', paymentInstructions, announcement } }
+  return { ok: true, value: { signupsOpen: g.get('signupsOpen') === 'on', requireApproval: g.get('requireApproval') === 'on', requireShopApproval: g.get('requireShopApproval') === 'on', trialDays, dailyCap, brandName, supportEmail, supportWhatsapp: supportWhatsapp ?? '', paymentInstructions } }
 }

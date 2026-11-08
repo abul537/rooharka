@@ -11,6 +11,7 @@ const ITEMS = [
   { href: '/csmi/billing', label: 'Billing' },
   { href: '/csmi/plans', label: 'Plans' },
   { href: '/csmi/offers', label: 'Offers' },
+  { href: '/csmi/banners', label: 'Banners' },
   { href: '/csmi/costs', label: 'Costs and profit' },
   { href: '/csmi/services', label: 'Services' },
   { href: '/csmi/reports', label: 'Reports' },

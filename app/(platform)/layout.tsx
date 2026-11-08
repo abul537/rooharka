@@ -5,6 +5,8 @@ import { notFound } from 'next/navigation'
 import { normalizeHost } from '@/lib/domains'
 import { isPlatformHost, marketingAllowed } from '@/lib/platform-host'
 import { getPlatformSettings } from '@/lib/signup/store'
+import { getBanners } from '@/lib/banners/store'
+import BannerBar from '@/components/BannerBar'
 
 export async function generateMetadata(): Promise<Metadata> {
   const s = await getPlatformSettings()
@@ -22,11 +24,11 @@ export default async function PlatformLayout({ children }: { children: React.Rea
   const host = normalizeHost((await headers()).get('host'))
   if (!marketingAllowed(host)) notFound()
   const home = isPlatformHost(host) ? '/' : '/platform' // on the real platform address the home page IS the root
-  const s = await getPlatformSettings()
+  const [s, banners] = await Promise.all([getPlatformSettings(), getBanners('PUBLIC')])
   const wa = s.supportWhatsapp ? `https://wa.me/${s.supportWhatsapp.replace(/\D/g, '')}` : null
   return (
     <div className="min-h-screen bg-white text-stone-900 antialiased">
-      {s.announcement && <div className="bg-stone-900 text-stone-50 text-center text-sm px-4 py-2">{s.announcement}</div>}
+      <BannerBar banners={banners} />
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-stone-200">
         <div className="mx-auto max-w-6xl flex items-center justify-between px-4 sm:px-6 h-16">
           <Link href={home} className="font-bold text-xl tracking-tight">{s.brandName}</Link>
