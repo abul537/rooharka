@@ -11,22 +11,23 @@ import BannerBar from '@/components/BannerBar'
 // Every page inside this group requires a signed-in store admin.
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin()
-  const [storeName, sub, overdue, shop, banners] = await Promise.all([
+  const [storeName, sub, overdue, shop, banners, unread] = await Promise.all([
     getStoreName(admin.storeId),
     db.subscription.findUnique({ where: { storeId: admin.storeId }, select: { status: true, trialEndsAt: true } }),
     db.invoice.count({ where: { storeId: admin.storeId, status: { in: ['OPEN', 'OVERDUE'] }, dueDate: { lt: new Date() } } }),
     db.store.findUnique({ where: { id: admin.storeId }, select: { shopApproval: true, shopDecisionNote: true } }),
     getBanners('STORES'),
+    db.contactMessage.count({ where: { storeId: admin.storeId, isRead: false } }),
   ])
   const trialLeft = sub?.status === 'TRIALING' && sub.trialEndsAt ? Math.max(0, Math.ceil((sub.trialEndsAt.getTime() - Date.now()) / 86_400_000)) : null
   const canBill = can(admin.role, 'settings.edit')
 
-  const allowed = ['/admin', '/admin/orders', '/admin/customers', '/admin/security']
+  const allowed = ['/admin', '/admin/orders', '/admin/messages', '/admin/customers', '/admin/security']
   if (can(admin.role, 'products.view')) allowed.push('/admin/products', '/admin/categories')
-  if (can(admin.role, 'settings.edit')) allowed.push('/admin/settings', '/admin/billing')
+  if (can(admin.role, 'settings.edit')) allowed.push('/admin/storefront', '/admin/settings', '/admin/billing')
 
   return (
-    <div className="lg:flex min-h-screen">
+    <div className="lg:flex min-h-screen bg-slate-50">
       <aside className="lg:w-60 lg:shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-4 lg:p-5">
         <div className="flex lg:block items-center justify-between mb-3 lg:mb-8">
           <div>
@@ -37,7 +38,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
             <button className="text-sm text-slate-600 underline">Sign out</button>
           </form>
         </div>
-        <AdminNav allowed={allowed} />
+        <AdminNav allowed={allowed} unread={unread} />
         <div className="hidden lg:block mt-10 pt-4 border-t border-slate-200 text-sm">
           <p className="font-medium truncate" title={admin.email}>{admin.name}</p>
           <p className="text-slate-500 truncate mb-3">{admin.role.replace('STORE_', '').toLowerCase()}</p>

@@ -42,7 +42,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white pt-8 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-white pt-8 pb-20">
       <div className="container mx-auto px-4 max-w-5xl">
         <div className="text-center mb-8">
           <h1 className="font-playfair text-4xl md:text-5xl font-bold text-gray-900 mb-2">Checkout</h1>

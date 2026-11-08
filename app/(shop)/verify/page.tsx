@@ -22,7 +22,7 @@ export default async function VerifyPage({ searchParams }: Props) {
   if (variant && verifiedPhone((await cookies()).get(otpCookieName())?.value, store.id)) redirect(next);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white pt-10 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-white pt-10 pb-20">
       <div className="container mx-auto px-4 max-w-md">
         <div className="text-center mb-8">
           <h1 className="font-playfair text-3xl md:text-4xl font-bold text-gray-900 mb-2">Verify your number</h1>

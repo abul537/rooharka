@@ -29,11 +29,11 @@ export default function AddressTypeIcons({ selected, onChange, error }: AddressT
             onClick={() => onChange(type.value)}
             className={`flex-1 flex flex-col items-center justify-center p-4 border-2 rounded-lg transition-all ${
               selected === type.value
-                ? 'border-amber-600 bg-amber-50 text-amber-700'
-                : 'border-gray-200 text-gray-500 hover:border-amber-300'
+                ? 'border-brand-600 bg-brand-50 text-brand-700'
+                : 'border-gray-200 text-gray-500 hover:border-brand-200'
             }`}
           >
-            <div className={`mb-2 ${selected === type.value ? 'text-amber-600' : 'text-gray-400'}`}>
+            <div className={`mb-2 ${selected === type.value ? 'text-brand-600' : 'text-gray-400'}`}>
               {type.icon}
             </div>
             <span className="text-sm font-medium">{type.label}</span>

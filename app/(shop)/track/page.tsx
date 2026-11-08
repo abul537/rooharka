@@ -70,10 +70,10 @@ export default async function TrackPage({ searchParams }: Props) {
   const showForm = config?.trackingEnabled !== false && !!store;
 
   return (
-    <div className="bg-gradient-to-b from-amber-50 to-white min-h-[70vh] py-12 px-4">
+    <div className="bg-gradient-to-b from-brand-50 to-white min-h-[70vh] py-12 px-4">
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-8">
-          <PackageSearch className="w-12 h-12 text-amber-700 mx-auto mb-3" aria-hidden />
+          <PackageSearch className="w-12 h-12 text-brand-700 mx-auto mb-3" aria-hidden />
           <h1 className="font-playfair text-4xl font-bold text-gray-900 mb-2">Track your order</h1>
           <p className="text-gray-600">Enter the tracking code we gave you after checkout.</p>
         </div>
@@ -83,20 +83,20 @@ export default async function TrackPage({ searchParams }: Props) {
             <div>
               <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-1">Tracking code</label>
               <input id="code" name="code" defaultValue={rawCode} required autoComplete="off" autoCapitalize="characters"
-                placeholder="MP-7K4Q-9XMD" className="w-full px-4 py-3 border border-gray-300 rounded-lg tracking-widest uppercase focus:ring-2 focus:ring-amber-500" />
+                placeholder="MP-7K4Q-9XMD" className="w-full px-4 py-3 border border-gray-300 rounded-lg tracking-widest uppercase focus:ring-2 focus:ring-brand-600" />
             </div>
             {config?.trackingRequiresPhoneLast4 && (
               <div>
                 <label htmlFor="last4" className="block text-sm font-medium text-gray-700 mb-1">Last 4 digits of your phone number</label>
                 <input id="last4" name="last4" defaultValue={rawLast4} required inputMode="numeric" pattern="\d{4}" maxLength={4}
-                  placeholder="4567" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+                  placeholder="4567" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-600" />
               </div>
             )}
-            <button type="submit" className="w-full bg-gradient-to-r from-amber-600 to-amber-800 text-white py-3 rounded-lg font-semibold">Track order</button>
+            <button type="submit" className="w-full bg-gradient-to-r from-brand-600 to-brand-800 text-white py-3 rounded-lg font-semibold">Track order</button>
           </form>
         )}
 
-        {message && <p role="alert" className="rounded-lg bg-amber-50 border border-amber-200 text-amber-900 p-4 text-center">{message}</p>}
+        {message && <p role="alert" className="rounded-lg bg-brand-50 border border-brand-200 text-brand-800 p-4 text-center">{message}</p>}
 
         {order && (
           <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 space-y-8">
@@ -140,7 +140,7 @@ export default async function TrackPage({ searchParams }: Props) {
                 <h3 className="font-bold text-gray-900 mb-3">Updates</h3>
                 <ul className="space-y-3 text-sm">
                   {[...order.timeline].reverse().map((t, i) => (
-                    <li key={i} className="border-l-2 border-amber-300 pl-4">
+                    <li key={i} className="border-l-2 border-brand-200 pl-4">
                       <p className="font-medium text-gray-900">{t.note ?? t.label}</p>
                       <p className="text-gray-500">{t.at}</p>
                     </li>

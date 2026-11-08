@@ -6,8 +6,8 @@ import { validatePakistaniPhone } from '@/lib/validation';
 
 interface Props { next: string; length: number }
 
-const box = 'w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 border-gray-300';
-const button = 'w-full rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 disabled:opacity-60';
+const box = 'w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-brand-600 focus:border-brand-600 border-gray-300';
+const button = 'w-full rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 disabled:opacity-60';
 
 async function post(url: string, body: unknown): Promise<{ ok: boolean; data: { error?: string; retryAfterSeconds?: number; length?: number } }> {
   try {
@@ -81,7 +81,7 @@ export default function VerifyFlow({ next, length }: Props) {
           <button disabled={busy} className={button}>{busy ? 'Checking…' : 'Verify and continue'}</button>
           <div className="flex justify-between text-sm">
             <button type="button" onClick={() => { setStep('phone'); setError(null); }} className="text-gray-600 underline">Change number</button>
-            <button type="button" disabled={busy || wait > 0} onClick={() => void sendCode()} className="text-amber-700 underline disabled:text-gray-400 disabled:no-underline">
+            <button type="button" disabled={busy || wait > 0} onClick={() => void sendCode()} className="text-brand-700 underline disabled:text-gray-400 disabled:no-underline">
               {wait > 0 ? `Resend in ${wait}s` : 'Resend code'}
             </button>
           </div>

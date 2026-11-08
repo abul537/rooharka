@@ -12,10 +12,8 @@ const playfair = Playfair_Display({
   variable: '--font-playfair',
 })
 
-export const metadata: Metadata = {
-  title: 'Darwaish® | Sacred Oil for Muscle Revival',
-  description: 'Ancient herbal formula passed through generations for muscle revival and joint flexibility.',
-}
+// Neutral on purpose: each store (and the platform site) sets its own title, description and icon.
+export const metadata: Metadata = { title: { default: 'Online store', template: '%s' } }
 
 export default function RootLayout({
   children,
@@ -24,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
-      <body className="min-h-screen bg-gradient-to-b from-amber-50 to-white">
+      <body className="min-h-screen bg-white text-gray-900">
         {children}
       </body>
     </html>

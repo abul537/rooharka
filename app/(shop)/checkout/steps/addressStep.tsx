@@ -27,7 +27,7 @@ interface AddressStepProps {
 type Errors = Partial<Record<keyof AddressFormData, string>>;
 
 const inputClass = (hasError: boolean) =>
-  `w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${
+  `w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-brand-600 focus:border-brand-600 ${
     hasError ? 'border-red-500' : 'border-gray-300'
   }`;
 
@@ -211,7 +211,7 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors,
           {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <ValidationMessage message={errorFor('cityId', 'city')} />
-        {emptyCity && <p className="mt-1 text-sm text-amber-700">No cities are listed for this province yet. Please contact the store to place your order.</p>}
+        {emptyCity && <p className="mt-1 text-sm text-brand-700">No cities are listed for this province yet. Please contact the store to place your order.</p>}
       </div>
 
       {/* Locality */}
@@ -224,7 +224,7 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors,
           {localities.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
         <ValidationMessage message={errorFor('localityId', 'locality')} />
-        {emptyLocality && <p className="mt-1 text-sm text-amber-700">No localities are listed for this city yet. Please contact the store to place your order.</p>}
+        {emptyLocality && <p className="mt-1 text-sm text-brand-700">No localities are listed for this city yet. Please contact the store to place your order.</p>}
       </div>
 
       {/* Landmark */}
@@ -245,7 +245,7 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors,
       )}
 
       {/* Address preview */}
-      <div className="bg-gradient-to-r from-amber-50 to-emerald-50 p-4 rounded-lg border border-amber-200">
+      <div className="bg-gradient-to-r from-brand-50 to-emerald-50 p-4 rounded-lg border border-brand-200">
         <p className="text-sm text-gray-600">Your full address will be:</p>
         <p className="font-medium text-gray-800">
           {fields.addressType.enabled && <>{formData.addressType.charAt(0).toUpperCase() + formData.addressType.slice(1)}: </>}
@@ -256,7 +256,7 @@ export default function AddressStep({ fields, onNext, initialData, serverErrors,
 
       <div className="flex justify-end">
         <button type="submit"
-          className="bg-gradient-to-r from-amber-600 to-amber-800 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:shadow-xl transition-all duration-300">
+          className="bg-gradient-to-r from-brand-600 to-brand-800 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:shadow-xl transition-all duration-300">
           Proceed to Payment
         </button>
       </div>

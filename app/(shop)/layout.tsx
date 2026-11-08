@@ -1,28 +1,53 @@
-import Header from '@/components/Header'
-import Footer from '@/components/Footer'
-import { getShopClosure } from '@/lib/store'
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import ShopHeader from '@/components/shop/ShopHeader'
+import ShopFooter from '@/components/shop/ShopFooter'
+import { db } from '@/lib/db'
+import { getCurrentStore, getShopClosure } from '@/lib/store'
+import { getShopContext } from '@/lib/storefront/data'
+import { safeUrl } from '@/lib/storefront/rules'
+import { themeStyle } from '@/lib/storefront/theme'
 
-// Storefront shell (header + footer). The admin area has its own layout without these.
-// The owner's reason is for the store owner only, never shown to customers.
-// A shop the platform owner has not approved shows a plain notice instead of any page (getCurrentStore is null for it too).
+/** Title, description and icon come from the store's own Settings; nothing is shared between stores. */
+export async function generateMetadata(): Promise<Metadata> {
+  const store = await getCurrentStore()
+  if (!store) return { title: 'Store' }
+  const s = await db.storeSettings.findUnique({ where: { storeId: store.id }, select: { seoTitle: true, seoDescription: true, faviconUrl: true } }).catch(() => null)
+  return {
+    title: { default: s?.seoTitle || store.name, template: `%s | ${store.name}` },
+    description: s?.seoDescription ?? undefined,
+    icons: s?.faviconUrl && safeUrl(s.faviconUrl, false) ? { icon: s.faviconUrl } : undefined,
+  }
+}
+
+// Storefront shell. A shop the platform owner has not approved shows a plain notice instead of any page
+// (the owner's reason is for the store owner only, never shown to customers).
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
-  const closed = await getShopClosure()
-  if (closed) {
-    const waiting = closed.approval === 'PENDING'
+  const [store, closed] = await Promise.all([getCurrentStore(), getShopClosure()])
+  if (closed || !store) {
+    const waiting = closed?.approval === 'PENDING'
     return (
-      <main className="min-h-screen grid place-items-center px-6 py-16 text-center">
+      <main className="grid min-h-screen place-items-center px-6 py-16 text-center">
         <div className="max-w-md">
-          <h1 className="text-2xl font-semibold">{closed.name}</h1>
+          <h1 className="text-2xl font-semibold">{closed?.name ?? 'Store'}</h1>
           <p className="mt-3 text-stone-600">{waiting ? 'This shop is not open yet. Please check back soon.' : 'This shop is not available right now.'}</p>
         </div>
       </main>
     )
   }
+  const ctx = await getShopContext(store)
+  const { announcement, color, font } = ctx.content
   return (
-    <>
-      <Header />
-      <main className="pt-20">{children}</main>
-      <Footer />
-    </>
+    <div style={themeStyle(color, font)} className="flex min-h-screen flex-col bg-white text-gray-900">
+      {announcement.text && (
+        <p className="bg-brand-700 px-4 py-2 text-center text-sm text-white">
+          {announcement.text}
+          {announcement.link && (announcement.link.startsWith('/') ? <Link href={announcement.link} className="ml-2 font-semibold underline">Learn more</Link> : <a href={announcement.link} target="_blank" rel="noopener noreferrer" className="ml-2 font-semibold underline">Learn more</a>)}
+        </p>
+      )}
+      <ShopHeader name={store.name} ctx={ctx} />
+      <main className="flex-1">{children}</main>
+      <ShopFooter name={store.name} ctx={ctx} />
+    </div>
   )
 }

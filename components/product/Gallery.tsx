@@ -18,13 +18,13 @@ export default function Gallery({ media, productName }: { media: MediaDTO[]; pro
   return (
     <div className="lg:sticky lg:top-28">
       <div className="relative">
-        <div className="relative w-full aspect-square rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-amber-100 to-emerald-100 flex items-center justify-center">
+        <div className="relative w-full aspect-square rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-brand-100 to-emerald-100 flex items-center justify-center">
           {!current && (
             <div className="text-center">
-              <div className="w-48 h-48 sm:w-64 sm:h-64 mx-auto mb-6 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 shadow-2xl flex items-center justify-center">
+              <div className="w-48 h-48 sm:w-64 sm:h-64 mx-auto mb-6 rounded-full bg-gradient-to-r from-brand-200 to-brand-600 shadow-2xl flex items-center justify-center">
                 <span className="text-white text-7xl" aria-hidden>🫙</span>
               </div>
-              <p className="text-amber-900 font-medium text-lg">{productName}</p>
+              <p className="text-brand-800 font-medium text-lg">{productName}</p>
             </div>
           )}
           {current?.kind === 'IMAGE' && (
@@ -44,7 +44,7 @@ export default function Gallery({ media, productName }: { media: MediaDTO[]; pro
           )}
         </div>
         <div className="absolute -top-4 -left-4 w-24 h-24 rounded-full bg-emerald-200/30 blur-xl pointer-events-none" />
-        <div className="absolute -bottom-4 -right-4 w-32 h-32 rounded-full bg-amber-200/30 blur-xl pointer-events-none" />
+        <div className="absolute -bottom-4 -right-4 w-32 h-32 rounded-full bg-brand-200/30 blur-xl pointer-events-none" />
       </div>
 
       {items.length > 1 && (
@@ -58,7 +58,7 @@ export default function Gallery({ media, productName }: { media: MediaDTO[]; pro
               aria-label={m.kind === 'VIDEO' ? 'Play product video' : `Show image ${i + 1}`}
               onClick={() => setActive(i)}
               className={`relative w-20 h-20 shrink-0 rounded-xl overflow-hidden border-2 transition-colors ${
-                i === active ? 'border-amber-600' : 'border-amber-200 hover:border-amber-400'
+                i === active ? 'border-brand-600' : 'border-brand-200 hover:border-brand-200'
               }`}
             >
               {m.kind === 'IMAGE' ? (

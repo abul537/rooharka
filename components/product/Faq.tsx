@@ -5,7 +5,7 @@ import type { SectionDTO } from '@/lib/data/product'
 export default function Faq({ section }: { section: SectionDTO }) {
   if (section.items.length === 0) return null
   return (
-    <section className="py-16 bg-gradient-to-b from-white to-amber-50" aria-labelledby="faq-heading">
+    <section className="py-16 bg-gradient-to-b from-white to-brand-50" aria-labelledby="faq-heading">
       <div className="container mx-auto px-4 max-w-3xl">
         <h2 id="faq-heading" className="font-playfair text-4xl font-bold text-gray-900 mb-12 text-center">
           {section.title}

@@ -67,7 +67,7 @@ export default async function ProductPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
 
-      <section className="py-10 md:py-16 bg-gradient-to-b from-amber-50 to-white">
+      <section className="py-10 md:py-16 bg-gradient-to-b from-brand-50 to-white">
         <div className="container mx-auto px-4">
           <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-start">
             <Gallery media={media} productName={product.name} />

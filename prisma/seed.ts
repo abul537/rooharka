@@ -3,6 +3,7 @@
 import 'dotenv/config'
 import { db } from '../lib/db'
 import { CHECKOUT_FIELD_DEFAULTS } from '../lib/store-defaults'
+import { presetContent } from '../lib/storefront/presets'
 
 const SERVICES = [
   { key: 'jazzcash', name: 'JazzCash', type: 'PAYMENT' },
@@ -180,6 +181,10 @@ async function main() {
       create: { storeId: store.id, sortOrder: i, enabled: true, ...f },
     })
   }
+
+  // The first store keeps the ORIGINAL single-product (Darwaish) storefront. Only created when missing, so edits are never overwritten.
+  const content = presetContent('SINGLE_PRODUCT', 'Darwaish®') as unknown as object
+  await db.storefront.upsert({ where: { storeId: store.id }, update: {}, create: { storeId: store.id, content } })
 
   await seedProduct(store.id)
   await seedProductPageSettings(store.id)

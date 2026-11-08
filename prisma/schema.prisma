@@ -224,6 +224,9 @@ model Store {
   blocklist     BlocklistEntry[]
   auditLogs     AuditLog[]
 
+  storefront      Storefront?
+  contactMessages ContactMessage[]
+
   @@index([status])
 }
 
@@ -1208,4 +1211,30 @@ model ShowcaseClient {
   createdAt DateTime @default(now())
 
   @@index([isVisible, sortOrder])
+}
+
+/// Everything the store owner controls about the customer-facing site (look, home page, About, Contact, policies) as one
+/// validated JSON document. A store with no row shows neutral built-in content made from its name; nothing is hard-coded.
+model Storefront {
+  storeId   String   @id
+  content   Json     @default("{}")
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+/// A message a customer sent through the store's Contact page. The store owner reads and answers it from the dashboard.
+model ContactMessage {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  phone     String
+  email     String?
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, isRead, createdAt])
 }

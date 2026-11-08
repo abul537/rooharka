@@ -31,17 +31,17 @@ export default async function SuccessPage({ searchParams }: { searchParams: Prom
   const awaiting = payment && payment.method !== 'COD';
 
   return (
-    <div className="bg-gradient-to-b from-amber-50 to-white min-h-[70vh] py-16 px-4">
+    <div className="bg-gradient-to-b from-brand-50 to-white min-h-[70vh] py-16 px-4">
       <div className="max-w-xl mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
         <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" aria-hidden />
         <h1 className="font-playfair text-3xl font-bold text-gray-900 mb-2">Thank you! Your order is placed</h1>
         <p className="text-gray-600 mb-6">Order #{order.number} · {formatPrice(order.total.toNumber(), store.currency)}</p>
 
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6">
-          <p className="text-sm text-amber-900 mb-1">Your tracking code</p>
+        <div className="bg-brand-50 border border-brand-200 rounded-xl p-5 mb-6">
+          <p className="text-sm text-brand-800 mb-1">Your tracking code</p>
           <p className="text-3xl font-bold tracking-widest text-gray-900 mb-2" data-testid="tracking-code">{code}</p>
           <CopyCode code={code} />
-          <p className="text-xs text-amber-900 mt-3">Save this code. You can use it any time to see your order status.</p>
+          <p className="text-xs text-brand-800 mt-3">Save this code. You can use it any time to see your order status.</p>
         </div>
 
         {awaiting && (
@@ -51,7 +51,7 @@ export default async function SuccessPage({ searchParams }: { searchParams: Prom
         )}
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link href={`/track?code=${encodeURIComponent(code)}`} className="bg-gradient-to-r from-amber-600 to-amber-800 text-white px-6 py-3 rounded-lg font-semibold">
+          <Link href={`/track?code=${encodeURIComponent(code)}`} className="bg-gradient-to-r from-brand-600 to-brand-800 text-white px-6 py-3 rounded-lg font-semibold">
             Track my order
           </Link>
           <Link href="/" className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Back to home</Link>

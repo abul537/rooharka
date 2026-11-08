@@ -3,8 +3,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Per-store colours: the storefront sets --c-* from the owner's chosen palette; these tokens make them real Tailwind colours (bg-brand-700, text-brand-800 ...). */
+@theme inline {
+  --color-brand-50: var(--c-50);
+  --color-brand-100: var(--c-100);
+  --color-brand-200: var(--c-200);
+  --color-brand-600: var(--c-600);
+  --color-brand-700: var(--c-700);
+  --color-brand-800: var(--c-800);
+}
+
 @layer base {
   :root {
+    --c-50: #ecfdf5; --c-100: #d1fae5; --c-200: #a7f3d0; --c-600: #059669; --c-700: #047857; --c-800: #065f46;
     --font-playfair: 'Playfair Display', serif;
     --font-inter: 'Inter', sans-serif;
   }
@@ -14,7 +25,7 @@
   }
   
   h1, h2, h3, h4, .font-playfair {
-    font-family: var(--font-playfair);
+    font-family: var(--heading-font, var(--font-playfair));
   }
 }
 

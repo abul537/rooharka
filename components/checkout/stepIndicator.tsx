@@ -11,7 +11,7 @@ export default function StepIndicator({ currentStep, steps }: StepIndicatorProps
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
               index + 1 === currentStep
-                ? 'bg-gradient-to-r from-amber-600 to-amber-800 text-white'
+                ? 'bg-gradient-to-r from-brand-600 to-brand-800 text-white'
                 : index + 1 < currentStep
                 ? 'bg-emerald-500 text-white'
                 : 'bg-gray-200 text-gray-500'
@@ -22,7 +22,7 @@ export default function StepIndicator({ currentStep, steps }: StepIndicatorProps
           <span
             className={`ml-2 text-sm font-medium ${
               index + 1 === currentStep
-                ? 'text-amber-700'
+                ? 'text-brand-700'
                 : index + 1 < currentStep
                 ? 'text-emerald-600'
                 : 'text-gray-400'

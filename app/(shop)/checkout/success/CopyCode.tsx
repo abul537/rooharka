@@ -11,7 +11,7 @@ export default function CopyCode({ code }: { code: string }) {
       onClick={async () => {
         try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* clipboard blocked: the code is visible to copy by hand */ }
       }}
-      className="inline-flex items-center gap-2 text-sm font-medium text-amber-800 hover:text-amber-900"
+      className="inline-flex items-center gap-2 text-sm font-medium text-brand-800 hover:text-brand-800"
     >
       {copied ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />}
       {copied ? 'Copied' : 'Copy code'}

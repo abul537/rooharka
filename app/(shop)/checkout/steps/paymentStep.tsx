@@ -40,7 +40,7 @@ export default function PaymentStep({ options, currency, submitting, error, fiel
     return (
       <div className="space-y-6">
         <h2 className="text-2xl font-bold text-gray-900">Payment</h2>
-        <p role="alert" className="rounded-lg bg-amber-50 border border-amber-200 text-amber-900 p-4">
+        <p role="alert" className="rounded-lg bg-brand-50 border border-brand-200 text-brand-800 p-4">
           This store needs an advance payment, but online payment is not set up yet. Please contact the store to place your order.
         </p>
         <button type="button" onClick={onBack} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Back</button>
@@ -59,10 +59,10 @@ export default function PaymentStep({ options, currency, submitting, error, fiel
           return (
             <label key={o.method}
               className={`flex items-start p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                selected?.method === o.method ? 'border-amber-600 bg-amber-50' : 'border-gray-200 hover:border-amber-400'
+                selected?.method === o.method ? 'border-brand-600 bg-brand-50' : 'border-gray-200 hover:border-brand-200'
               }`}>
               <input type="radio" name="payment" value={o.method} checked={selected?.method === o.method}
-                onChange={() => setMethod(o.method)} className="mt-1 w-4 h-4 text-amber-600" />
+                onChange={() => setMethod(o.method)} className="mt-1 w-4 h-4 text-brand-600" />
               <div className="ml-4 flex-1">
                 <p className="font-medium text-gray-900">{label.title}</p>
                 <p className="text-sm text-gray-500">{label.hint}</p>
@@ -81,20 +81,20 @@ export default function PaymentStep({ options, currency, submitting, error, fiel
 
       {/* Wallet instructions + transaction id */}
       {selected && selected.wallet && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-5 space-y-4">
-          <p className="text-sm text-amber-900">
+        <div className="bg-brand-50 border border-brand-200 rounded-lg p-5 space-y-4">
+          <p className="text-sm text-brand-800">
             1. Open your {LABELS[selected.method].title} app and send <strong>{formatPrice(selected.charges.advance, currency)}</strong> to:
           </p>
-          <div className="bg-white rounded-lg p-4 border border-amber-200">
+          <div className="bg-white rounded-lg p-4 border border-brand-200">
             <p className="text-lg font-bold text-gray-900 tracking-wide">{selected.wallet.accountNumber}</p>
             {selected.wallet.accountTitle && <p className="text-sm text-gray-600">Account title: {selected.wallet.accountTitle}</p>}
           </div>
-          <p className="text-sm text-amber-900">2. Enter the Transaction ID (TID) from your payment receipt below. We confirm it before dispatch.</p>
+          <p className="text-sm text-brand-800">2. Enter the Transaction ID (TID) from your payment receipt below. We confirm it before dispatch.</p>
           <div>
             <label htmlFor="tid" className="block text-sm font-medium text-gray-700 mb-1">Transaction ID <span className="text-red-500" aria-hidden>*</span></label>
             <input id="tid" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} onBlur={() => setTouched(true)}
               autoComplete="off" inputMode="text" maxLength={30}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-amber-500 ${(touched && tidInvalid) || fieldError ? 'border-red-500' : 'border-gray-300'}`}
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-brand-600 ${(touched && tidInvalid) || fieldError ? 'border-red-500' : 'border-gray-300'}`}
               placeholder="e.g. 12345678901" />
             {((touched && tidInvalid) || fieldError) && (
               <p className="mt-1 text-sm text-red-600">{fieldError ?? 'Enter the transaction ID from your receipt (6 to 30 letters or digits)'}</p>
@@ -109,7 +109,7 @@ export default function PaymentStep({ options, currency, submitting, error, fiel
         <button type="button" onClick={onBack} disabled={submitting}
           className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50">Back</button>
         <button type="submit" disabled={!selected || submitting}
-          className="bg-gradient-to-r from-amber-600 to-amber-800 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+          className="bg-gradient-to-r from-brand-600 to-brand-800 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
           {submitting ? 'Placing order…' : 'Complete Order'}
         </button>
       </div>

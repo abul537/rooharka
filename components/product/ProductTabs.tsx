@@ -67,7 +67,7 @@ export default function ProductTabs({ data }: { data: ProductPageData }) {
               onClick={() => setActive(tab.key)}
               onKeyDown={(e) => onKeyDown(e, i)}
               className={`px-5 md:px-6 py-4 font-medium text-base md:text-lg border-b-2 whitespace-nowrap transition-colors ${
-                tab.key === current.key ? 'border-amber-600 text-amber-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+                tab.key === current.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-600 hover:text-gray-900'
               }`}
             >
               {tab.label}

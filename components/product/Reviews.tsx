@@ -5,7 +5,7 @@ export function Stars({ value, size = 'text-xl' }: { value: number; size?: strin
   return (
     <span className={`inline-flex ${size}`} role="img" aria-label={`${value.toFixed(1)} out of 5 stars`}>
       {[1, 2, 3, 4, 5].map((n) => (
-        <span key={n} className={n <= full ? 'text-amber-500' : 'text-gray-300'} aria-hidden>★</span>
+        <span key={n} className={n <= full ? 'text-brand-600' : 'text-gray-300'} aria-hidden>★</span>
       ))}
     </span>
   )
@@ -23,7 +23,7 @@ export default function Reviews({ items, count, average }: { items: ReviewDTO[];
         </div>
       )}
       {items.length === 0 ? (
-        <p className="text-gray-600 bg-amber-50 rounded-2xl p-8">
+        <p className="text-gray-600 bg-brand-50 rounded-2xl p-8">
           No reviews yet. Be the first to share your experience after your order arrives.
         </p>
       ) : (

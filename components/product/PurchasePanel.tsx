@@ -45,7 +45,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
   return (
     <div>
       {settings.badgeText && (
-        <div className="inline-flex items-center px-4 py-2 rounded-full bg-amber-100 text-amber-800 mb-6">
+        <div className="inline-flex items-center px-4 py-2 rounded-full bg-brand-100 text-brand-800 mb-6">
           <span className="mr-2" aria-hidden>✨</span>
           <span className="font-medium">{settings.badgeText}</span>
         </div>
@@ -92,7 +92,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
                 <label
                   key={v.id}
                   className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                    v.id === variantId ? 'border-amber-600 bg-amber-50' : 'border-gray-200 hover:border-amber-300'
+                    v.id === variantId ? 'border-brand-600 bg-brand-50' : 'border-gray-200 hover:border-brand-200'
                   } ${out ? 'opacity-60' : ''}`}
                 >
                   <input
@@ -106,7 +106,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
                   <div className="flex justify-between items-start mb-2 gap-2">
                     <span className="font-bold text-gray-900">{v.label}</span>
                     {(out || v.badge) && (
-                      <span className={`text-xs text-white px-2 py-1 rounded ${out ? 'bg-gray-500' : 'bg-amber-600'}`}>
+                      <span className={`text-xs text-white px-2 py-1 rounded ${out ? 'bg-gray-500' : 'bg-brand-600'}`}>
                         {out ? 'Sold out' : v.badge}
                       </span>
                     )}
@@ -147,7 +147,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
             type="button"
             onClick={order}
             disabled={soldOut}
-            className="flex-1 bg-gradient-to-r from-amber-700 to-amber-800 text-white py-4 rounded-xl font-bold text-lg hover:shadow-2xl hover:scale-[1.02] transition-all flex items-center justify-center disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+            className="flex-1 bg-gradient-to-r from-brand-700 to-brand-800 text-white py-4 rounded-xl font-bold text-lg hover:shadow-2xl hover:scale-[1.02] transition-all flex items-center justify-center disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
           >
             <ShoppingCart className="mr-3 w-5 h-5" aria-hidden />
             {soldOut ? 'Out of stock' : `${settings.buyButtonLabel} · ${formatPrice(total, store.currency)}`}
@@ -165,7 +165,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
             const Icon = TRUST_ICON[b.icon]
             return (
               <li key={i} className="flex items-center gap-3">
-                <Icon className="w-5 h-5 text-amber-600 shrink-0" aria-hidden />
+                <Icon className="w-5 h-5 text-brand-600 shrink-0" aria-hidden />
                 <span className="text-sm">{b.text}</span>
               </li>
             )
@@ -175,7 +175,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
 
       {/* Key benefits */}
       {keyBenefits && keyBenefits.items.length > 0 && (
-        <div className="bg-gradient-to-r from-amber-50 to-emerald-50 rounded-2xl p-6">
+        <div className="bg-gradient-to-r from-brand-50 to-emerald-50 rounded-2xl p-6">
           <h2 className="font-bold text-xl text-gray-900 mb-4">{keyBenefits.title}</h2>
           <ul className="grid sm:grid-cols-2 gap-3">
             {keyBenefits.items.map((b, i) => (
@@ -201,7 +201,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
             <p className="font-bold text-gray-900">{formatPrice(total, store.currency)}</p>
           </div>
           <button type="button" onClick={order} disabled={soldOut} tabIndex={showBar ? 0 : -1}
-            className="ml-auto bg-gradient-to-r from-amber-700 to-amber-800 text-white px-6 py-3 rounded-xl font-bold disabled:opacity-50">
+            className="ml-auto bg-gradient-to-r from-brand-700 to-brand-800 text-white px-6 py-3 rounded-xl font-bold disabled:opacity-50">
             {soldOut ? 'Out of stock' : settings.buyButtonLabel}
           </button>
         </div>

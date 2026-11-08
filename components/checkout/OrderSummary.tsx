@@ -21,7 +21,7 @@ export default function OrderSummary({ line, quantity, maxQuantity, onQuantityCh
       <h2 className="text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
 
       <div className="flex gap-4 pb-4 border-b border-gray-100">
-        <div className="relative w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-amber-100 to-emerald-100 flex items-center justify-center">
+        <div className="relative w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-brand-100 to-emerald-100 flex items-center justify-center">
           {line.imageUrl
             ? <MediaImage src={line.imageUrl} width={160} alt="" fill sizes="80px" className="object-cover" />
             : <span className="text-3xl" aria-hidden>🫙</span>}
@@ -49,7 +49,7 @@ export default function OrderSummary({ line, quantity, maxQuantity, onQuantityCh
         <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-100"><dt>Total</dt><dd>{formatPrice(charges.total, currency)}</dd></div>
         {charges.advance > 0 && (
           <>
-            <div className="flex justify-between text-amber-800"><dt>Pay now</dt><dd>{formatPrice(charges.advance, currency)}</dd></div>
+            <div className="flex justify-between text-brand-800"><dt>Pay now</dt><dd>{formatPrice(charges.advance, currency)}</dd></div>
             {charges.dueOnDelivery > 0 && <div className="flex justify-between text-gray-600"><dt>Pay on delivery</dt><dd>{formatPrice(charges.dueOnDelivery, currency)}</dd></div>}
           </>
         )}
