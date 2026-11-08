@@ -1194,3 +1194,18 @@ model Banner {
 
   @@index([isActive, audience])
 }
+
+/// A business shown on the public site ("Trusted by"), with an optional testimonial. Only what you enter here is shown.
+model ShowcaseClient {
+  id        String   @id @default(cuid())
+  name      String
+  logoUrl   String?  // https image address
+  website   String?  // https address the logo links to
+  quote     String?  // testimonial, only if the client agreed
+  person    String?  // who said it, e.g. "Ayesha Khan, owner"
+  sortOrder Int      @default(0)
+  isVisible Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([isVisible, sortOrder])
+}

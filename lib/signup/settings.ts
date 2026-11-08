@@ -18,7 +18,6 @@ export interface PlatformSettings {
   supportWhatsapp: string
   /** Shown to store owners on their Billing page: how to pay the platform. */
   paymentInstructions: string
-  /** One short line shown above the public site; empty = none. */
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {

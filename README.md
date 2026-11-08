@@ -178,3 +178,12 @@ The platform's own address (`PLATFORM_HOST`, for example `rooharka.pk`) shows a 
 **Lifecycle:** trial, then billing converts the subscription to paid and creates the first invoice; an unpaid invoice turns the store "past due" (never suspended automatically). Store owners see their plan, trial days left, invoices and how to pay under **Plan and billing**; a bar shows trial days left or overdue invoices.
 
 **Set up:** `PLATFORM_HOST` (and a wildcard DNS record `*` to the same hosting so `store.rooharka.pk` works), `RESEND_API_KEY` + `MAIL_FROM` (optional: without them every sign-up needs your approval), then `pnpm db:push`, add a plan, open sign-ups. The Terms and Privacy pages are plain-language starting texts: have a lawyer review them. Security and error-handling rules: see `docs/SECURITY.md`.
+
+## Running the platform from CSMI (approvals, plans, offers, banners, public site)
+Everything below is controlled by you in `/csmi`; no code change or redeploy is needed.
+- **Approvals** (`/csmi/approvals`): the one inbox for new accounts, shops waiting to go live to customers, and stores asking to use a service. "Not now" always needs a reason; the store owner is told by email, or you tap a ready WhatsApp message. Close a live shop or block a service from the store's own page. Turn on "new shops stay closed until I open them" in Sign-up settings, and "Needs my approval" per service on the Services page.
+- **Plans** (`/csmi/plans`): prices, limits, included services, order on the pricing page. Untick "Show on pricing page" for a tailor-made plan for one client, then give it to the store from its page.
+- **Offers** (`/csmi/offers`): discount codes (percent off the plan fee for the first N invoices, optional dates, plan and maximum uses). Share `/signup?offer=CODE`. The discount is its own line on the invoice.
+- **Banners** (`/csmi/banners`): notices for visitors, store owners or both, between dates, in three styles.
+- **Public site** (`/csmi/site`): headline, features (with icons), FAQ and which sections appear on the home page. **Clients** (`/csmi/clients`): the "Trusted by" logos and testimonials (show only businesses that agreed), plus an optional real store counter.
+- After pulling these changes run `pnpm db:push` then `pnpm exec prisma generate` (new tables: Offer, Banner, ShowcaseClient; new fields on Store, StoreService, ServiceCatalog, Plan, Subscription, SignupRequest). Existing stores and services stay approved, so nothing live closes.

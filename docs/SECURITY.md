@@ -66,3 +66,7 @@ The rules this platform keeps. Read this before changing sign-in, sign-up, billi
 ## Banners
 - Text is plain text (React escapes it; `<` and `>` are refused). Links must be `https://` or a path on this site (`safeLink`), checked when saved AND again when drawn, so `javascript:` or `//evil.com` can never appear.
 - Only users with `csmi.manage` can change banners; every change is audited. The single old "announcement" setting was replaced by banners.
+
+## Public site content and clients
+- Home-page text is stored as JSON and re-validated on read (`readSite`): bad or missing data falls back to the built-in wording. Text containing `<` or `>` is refused; React escapes everything else.
+- Client logos and links must be `https://` (`httpsUrl`); logos load with `referrerPolicy="no-referrer"`, links open with `rel="noopener noreferrer nofollow"`. A client cannot be saved without confirming it agreed to be shown. The live-store counter is counted from the database, never typed in.

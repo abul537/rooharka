@@ -18,6 +18,10 @@ import { approveSignup, rejectSignup } from '@/lib/signup/service'
 import { decideService, decideShop } from '@/lib/approvals/service'
 import { parseOffer } from '@/lib/offers/rules'
 import { parseBanner } from '@/lib/banners/rules'
+import { parseSiteForm } from '@/lib/site/rules'
+import { resetSiteContent, saveSiteContent } from '@/lib/site/store'
+import { parseClient } from '@/lib/showcase/rules'
+import { deleteClient, saveClient } from '@/lib/showcase/service'
 import { deleteBanner, saveBanner } from '@/lib/banners/service'
 import { saveOffer } from '@/lib/offers/service'
 import type { Parsed } from '@/lib/admin/settings-rules'
@@ -248,4 +252,37 @@ export async function deleteBannerAction(_: ActionState, fd: FormData): Promise<
     await deleteBanner(id)
     return { message: 'Banner deleted.', entity: 'Banner', entityId: id }
   }, ['/csmi/banners'])
+}
+
+// ---------------------------------------------------------------- public site content and clients
+export async function saveSiteAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return manage('site.save', async () => {
+    const input = must(parseSiteForm(fd))
+    await saveSiteContent(input)
+    return { message: 'Saved. The public home page shows it within about 15 seconds.', entity: 'PlatformSetting', entityId: 'site' }
+  }, ['/csmi/site', '/platform'])
+}
+
+export async function resetSiteAction(_: ActionState): Promise<ActionState> {
+  return manage('site.reset', async () => {
+    await resetSiteContent()
+    return { message: 'Back to the original wording.', entity: 'PlatformSetting', entityId: 'site' }
+  }, ['/csmi/site', '/platform'])
+}
+
+export async function saveClientAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const id = str(fd, 'clientId') || null
+  return manage('client.save', async () => {
+    const input = must(parseClient(fd))
+    const saved = await saveClient(id, input)
+    return { message: id ? 'Client saved.' : 'Client added.', entity: 'ShowcaseClient', entityId: saved, after: { name: input.name, visible: input.isVisible } }
+  }, ['/csmi/clients', '/platform'])
+}
+
+export async function deleteClientAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const id = str(fd, 'clientId')
+  return manage('client.delete', async () => {
+    await deleteClient(id)
+    return { message: 'Client removed.', entity: 'ShowcaseClient', entityId: id }
+  }, ['/csmi/clients', '/platform'])
 }
