@@ -4,6 +4,7 @@
  */
 import type { Getter, Parsed } from '@/lib/admin/settings-rules'
 import { normalizePkMobile } from '@/lib/phone'
+import { FEATURE_KEYS } from '@/lib/signup/plans'
 import { validateEmail } from '@/lib/validation'
 import { isValidSlug, type BillingInterval, type StoreStatus, type SubStatus } from '@/lib/csmi/rules'
 
@@ -25,7 +26,7 @@ export const PAY_METHODS = ['bank', 'jazzcash', 'easypaisa', 'cash', 'other'] as
 // ------------------------------------------------------------------- plans
 /** Limits and wording shown on the public pricing page. A blank limit means unlimited. NOT enforced by the platform yet. */
 export interface PlanShow { products: number | null; ordersPerMonth: number | null; staff: number | null; tagline: string; popular: boolean }
-export interface PlanInput { name: string; monthlyPrice: number; yearlyPrice: number | null; isActive: boolean; show: PlanShow }
+export interface PlanInput { name: string; monthlyPrice: number; yearlyPrice: number | null; isActive: boolean; isPublic: boolean; sortOrder: number; features: string[]; show: PlanShow }
 export function parsePlan(g: Getter): Parsed<PlanInput> {
   const name = text(g, 'name')
   if (name.length < 2 || name.length > 40) return { ok: false, error: 'The plan name must be 2 to 40 characters.' }
@@ -42,7 +43,10 @@ export function parsePlan(g: Getter): Parsed<PlanInput> {
   if (products === undefined || ordersPerMonth === undefined || staff === undefined) return { ok: false, error: 'Limits must be whole numbers above 0, or empty for unlimited.' }
   const tagline = text(g, 'tagline')
   if (tagline.length > 90) return { ok: false, error: 'The tagline must be 90 characters or fewer.' }
-  return { ok: true, value: { name, monthlyPrice: monthly, yearlyPrice: yearly, isActive: flag(g, 'isActive'), show: { products, ordersPerMonth, staff, tagline, popular: flag(g, 'popular') } } }
+  const sortRaw = text(g, 'sortOrder')
+  if (sortRaw !== '' && !/^\d{1,4}$/.test(sortRaw)) return { ok: false, error: 'The order must be a whole number from 0 to 9999.' }
+  const features = FEATURE_KEYS.filter((k) => flag(g, `feature_${k}`))
+  return { ok: true, value: { name, monthlyPrice: monthly, yearlyPrice: yearly, isActive: flag(g, 'isActive'), isPublic: flag(g, 'isPublic'), sortOrder: sortRaw === '' ? 0 : Number(sortRaw), features, show: { products, ordersPerMonth, staff, tagline, popular: flag(g, 'popular') } } }
 }
 
 // ------------------------------------------------------------------- costs

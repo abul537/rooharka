@@ -251,9 +251,31 @@ model Plan {
   limits        Json     @default("{}") // { products: 50, ordersPerMonth: 500, staff: 3 }
   features      Json     @default("[]") // service keys included in the plan
   isActive      Boolean  @default(true)
+  isPublic      Boolean  @default(true) // false = tailor-made: hidden from pricing and sign-up, you assign it to one store
+  sortOrder     Int      @default(0)    // order on the pricing page (lowest first), then by price
   createdAt     DateTime @default(now())
 
   subscriptions Subscription[]
+  offers        Offer[]
+}
+
+/// A promotion you launch: a code worth a percentage off the plan fee for the first N billing periods.
+model Offer {
+  id         String    @id @default(cuid())
+  code       String    @unique // typed by the store owner at sign-up, stored upper case
+  title      String    // shown to the store owner
+  percentOff Int       // 1 to 100, taken off the PLAN fee (add-on fees are not discounted)
+  periods    Int       @default(1) // how many invoices get the discount
+  planId     String?   // null = any plan
+  plan       Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+  startsAt   DateTime?
+  endsAt     DateTime?
+  maxUses    Int?      // null = unlimited
+  usedCount  Int       @default(0)
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  @@index([isActive])
 }
 
 /// One active subscription per store. Source of truth for MRR.
@@ -268,6 +290,9 @@ model Subscription {
   cancelAtPeriodEnd  Boolean            @default(false)
   cancelledAt        DateTime?
   priceOverride      Decimal?           @db.Decimal(12, 2) // negotiated price
+  offerCode          String?            // the promotion this subscription started with (history)
+  discountPercent    Int                @default(0) // taken off the plan fee while discountPeriodsLeft > 0
+  discountPeriodsLeft Int               @default(0)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -1005,6 +1030,7 @@ model SignupRequest {
   slug         String
   planId       String
   interval     String    @default("MONTHLY") // MONTHLY | YEARLY: how the owner chose to pay after the trial
+  offerCode    String?   // a promotion code the visitor typed (validated again when the store is created)
   passwordHash String    // hashed before anything is saved; the plain password is never stored
   tokenHash    String?   @unique // SHA-256 of the emailed link's secret; cleared once used
   status       String    @default("PENDING_EMAIL") // PENDING_EMAIL | PENDING_APPROVAL | COMPLETED | REJECTED | EXPIRED

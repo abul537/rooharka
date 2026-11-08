@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import type { CostFormInput, NewStoreInput, PlanInput, StatusInput, SubscriptionInput } from '@/lib/csmi/forms'
 import { MAX_DOMAINS_PER_STORE } from '@/lib/domains'
+import { applyDiscount } from '@/lib/offers/rules'
 import { addPeriod, intervalOf, invoiceLines, invoiceTotals, nextInvoiceNumber, periodPrice, type BillingInterval } from '@/lib/csmi/rules'
 
 /** A problem whose message is safe to show to the platform owner. */
@@ -124,7 +125,7 @@ export async function saveSubscription(storeId: string, input: SubscriptionInput
 export async function savePlan(id: string | null, input: PlanInput) {
   const { products, ordersPerMonth, staff, tagline, popular } = input.show
   const limits = { ...(products ? { products } : {}), ...(ordersPerMonth ? { ordersPerMonth } : {}), ...(staff ? { staff } : {}), ...(tagline ? { tagline } : {}), ...(popular ? { popular: true } : {}) }
-  const data = { name: input.name, monthlyPrice: input.monthlyPrice, yearlyPrice: input.yearlyPrice, isActive: input.isActive, limits: limits as Prisma.InputJsonValue }
+  const data = { name: input.name, monthlyPrice: input.monthlyPrice, yearlyPrice: input.yearlyPrice, isActive: input.isActive, isPublic: input.isPublic, sortOrder: input.sortOrder, features: input.features as Prisma.InputJsonValue, limits: limits as Prisma.InputJsonValue }
   try {
     if (id) {
       const r = await db.plan.updateMany({ where: { id }, data })
@@ -228,7 +229,7 @@ export async function runBilling(now = new Date()): Promise<BillingRun> {
   run.trialsConverted = await convertEndedTrials(now)
   const subs = await db.subscription.findMany({
     where: { status: 'ACTIVE', store: { status: { in: ['ACTIVE', 'PAST_DUE'] } } },
-    include: { plan: true, store: { select: { id: true, services: { where: { enabled: true }, select: { platformFee: true, service: { select: { name: true, platformFee: true } } } } } } },
+    include: { plan: true, store: { select: { id: true, services: { where: { enabled: true, approval: 'APPROVED' }, select: { platformFee: true, service: { select: { name: true, platformFee: true } } } } } } },
   })
   const year = now.getUTCFullYear()
   let numbers = (await db.invoice.findMany({ where: { number: { startsWith: `INV-${year}-` } }, select: { number: true } })).map((i) => i.number)
@@ -247,9 +248,12 @@ export async function runBilling(now = new Date()): Promise<BillingRun> {
 
     const price = periodPrice({ monthlyPrice: num(sub.plan.monthlyPrice), yearlyPrice: sub.plan.yearlyPrice ? num(sub.plan.yearlyPrice) : null }, interval, sub.priceOverride ? num(sub.priceOverride) : null)
     const addOns = sub.store.services.map((s) => ({ name: s.service.name, monthlyFee: s.platformFee ? num(s.platformFee) : num(s.service.platformFee) }))
-    const lines = invoiceLines(sub.plan.name, price, interval, addOns)
+    const discounted = sub.discountPercent > 0 && sub.discountPeriodsLeft > 0
+    const lines = discounted ? applyDiscount(invoiceLines(sub.plan.name, price, interval, addOns), sub.discountPercent, sub.offerCode ?? 'Offer') : invoiceLines(sub.plan.name, price, interval, addOns)
     const totals = invoiceTotals(lines)
-    if (totals.total <= 0) { run.skippedFree++; return }
+    // One discounted period is used up per billed period, even when the discount made the invoice free.
+    const usePeriod = () => discounted ? db.subscription.updateMany({ where: { id: sub.id, discountPeriodsLeft: { gt: 0 } }, data: { discountPeriodsLeft: { decrement: 1 } } }) : null
+    if (totals.total <= 0) { await usePeriod(); run.skippedFree++; return }
 
     for (let attempt = 0; attempt < 4; attempt++) {
       const number = nextInvoiceNumber(numbers, year)
@@ -262,6 +266,7 @@ export async function runBilling(now = new Date()): Promise<BillingRun> {
           },
         })
         numbers = [...numbers, number]
+        await usePeriod()
         run.invoicesCreated++
         break
       } catch (e) {

@@ -1,10 +1,12 @@
 /** Turns a plan's stored limits and features into the lines shown on the pricing page. Pure, so it is tested. */
 export interface PlanLimits { products: number | null; ordersPerMonth: number | null; staff: number | null; tagline: string; popular: boolean }
 
-const FEATURE_LABELS: Record<string, string> = {
+export const FEATURE_LABELS: Record<string, string> = {
   'sms-otp': 'Fake-order check by SMS code', 'whatsapp-otp': 'Fake-order check by WhatsApp code', jazzcash: 'JazzCash payments', easypaisa: 'EasyPaisa payments',
   tcs: 'TCS shipping', leopards: 'Leopards booking and tracking', postex: 'PostEx booking and tracking', 'order-tracking': 'Customer order tracking page',
 }
+
+export const FEATURE_KEYS = Object.keys(FEATURE_LABELS)
 
 /** Everything every plan includes. Kept to what the product really does. */
 export const INCLUDED_IN_ALL = [

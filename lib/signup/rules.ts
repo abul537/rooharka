@@ -1,3 +1,4 @@
+import { normalizeCode, validCode } from '@/lib/offers/rules'
 /**
  * Pure rules for store-owner sign-up (no database), so every rule is unit-tested.
  * The browser form checks the same things for convenience, but THESE run on the server and are what counts.
@@ -36,6 +37,8 @@ export function slugProblem(slug: string): string | null {
 export interface SignupInput {
   ownerName: string; email: string; phone: string; storeName: string; slug: string
   planId: string; interval: 'MONTHLY' | 'YEARLY'; password: string
+  /** An optional promotion code, already normalised; checked against the offers table by the service. */
+  offerCode: string | null
 }
 
 const text = (g: Getter, k: string) => String(g.get(k) ?? '').trim()
@@ -69,12 +72,16 @@ export function parseSignupForm(g: Getter): Parsed<SignupInput> {
   if (!/^[A-Za-z0-9_-]{8,40}$/.test(planId)) return { ok: false, error: 'Choose a plan.' }
   const interval = text(g, 'interval') === 'YEARLY' ? 'YEARLY' : 'MONTHLY'
 
+  const offerRaw = text(g, 'offerCode')
+  const offerCode = offerRaw ? normalizeCode(offerRaw) : null
+  if (offerCode !== null && !validCode(offerCode)) return { ok: false, error: 'That offer code is not valid.' }
+
   const password = String(g.get('password') ?? '')
   const pp = passwordProblem(password, email)
   if (pp) return { ok: false, error: pp }
 
   if (g.get('terms') !== 'on') return { ok: false, error: 'Please accept the Terms of Service and Privacy Policy to continue.' }
-  return { ok: true, value: { ownerName, email, phone, storeName, slug, planId, interval, password } }
+  return { ok: true, value: { ownerName, email, phone, storeName, slug, planId, interval, password, offerCode } }
 }
 
 // -------------------------------------------------------------------- tokens

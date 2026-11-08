@@ -10,7 +10,7 @@ import type { PublicPlan } from '@/components/platform/PlanCards'
 type Availability = { state: 'idle' | 'checking' | 'ok' | 'bad'; text?: string }
 const input = 'w-full rounded-lg border border-stone-300 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600'
 
-export default function SignupForm({ plans, defaultPlanId, domainSuffix, trialDays }: { plans: PublicPlan[]; defaultPlanId: string; domainSuffix: string | null; trialDays: number }) {
+export default function SignupForm({ plans, defaultPlanId, domainSuffix, trialDays, defaultOffer }: { plans: PublicPlan[]; defaultPlanId: string; domainSuffix: string | null; trialDays: number; defaultOffer?: string }) {
   const [state, action, pending] = useActionState<SignupState, FormData>(signupAction, {})
   const v = state.values ?? {}
   const [planId, setPlanId] = useState(v.planId || defaultPlanId)
@@ -95,6 +95,7 @@ export default function SignupForm({ plans, defaultPlanId, domainSuffix, trialDa
           <label className="block"><span className="block text-sm font-medium mb-1">Email</span><input name="email" type="email" required maxLength={254} defaultValue={v.email} autoComplete="email" className={input} /></label>
           <label className="block"><span className="block text-sm font-medium mb-1">Mobile number</span><input name="phone" type="tel" inputMode="tel" required defaultValue={v.phone} placeholder="0300 1234567" autoComplete="tel" className={input} /></label>
         </div>
+        <label className="block"><span className="block text-sm font-medium mb-1">Offer code <span className="font-normal text-stone-500">(optional)</span></span><input name="offerCode" maxLength={24} defaultValue={v.offerCode ?? defaultOffer} autoCapitalize="characters" autoComplete="off" className={`${input} uppercase`} /></label>
         <label className="block"><span className="block text-sm font-medium mb-1">Password</span>
           <span className="flex gap-2"><input name="password" type={showPw ? 'text' : 'password'} required minLength={12} maxLength={128} autoComplete="new-password" className={input} />
             <button type="button" onClick={() => setShowPw((s) => !s)} className="shrink-0 rounded-lg border border-stone-300 px-4 text-sm" aria-pressed={showPw}>{showPw ? 'Hide' : 'Show'}</button></span>

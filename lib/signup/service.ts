@@ -13,6 +13,7 @@ import { rateLimit } from '@/lib/rate-limit'
 import { REQUEST_HOURS, TERMS_VERSION, hashToken, needsApproval, newVerifyToken, requestExpiry, signupGate, splitVerifyToken, trialEnd, type SignupInput } from '@/lib/signup/rules'
 import { getPlatformSettings } from '@/lib/signup/store'
 import { cleanReason, reasonProblem } from '@/lib/approvals/rules'
+import { offerProblem } from '@/lib/offers/rules'
 import type { PlatformSettings } from '@/lib/signup/settings'
 
 /** A problem whose message is safe to show to the person signing up (or the owner in CSMI). */
@@ -43,9 +44,14 @@ export async function startSignup(input: SignupInput, meta: Meta): Promise<{ nex
   if (!gate.ok) throw new SignupError(gate.error)
   if (!rateLimit(`signup-ip:${meta.ip}`, 5, 3_600_000).ok || !rateLimit(`signup-email:${input.email}`, 3, 3_600_000).ok) throw new SignupError('Too many attempts. Please wait an hour and try again.')
 
-  const plan = await db.plan.findFirst({ where: { id: input.planId, isActive: true }, select: { id: true, yearlyPrice: true } })
+  // Private (tailor-made) plans are never chosen by visitors.
+  const plan = await db.plan.findFirst({ where: { id: input.planId, isActive: true, isPublic: true }, select: { id: true, yearlyPrice: true } })
   if (!plan) throw new SignupError('That plan is no longer available. Please choose another.')
   if (input.interval === 'YEARLY' && !plan.yearlyPrice) throw new SignupError('That plan is only sold monthly.')
+  if (input.offerCode) {
+    const problem = offerProblem(await db.offer.findUnique({ where: { code: input.offerCode } }), { planId: plan.id, now })
+    if (problem) throw new SignupError(problem)
+  }
 
   // The same person trying again replaces their own earlier, unfinished request.
   await db.signupRequest.updateMany({ where: { email: input.email, status: { in: ['PENDING_EMAIL', 'PENDING_APPROVAL'] } }, data: { status: 'EXPIRED', tokenHash: null } })
@@ -66,7 +72,7 @@ export async function startSignup(input: SignupInput, meta: Meta): Promise<{ nex
   const verify = mail ? newVerifyToken(id) : null
   await db.signupRequest.create({
     data: {
-      id, email: input.email, ownerName: input.ownerName, phone: input.phone, storeName: input.storeName, slug: input.slug, planId: plan.id, interval: input.interval,
+      id, email: input.email, ownerName: input.ownerName, phone: input.phone, storeName: input.storeName, slug: input.slug, planId: plan.id, interval: input.interval, offerCode: input.offerCode,
       passwordHash: await hashPassword(input.password), tokenHash: verify?.hash ?? null,
       status: mail ? 'PENDING_EMAIL' : 'PENDING_APPROVAL', termsVersion: TERMS_VERSION, ip: meta.ip.slice(0, 64), userAgent: meta.userAgent?.slice(0, 255),
       expiresAt: mail ? requestExpiry(now) : new Date(now.getTime() + APPROVAL_WAIT_DAYS * 86_400_000),
@@ -141,6 +147,17 @@ async function provision(requestId: string, from: 'PENDING_EMAIL' | 'PENDING_APP
       const plan = await tx.plan.findFirst({ where: { id: req.planId, isActive: true } })
       if (!plan) throw new SignupError('The plan chosen is no longer offered. Ask the person to choose another plan.')
 
+      // The promotion is checked again now and one use is claimed atomically (two people cannot both take the last one).
+      // If it no longer applies the store is still created, just without the discount.
+      let promo = { offerCode: null as string | null, discountPercent: 0, discountPeriodsLeft: 0 }
+      if (req.offerCode) {
+        const offer = await tx.offer.findUnique({ where: { code: req.offerCode } })
+        if (offer && !offerProblem(offer, { planId: plan.id, now })) {
+          const took = await tx.$executeRaw`UPDATE "Offer" SET "usedCount" = "usedCount" + 1 WHERE "id" = ${offer.id} AND ("maxUses" IS NULL OR "usedCount" < "maxUses")`
+          if (took === 1) promo = { offerCode: offer.code, discountPercent: offer.percentOff, discountPeriodsLeft: offer.periods }
+        }
+      }
+
       const days = settings.trialDays
       const interval = req.interval === 'YEARLY' ? 'YEARLY' : 'MONTHLY'
       const end = days > 0 ? trialEnd(now, days) : addPeriod(now, interval)
@@ -150,7 +167,7 @@ async function provision(requestId: string, from: 'PENDING_EMAIL' | 'PENDING_APP
           onboardedAt: days > 0 ? null : now,
           settings: { create: { displayName: req.storeName, supportEmail: req.email } },
           checkoutFields: { create: CHECKOUT_FIELD_DEFAULTS.map((f, i) => ({ ...f, sortOrder: i, enabled: true })) },
-          subscription: { create: { planId: plan.id, status: days > 0 ? 'TRIALING' : 'ACTIVE', trialEndsAt: days > 0 ? end : null, currentPeriodStart: now, currentPeriodEnd: end } },
+          subscription: { create: { planId: plan.id, status: days > 0 ? 'TRIALING' : 'ACTIVE', trialEndsAt: days > 0 ? end : null, currentPeriodStart: now, currentPeriodEnd: end, ...promo } },
         },
         select: { id: true, slug: true },
       })

@@ -14,7 +14,7 @@ export interface SignupState {
   values?: Record<string, string>
 }
 
-const KEEP = ['ownerName', 'email', 'phone', 'storeName', 'slug', 'planId', 'interval'] as const
+const KEEP = ['ownerName', 'email', 'phone', 'storeName', 'slug', 'planId', 'interval', 'offerCode'] as const
 const GENERIC = 'Something went wrong on our side. Nothing was saved; please try again in a moment.'
 
 export async function signupAction(_prev: SignupState, fd: FormData): Promise<SignupState> {

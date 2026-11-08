@@ -52,7 +52,7 @@ export async function loadPlatform(windowDays = 30, now = new Date()): Promise<P
       orderBy: { createdAt: 'asc' },
       include: {
         subscription: { include: { plan: true } },
-        services: { where: { enabled: true }, select: { serviceKey: true, platformFee: true, lastError: true, service: { select: { name: true, type: true, platformFee: true } } } },
+        services: { where: { enabled: true, approval: 'APPROVED' }, select: { serviceKey: true, platformFee: true, lastError: true, service: { select: { name: true, type: true, platformFee: true } } } },
       },
     }),
     db.order.groupBy({ by: ['storeId', 'status'], where: { placedAt: { gte: since } }, _count: { _all: true }, _sum: { total: true } }),

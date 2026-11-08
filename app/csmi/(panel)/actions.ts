@@ -16,6 +16,8 @@ import { parseSettingsForm } from '@/lib/signup/settings'
 import { savePlatformSettings } from '@/lib/signup/store'
 import { approveSignup, rejectSignup } from '@/lib/signup/service'
 import { decideService, decideShop } from '@/lib/approvals/service'
+import { parseOffer } from '@/lib/offers/rules'
+import { saveOffer } from '@/lib/offers/service'
 import type { Parsed } from '@/lib/admin/settings-rules'
 import type { ActionState } from '@/components/admin/ActionForm'
 
@@ -80,7 +82,7 @@ export async function savePlanAction(_: ActionState, fd: FormData): Promise<Acti
     const input = must(parsePlan(fd))
     const saved = await savePlan(id, input)
     return { message: id ? 'Plan saved.' : 'Plan added.', entity: 'Plan', entityId: saved, after: input }
-  }, ['/csmi/plans'])
+  }, ['/csmi/plans', '/pricing', '/platform', '/signup'])
 }
 
 export async function saveCostAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -216,4 +218,14 @@ export async function decideServiceAction(_: ActionState, fd: FormData): Promise
     const r = await decideService(storeId, key, approve, str(fd, 'reason'))
     return { message: `${r.serviceName} is now ${approve ? 'APPROVED' : 'BLOCKED'} for this store.${notified(r.notice)}`, storeId, entity: 'StoreService', entityId: key, after: { service: key, approval: r.after, reason: r.reason } }
   }, ['/csmi/approvals', `/csmi/stores/${storeId}`])
+}
+
+// ---------------------------------------------------------------- offers
+export async function saveOfferAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const id = str(fd, 'offerId') || null
+  return manage('offer.save', async () => {
+    const input = must(parseOffer(fd))
+    const saved = await saveOffer(id, input)
+    return { message: id ? `Offer ${input.code} saved.` : `Offer ${input.code} created. Share the link /signup?offer=${input.code}`, entity: 'Offer', entityId: saved, after: input }
+  }, ['/csmi/offers'])
 }
