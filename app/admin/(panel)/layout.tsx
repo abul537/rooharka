@@ -7,17 +7,19 @@ import Link from 'next/link'
 import { db } from '@/lib/db'
 import { getBanners } from '@/lib/banners/store'
 import BannerBar from '@/components/BannerBar'
+import { loadPosAccess } from '@/lib/entitlements/service'
 
 // Every page inside this group requires a signed-in store admin.
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin()
-  const [storeName, sub, overdue, shop, banners, unread] = await Promise.all([
+  const [storeName, sub, overdue, shop, banners, unread, pos] = await Promise.all([
     getStoreName(admin.storeId),
     db.subscription.findUnique({ where: { storeId: admin.storeId }, select: { status: true, trialEndsAt: true } }),
     db.invoice.count({ where: { storeId: admin.storeId, status: { in: ['OPEN', 'OVERDUE'] }, dueDate: { lt: new Date() } } }),
     db.store.findUnique({ where: { id: admin.storeId }, select: { shopApproval: true, shopDecisionNote: true } }),
     getBanners('STORES'),
     db.contactMessage.count({ where: { storeId: admin.storeId, isRead: false } }),
+    loadPosAccess(admin.storeId), // whether the platform owner allows POS lite for this store
   ])
   const trialLeft = sub?.status === 'TRIALING' && sub.trialEndsAt ? Math.max(0, Math.ceil((sub.trialEndsAt.getTime() - Date.now()) / 86_400_000)) : null
   const canBill = can(admin.role, 'settings.edit')
@@ -25,10 +27,12 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const allowed = ['/admin', '/admin/orders', '/admin/messages', '/admin/customers', '/admin/security']
   if (can(admin.role, 'products.view')) allowed.push('/admin/products', '/admin/categories')
   if (can(admin.role, 'settings.edit')) allowed.push('/admin/storefront', '/admin/settings', '/admin/billing')
+  if (can(admin.role, 'staff.manage')) allowed.push('/admin/team')
+  if (pos.enabled && can(admin.role, 'pos.sell')) allowed.push('/admin/pos')
 
   return (
     <div className="lg:flex min-h-screen bg-slate-50">
-      <aside className="lg:w-60 lg:shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-4 lg:p-5">
+      <aside className="print:hidden lg:w-60 lg:shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-4 lg:p-5">
         <div className="flex lg:block items-center justify-between mb-3 lg:mb-8">
           <div>
             <p className="font-bold text-lg leading-tight">{storeName}</p>
@@ -45,7 +49,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           <form action={logoutAction}><button className="text-slate-600 underline">Sign out</button></form>
         </div>
       </aside>
-      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-10">
+      <main className="flex-1 min-w-0 print:p-0 p-4 sm:p-6 lg:p-10">
         <BannerBar banners={banners} className="mb-6 overflow-hidden rounded-xl" />
         {shop?.shopApproval === 'PENDING' && <div role="note" className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm"><strong>Your shop is not open to customers yet.</strong> Set up your products and details meanwhile; the platform owner reviews new shops and will tell you when it opens.</div>}
         {shop?.shopApproval === 'DENIED' && <div role="alert" className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm"><strong>Your shop is closed to customers.</strong> {shop.shopDecisionNote ? `Reason: ${shop.shopDecisionNote}. ` : ''}Contact the platform owner once you have fixed this.</div>}

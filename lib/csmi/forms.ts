@@ -24,7 +24,7 @@ export const COST_CATEGORIES = ['hosting', 'database', 'domain', 'messaging', 's
 export const PAY_METHODS = ['bank', 'jazzcash', 'easypaisa', 'cash', 'other'] as const
 
 // ------------------------------------------------------------------- plans
-/** Limits and wording shown on the public pricing page. A blank limit means unlimited. NOT enforced by the platform yet. */
+/** Limits and wording shown on the public pricing page. A blank limit means unlimited. The staff limit and POS lite are enforced by the platform; products and orders are not yet. */
 export interface PlanShow { products: number | null; ordersPerMonth: number | null; staff: number | null; tagline: string; popular: boolean }
 export interface PlanInput { name: string; monthlyPrice: number; yearlyPrice: number | null; isActive: boolean; isPublic: boolean; sortOrder: number; features: string[]; show: PlanShow }
 export function parsePlan(g: Getter): Parsed<PlanInput> {
@@ -34,13 +34,14 @@ export function parsePlan(g: Getter): Parsed<PlanInput> {
   if (monthly === null || Number.isNaN(monthly)) return { ok: false, error: 'Enter the monthly price in rupees, like 3000.' }
   const yearly = parseMoney(text(g, 'yearlyPrice'))
   if (yearly !== null && (Number.isNaN(yearly) || yearly <= 0)) return { ok: false, error: 'The yearly price must be a number above 0, or left empty.' }
-  const limit = (k: string, label: string): number | null | undefined => {
+  const limit = (k: string, min: number): number | null | undefined => {
     const v = text(g, k)
     if (v === '') return null
-    return /^\d{1,7}$/.test(v) && Number(v) > 0 ? Number(v) : undefined
+    return /^\d{1,7}$/.test(v) && Number(v) >= min ? Number(v) : undefined
   }
-  const products = limit('limitProducts', 'products'), ordersPerMonth = limit('limitOrders', 'orders'), staff = limit('limitStaff', 'staff')
-  if (products === undefined || ordersPerMonth === undefined || staff === undefined) return { ok: false, error: 'Limits must be whole numbers above 0, or empty for unlimited.' }
+  const products = limit('limitProducts', 1), ordersPerMonth = limit('limitOrders', 1), staff = limit('limitStaff', 0)
+  if (products === undefined || ordersPerMonth === undefined) return { ok: false, error: 'Product and order limits must be whole numbers above 0, or empty for unlimited.' }
+  if (staff === undefined) return { ok: false, error: 'The staff limit must be a whole number (0 means the owner only), or empty for unlimited.' }
   const tagline = text(g, 'tagline')
   if (tagline.length > 90) return { ok: false, error: 'The tagline must be 90 characters or fewer.' }
   const sortRaw = text(g, 'sortOrder')

@@ -29,7 +29,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const [total, orders] = await Promise.all([
     db.order.count({ where }),
     db.order.findMany({ where, orderBy: { placedAt: 'desc' }, skip: (page - 1) * PAGE, take: PAGE,
-      select: { id: true, number: true, customerName: true, cityName: true, total: true, status: true, paymentStatus: true, placedAt: true } }),
+      select: { id: true, number: true, customerName: true, cityName: true, total: true, status: true, paymentStatus: true, placedAt: true, source: true } }),
   ])
   const pages = Math.max(1, Math.ceil(total / PAGE))
   const href = (p: number, s = status, pay = sp.pay) => {
@@ -63,7 +63,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             {orders.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-slate-500">No orders found.</td></tr>}
             {orders.map((o) => (
               <tr key={o.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                <td className="p-3 font-medium"><Link className="underline" href={`/admin/orders/${o.id}`}>#{o.number}</Link></td>
+                <td className="p-3 font-medium"><Link className="underline" href={`/admin/orders/${o.id}`}>#{o.number}</Link>{o.source === 'POS' && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-600">counter</span>}</td>
                 <td className="p-3">{o.customerName}<span className="block text-xs text-slate-500">{o.cityName}</span></td>
                 <td className="p-3 whitespace-nowrap">{formatPrice(o.total.toNumber())}</td>
                 <td className="p-3"><StatusBadge status={o.status} /></td>

@@ -9,7 +9,9 @@ import { formatPkt } from '@/lib/admin/dates'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { Flags, Pill, Stat, pct } from '@/components/csmi/Pills'
-import { addDomainAction, checkDomainAction, removeDomainAction, saveSubscriptionAction, setDomainLiveAction, setStatusAction, decideServiceAction, decideShopAction } from '../../actions'
+import { loadEntitlements } from '@/lib/entitlements/service'
+import { STAFF_UNLIMITED, isOverStaffLimit, staffUsage } from '@/lib/entitlements/rules'
+import { addDomainAction, checkDomainAction, removeDomainAction, saveSubscriptionAction, setDomainLiveAction, setStatusAction, decideServiceAction, decideShopAction, saveEntitlementsAction } from '../../actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +19,7 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
   const user = await requirePlatform()
   const { id } = await params
   const manage = canPlatform(user.role, 'csmi.manage')
-  const [p, plans, invoices, services, sub, costs, domains, gate] = await Promise.all([
+  const [p, plans, invoices, services, sub, costs, domains, gate, ent, own] = await Promise.all([
     loadPlatform(30),
     db.plan.findMany({ orderBy: { monthlyPrice: 'asc' }, select: { id: true, name: true, isActive: true } }),
     db.invoice.findMany({ where: { storeId: id }, orderBy: { createdAt: 'desc' }, take: 12 }),
@@ -26,6 +28,8 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
     db.platformCost.findMany({ where: { storeId: id }, orderBy: { createdAt: 'desc' } }),
     db.storeDomain.findMany({ where: { storeId: id }, orderBy: { createdAt: 'asc' } }),
     db.store.findUnique({ where: { id }, select: { shopApproval: true, shopDecisionNote: true } }),
+    loadEntitlements(id),
+    db.store.findUnique({ where: { id }, select: { staffLimit: true, posMode: true } }),
   ])
   const r = p.rows.find((x) => x.id === id)
   if (!r) notFound()
@@ -91,6 +95,20 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
           ) : <Pill status={r.status} />}
         </Card>
       </div>
+
+      <Card title="Staff limit and POS lite" hint="You decide what this store may use. “Follow the plan” uses the plan's staff limit and its POS lite tick; anything else here overrides the plan for this store only. The store cannot change this.">
+        <p className="text-sm mb-3">Now: <strong>{staffUsage(ent.staff.used, ent.staff)}</strong> ({ent.staff.source === 'store' ? 'set for this store' : ent.staff.source === 'plan' ? `from the ${ent.planName ?? ''} plan` : 'safe default: no plan yet'}) · POS lite <strong>{ent.pos.enabled ? 'ON' : 'OFF'}</strong> ({ent.pos.source === 'store' ? 'set for this store' : 'from the plan'}){isOverStaffLimit(ent.staff.used, ent.staff) && <span className="text-amber-700"> · over the limit: existing staff keep working, but the store cannot add or switch on more</span>}</p>
+        {manage && (
+          <ActionForm action={saveEntitlementsAction} className="grid sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+            <input type="hidden" name="storeId" value={r.id} />
+            <Field label="Staff logins (besides the owner)" hint="Empty = follow the plan · 0 = owner only · unlimited"><input name="staffLimit" defaultValue={own?.staffLimit === STAFF_UNLIMITED ? 'unlimited' : own?.staffLimit ?? ''} maxLength={9} className={inputCls} /></Field>
+            <Field label="POS lite (counter sales)">
+              <select name="posMode" defaultValue={own?.posMode ?? 'PLAN'} className={inputCls}><option value="PLAN">Follow the plan</option><option value="ON">Always on</option><option value="OFF">Always off</option></select>
+            </Field>
+            <button className={primaryBtn}>Save</button>
+          </ActionForm>
+        )}
+      </Card>
 
       <Card title="Shop visibility" hint="Open: customers can browse and order. Closed: customers see a plain 'not open yet' page. The owner can always sign in and set up. Closing needs a reason, which the store owner reads and is told.">
         <p className="text-sm mb-3">Now: <strong>{gate?.shopApproval === 'APPROVED' ? 'Open to customers' : gate?.shopApproval === 'PENDING' ? 'Waiting for your approval' : 'Closed by you'}</strong>{gate?.shopApproval === 'DENIED' && gate.shopDecisionNote ? ` · “${gate.shopDecisionNote}”` : ''}</p>

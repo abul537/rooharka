@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit'
 import { runJob } from '@/lib/jobs'
 import { platformOrError } from '@/lib/csmi/guard'
-import { CsmiError, addDomain, createStore, removeDomain, setDomainLive, deleteCost, markInvoicePaid, runBilling, saveCost, savePlan, saveSubscription, setServiceFee, setStoreStatus, voidInvoice } from '@/lib/csmi/manage'
+import { CsmiError, addDomain, createStore, removeDomain, setDomainLive, deleteCost, markInvoicePaid, runBilling, saveCost, savePlan, saveSubscription, setServiceFee, setStoreEntitlements, setStoreStatus, voidInvoice } from '@/lib/csmi/manage'
 import { parseCost, parseMarkPaid, parseNewStore, parsePlan, parseServiceFee, parseStoreStatus, parseSubscription } from '@/lib/csmi/forms'
 import { parseDomainInput } from '@/lib/domains'
 import { lookupDomain } from '@/lib/dns-check'
@@ -16,6 +16,7 @@ import { parseSettingsForm } from '@/lib/signup/settings'
 import { savePlatformSettings } from '@/lib/signup/store'
 import { approveSignup, rejectSignup } from '@/lib/signup/service'
 import { decideService, decideShop } from '@/lib/approvals/service'
+import { parsePosMode, parseStoreStaffLimit } from '@/lib/entitlements/rules'
 import { parseOffer } from '@/lib/offers/rules'
 import { parseBanner } from '@/lib/banners/rules'
 import { parseSiteForm } from '@/lib/site/rules'
@@ -285,4 +286,17 @@ export async function deleteClientAction(_: ActionState, fd: FormData): Promise<
     await deleteClient(id)
     return { message: 'Client removed.', entity: 'ShowcaseClient', entityId: id }
   }, ['/csmi/clients', '/platform'])
+}
+
+/** What this store may use: its staff limit and POS lite. Empty limit / "Follow the plan" hands the decision back to the plan. */
+export async function saveEntitlementsAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const storeId = str(fd, 'storeId')
+  return manage('store.entitlements', async () => {
+    const limit = parseStoreStaffLimit(str(fd, 'staffLimit'))
+    if (!limit.ok) throw new CsmiError(limit.error)
+    const posMode = parsePosMode(str(fd, 'posMode'))
+    if (!posMode) throw new CsmiError('Choose how POS lite is decided for this store.')
+    const r = await setStoreEntitlements(storeId, { staffLimit: limit.value, posMode })
+    return { message: `Saved for ${r.name}. It takes effect on the next page the store opens.`, storeId, entity: 'Store', entityId: storeId, after: { staffLimit: limit.value, posMode, was: r.before } }
+  }, ['/csmi/stores', `/csmi/stores/${storeId}`])
 }

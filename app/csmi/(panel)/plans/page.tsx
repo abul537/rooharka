@@ -26,7 +26,7 @@ export default async function PlansPage() {
       <div className="sm:col-span-5 grid sm:grid-cols-[1fr_1fr_1fr_2fr_auto] gap-3 items-end border-t border-slate-100 pt-3">
         <Field label="Products limit" hint="Empty = unlimited"><input name="limitProducts" inputMode="numeric" defaultValue={lim(p).products ?? ''} className={inputCls} /></Field>
         <Field label="Orders / month"><input name="limitOrders" inputMode="numeric" defaultValue={lim(p).ordersPerMonth ?? ''} className={inputCls} /></Field>
-        <Field label="Staff logins"><input name="limitStaff" inputMode="numeric" defaultValue={lim(p).staff ?? ''} className={inputCls} /></Field>
+        <Field label="Staff logins" hint="0 = owner only. Empty = unlimited"><input name="limitStaff" inputMode="numeric" defaultValue={lim(p).staff ?? ''} className={inputCls} /></Field>
         <Field label="Tagline on pricing page"><input name="tagline" maxLength={90} defaultValue={lim(p).tagline} className={inputCls} /></Field>
         <Check name="popular" label="Most popular" defaultChecked={lim(p).popular} />
       </div>
@@ -45,7 +45,7 @@ export default async function PlansPage() {
   return (
     <div className="max-w-5xl space-y-6">
       <h1 className="text-2xl font-bold">Plans</h1>
-      <p className="text-sm text-slate-600">What you sell to store owners. A store can have a negotiated price on top (set on the store's page). Switching a plan off hides it from new stores; existing stores keep it. Changing a price changes what existing stores on that plan are billed from their next invoice. To make a tailor-made plan for one client, add a plan and untick “Show on pricing page”: visitors never see it, and you give it to the store from its page. The limits, tagline, included services and “Most popular” are shown on the public pricing page; the limits are not enforced by the platform yet, so treat them as promises you keep by hand.</p>
+      <p className="text-sm text-slate-600">What you sell to store owners. A store can have a negotiated price on top (set on the store's page). Switching a plan off hides it from new stores; existing stores keep it. Changing a price changes what existing stores on that plan are billed from their next invoice. To make a tailor-made plan for one client, add a plan and untick “Show on pricing page”: visitors never see it, and you give it to the store from its page. The limits, tagline, included services and “Most popular” are shown on the public pricing page; the staff limit and POS lite are enforced by the platform (a store's page can override both); the products and orders limits are not enforced yet, so treat those as promises you keep by hand.</p>
       <p className="text-sm"><a href="/csmi/offers" className="underline font-medium">Offers and discount codes</a></p>
       {manage && <Card title="Add a plan">{form()}</Card>}
       <Card title="Your plans">

@@ -108,6 +108,21 @@ enum PaymentMethod {
   JAZZCASH
   EASYPAISA
   BANK_TRANSFER
+  CASH // counter sales (POS lite): money taken in the shop
+  CARD
+}
+
+/// Where an order came from.
+enum OrderSource {
+  ONLINE // the storefront checkout
+  POS    // rung up at the counter
+}
+
+/// Does a store get POS lite? PLAN = follow its plan; ON / OFF = the platform owner's override.
+enum PosMode {
+  PLAN
+  ON
+  OFF
 }
 
 enum PaymentStatus {
@@ -196,6 +211,8 @@ model Store {
   shopApproval  ApprovalState @default(APPROVED) // may customers see the shop?
   shopDecisionNote String?  // the owner's reason, shown to the store owner
   shopDecidedAt DateTime?
+  staffLimit    Int?        // staff logins besides the owner: null = follow the plan, -1 = unlimited, 0.. = this many
+  posMode       PosMode     @default(PLAN)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -943,6 +960,8 @@ model Order {
   sessionId     String?
   utmSource     String?
   cancelledReason String?
+  source        OrderSource @default(ONLINE)
+  soldById      String?     // the staff member who rang up a POS sale
   placedAt      DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -955,6 +974,7 @@ model Order {
 
   @@unique([storeId, number])
   @@index([storeId, status, placedAt])
+  @@index([storeId, source, placedAt])
   @@index([customerId])
 }
 

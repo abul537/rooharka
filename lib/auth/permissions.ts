@@ -14,11 +14,13 @@ export type Permission =
   | 'products.view'
   | 'products.edit'        // prices, stock, texts
   | 'settings.edit'        // checkout fields, payment rules, wallets, theme switches
+  | 'staff.manage'         // add, switch off and reset the logins of the shop's team (owner only)
+  | 'pos.sell'             // ring up counter sales (also needs POS lite switched on by the platform owner)
 
 const MATRIX: Record<StaffRole, Permission[]> = {
-  STORE_OWNER: ['orders.view', 'orders.update', 'orders.cancel', 'payments.confirm', 'customers.view', 'customers.block', 'products.view', 'products.edit', 'settings.edit'],
-  STORE_MANAGER: ['orders.view', 'orders.update', 'orders.cancel', 'payments.confirm', 'customers.view', 'customers.block', 'products.view', 'products.edit', 'settings.edit'],
-  STORE_STAFF: ['orders.view', 'orders.update', 'customers.view', 'products.view'],
+  STORE_OWNER: ['orders.view', 'orders.update', 'orders.cancel', 'payments.confirm', 'customers.view', 'customers.block', 'products.view', 'products.edit', 'settings.edit', 'staff.manage', 'pos.sell'],
+  STORE_MANAGER: ['orders.view', 'orders.update', 'orders.cancel', 'payments.confirm', 'customers.view', 'customers.block', 'products.view', 'products.edit', 'settings.edit', 'pos.sell'],
+  STORE_STAFF: ['orders.view', 'orders.update', 'customers.view', 'products.view', 'pos.sell'],
 }
 
 export function can(role: string, permission: Permission): boolean {

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 
 const ITEMS = [
   { href: '/admin', label: 'Overview', exact: true },
+  { href: '/admin/pos', label: 'POS (counter sale)' },
   { href: '/admin/orders', label: 'Orders' },
   { href: '/admin/messages', label: 'Messages' },
   { href: '/admin/products', label: 'Products' },
@@ -12,6 +13,7 @@ const ITEMS = [
   { href: '/admin/customers', label: 'Customers' },
   { href: '/admin/storefront', label: 'Storefront' },
   { href: '/admin/settings', label: 'Settings' },
+  { href: '/admin/team', label: 'Team' },
   { href: '/admin/billing', label: 'Plan and billing' },
   { href: '/admin/security', label: 'My security' },
 ]

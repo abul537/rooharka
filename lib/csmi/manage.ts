@@ -290,3 +290,12 @@ export async function runBilling(now = new Date()): Promise<BillingRun> {
   }
   return run
 }
+
+// ------------------------------------------------------- what a store may use
+/** Sets the platform owner's overrides for one store: its staff limit (null = follow the plan) and POS lite (PLAN / ON / OFF). */
+export async function setStoreEntitlements(storeId: string, input: { staffLimit: number | null; posMode: 'PLAN' | 'ON' | 'OFF' }) {
+  const before = await db.store.findUnique({ where: { id: storeId }, select: { name: true, staffLimit: true, posMode: true } })
+  if (!before) throw new CsmiError('Store not found.')
+  await db.store.update({ where: { id: storeId }, data: { staffLimit: input.staffLimit, posMode: input.posMode } })
+  return { name: before.name, before: { staffLimit: before.staffLimit, posMode: before.posMode } }
+}

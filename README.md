@@ -196,3 +196,12 @@ Every word and colour on a store's public site is controlled by its owner in the
 - **Messages** (`/admin/messages`): what customers send from the Contact page, with call, WhatsApp and email buttons and an unread count.
 - Reviews on the home page are only real, approved customer reviews. There is no cart yet (one product per order), so the header has none.
 - First store: `pnpm db:seed` gives it the original single-product (Darwaish) storefront if it has none; any store can load either starting point with one click.
+
+## Staff limit and POS lite (decided by the platform owner)
+**What it is for.** You (CSMI) decide, per plan and per store, how many people may sign in to a store's dashboard and whether the store gets a counter-sale screen. Stores can never change either.
+
+- **Staff limit.** Counts active managers and staff; the owner is always free. Set it on the plan (Plans page, "Staff logins": empty = unlimited, 0 = owner only) and override it for one store on its page ("Staff limit and POS lite": empty = follow the plan, a number, or `unlimited`). A store with no plan gets a safe default of 2.
+- **Team page** (`/admin/team`, owner only): add a person (name, email, role, starting password), switch them off (signed out at once), switch them on, reset their password. Adding or switching on checks the limit on the server under a lock on the store row, so two clicks can never take the last slot. If you lower a limit, nobody is removed; the store just cannot add more.
+- **POS lite** (`/admin/pos`): tick "POS lite" on a plan, or set the store to Always on / Always off. It rings up a counter sale as an ordinary order (marked "counter"), already paid and delivered: stock is reduced safely, prices come from the database, an optional mobile number builds the customer's history (otherwise one "Walk-in customer" profile), payment is *recorded* (cash with change, card, JazzCash, EasyPaisa, bank transfer; nothing is charged from here). Includes a print receipt, today's takings per method, and "Cancel sale" (managers and owners): stock goes back and the sale is marked refunded.
+- Code: `lib/entitlements/` (rules, service), `lib/team/`, `lib/pos/` (rules are pure and tested in `tests/entitlements.test.ts`).
+- After pulling run `pnpm db:push` (adds `Store.staffLimit`, `Store.posMode`, `Order.source`, `Order.soldById`, payment methods CASH and CARD) and `pnpm exec prisma generate`. Existing plans do not include POS until you tick it (or set stores to Always on).

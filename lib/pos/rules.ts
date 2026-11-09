@@ -1,0 +1,112 @@
+/**
+ * POS lite: the rules of a counter sale. Pure (no database), so every rule is unit-tested.
+ * The server re-prices everything from the database; the browser only says WHAT was sold and HOW it was paid.
+ */
+import { normalizePkMobile } from '@/lib/phone'
+
+/** Recorded, never processed: the money moves in the shop (cash, card machine, wallet app, bank app). */
+export const POS_PAYMENT_METHODS = ['CASH', 'CARD', 'JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'] as const
+export type PosPaymentMethod = (typeof POS_PAYMENT_METHODS)[number]
+export const POS_METHOD_LABEL: Record<PosPaymentMethod, string> = { CASH: 'Cash', CARD: 'Card', JAZZCASH: 'JazzCash', EASYPAISA: 'EasyPaisa', BANK_TRANSFER: 'Bank transfer' }
+
+export const MAX_SALE_LINES = 50
+export const MAX_LINE_QTY = 999
+/** Stored as the customer's phone for sales with no customer details, so every store has ONE "walk-in" profile. */
+export const WALK_IN_PHONE = 'WALK-IN'
+export const WALK_IN_NAME = 'Walk-in customer'
+
+export interface SaleRequest {
+  items: { variantId: string; quantity: number }[]
+  discount: number
+  paymentMethod: PosPaymentMethod
+  /** Cash handed over by the customer (cash sales only); used to show change. */
+  tendered: number | null
+  customerName: string | null
+  customerPhone: string | null
+  idempotencyKey: string
+}
+
+export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+
+const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+function money(v: unknown): number | null | undefined {
+  // null = empty, undefined = invalid
+  const s = typeof v === 'number' ? String(v) : str(v).replace(/,/g, '')
+  if (s === '') return null
+  return /^\d{1,9}(\.\d{1,2})?$/.test(s) ? Number(s) : undefined
+}
+
+/** Checks an untrusted request body. One readable message for the first problem. */
+export function parseSale(body: unknown): { ok: true; value: SaleRequest } | { ok: false; error: string } {
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>
+  const raw = Array.isArray(b.items) ? b.items : []
+  if (raw.length === 0) return { ok: false, error: 'Add at least one item to the sale.' }
+  if (raw.length > MAX_SALE_LINES) return { ok: false, error: `A sale can have at most ${MAX_SALE_LINES} different items.` }
+
+  const merged = new Map<string, number>() // the same item scanned twice becomes one line
+  for (const r of raw) {
+    const it = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>
+    const id = str(it.variantId)
+    const q = typeof it.quantity === 'number' ? it.quantity : Number(it.quantity)
+    if (!id || id.length > 40 || !Number.isInteger(q) || q < 1 || q > MAX_LINE_QTY) return { ok: false, error: `Each quantity must be a whole number from 1 to ${MAX_LINE_QTY}.` }
+    merged.set(id, (merged.get(id) ?? 0) + q)
+  }
+  for (const q of merged.values()) if (q > MAX_LINE_QTY) return { ok: false, error: `You can sell at most ${MAX_LINE_QTY} of one item at a time.` }
+
+  const discount = money(b.discount)
+  if (discount === undefined) return { ok: false, error: 'The discount must be an amount in rupees, like 200.' }
+
+  const paymentMethod = POS_PAYMENT_METHODS.find((m) => m === b.paymentMethod)
+  if (!paymentMethod) return { ok: false, error: 'Choose how the customer paid.' }
+
+  let tendered: number | null = null
+  if (paymentMethod === 'CASH') {
+    const t = money(b.tendered)
+    if (t === undefined) return { ok: false, error: 'The cash received must be an amount in rupees.' }
+    tendered = t
+  }
+
+  const name = str(b.customerName).replace(/\s+/g, ' ')
+  if (name.length > 80) return { ok: false, error: 'The customer name must be 80 characters or fewer.' }
+  const phoneRaw = str(b.customerPhone)
+  let phone: string | null = null
+  if (phoneRaw) {
+    phone = normalizePkMobile(phoneRaw)
+    if (!phone) return { ok: false, error: 'That mobile number does not look right. Use a number like 0300 1234567, or leave it empty.' }
+  }
+
+  const key = str(b.idempotencyKey)
+  if (key.length < 8 || key.length > 80) return { ok: false, error: 'Your screen is out of date. Please refresh the page and try again.' }
+
+  return { ok: true, value: { items: [...merged].map(([variantId, quantity]) => ({ variantId, quantity })), discount: discount ?? 0, paymentMethod, tendered, customerName: name || null, customerPhone: phone, idempotencyKey: key } }
+}
+
+export interface SaleTotals { subtotal: number; discount: number; total: number }
+
+/** Totals from the database prices. A discount can never take the total below zero. */
+export function saleTotals(lines: { unitPrice: number; quantity: number }[], discount: number): { ok: true; value: SaleTotals } | { ok: false; error: string } {
+  const subtotal = round2(lines.reduce((s, l) => s + round2(l.unitPrice * l.quantity), 0))
+  if (discount > subtotal) return { ok: false, error: 'The discount is more than the total of the items.' }
+  return { ok: true, value: { subtotal, discount: round2(discount), total: round2(subtotal - discount) } }
+}
+
+/** Change to hand back for a cash sale. An empty "cash received" means exact money. */
+export function cashChange(total: number, tendered: number | null): { ok: true; change: number } | { ok: false; error: string } {
+  if (tendered === null) return { ok: true, change: 0 }
+  if (tendered < total) return { ok: false, error: 'The cash received is less than the total.' }
+  return { ok: true, change: round2(tendered - total) }
+}
+
+/** Today's takings per payment method, ignoring sales that were cancelled (voided). */
+export function tillSummary(rows: { method: string; total: number; cancelled: boolean }[]) {
+  const by = new Map<string, { count: number; total: number }>()
+  let count = 0, total = 0
+  for (const r of rows) {
+    if (r.cancelled) continue
+    const cur = by.get(r.method) ?? { count: 0, total: 0 }
+    cur.count += 1; cur.total = round2(cur.total + r.total)
+    by.set(r.method, cur)
+    count += 1; total = round2(total + r.total)
+  }
+  return { count, total, byMethod: POS_PAYMENT_METHODS.filter((m) => by.has(m)).map((m) => ({ method: m, ...by.get(m)! })) }
+}

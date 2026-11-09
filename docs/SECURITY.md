@@ -76,3 +76,8 @@ The rules this platform keeps. Read this before changing sign-in, sign-up, billi
 - Colours are chosen from a fixed list and applied as CSS variables; the owner never writes CSS.
 - Contact form: hidden honeypot field (bots get a fake success, nothing stored), 5 messages per 15 minutes per visitor address, 3 per hour per phone number, 100 per store per day, Pakistani mobile required, at most 2 links, 1000 characters. Messages are always read and deleted scoped to the signed-in store.
 - A shop the platform owner has not approved shows only a neutral notice; the storefront shell never renders for it.
+
+## Staff limit, team and POS lite
+- The limit and the POS switch are read on the server for every add / switch-on / sale; hiding a menu entry is only tidiness. Only platform staff with `csmi.manage` can change them, and each change is audited (`csmi.store.entitlements`).
+- Team changes need the owner-only `staff.manage` permission, only touch managers and staff of the caller's own store (never the owner, never another store), and are audited (`team.add/on/off/password`). Switching someone off or resetting their password signs them out everywhere.
+- Counter sales need `pos.sell` plus the POS switch; prices, stock and totals are recomputed on the server, a retry key stops double sales, sales are rate-limited per user, and cancelling a sale needs `orders.cancel`. The store row is locked while the staff count is checked so limits cannot be beaten by double clicks.
