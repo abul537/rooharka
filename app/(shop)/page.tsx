@@ -55,7 +55,7 @@ export default async function Home() {
             </div>
             {single && spotlight && (
               <Link href={`/product/${spotlight.slug}`} className="absolute -bottom-5 left-4 right-4 flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-lg ring-1 ring-gray-200 transition hover:shadow-xl sm:left-auto sm:right-6 sm:w-80">
-                <span className="min-w-0"><span className="block truncate font-semibold text-gray-900">{spotlight.name}</span><span className="text-sm text-gray-600">{spotlight.maxPrice > spotlight.minPrice ? 'From ' : ''}{formatPrice(spotlight.minPrice, store.currency)}</span></span>
+                <span className="min-w-0"><span className="block truncate font-semibold text-gray-900">{spotlight.name}</span><span className="text-sm text-gray-600">{spotlight.maxPrice > spotlight.minPrice ? 'From ' : ''}{formatPrice(spotlight.minPrice, store.currency)}{spotlight.perUnit ? ` ${spotlight.perUnit}` : ''}</span></span>
                 <span className="shrink-0 rounded-lg bg-brand-700 px-3 py-2 text-sm font-semibold text-white">{spotlight.soldOut ? 'Sold out' : 'View'}</span>
               </Link>
             )}

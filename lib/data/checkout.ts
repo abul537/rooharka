@@ -113,7 +113,13 @@ export interface CheckoutLine {
   productSlug: string
   variantLabel: string
   imageUrl: string | null
+  /** Price per selling unit (per kg for measured products). */
   unitPrice: number
+  /** Selling unit snapshot: kg, box ... null = pieces. */
+  unitCode: string | null
+  type: string
+  qtyMin: number | null
+  qtyStep: number | null
   stock: number
   trackStock: boolean
 }
@@ -127,6 +133,7 @@ export async function getCheckoutLine(storeId: string, variantId: string): Promi
         select: {
           name: true,
           slug: true,
+          type: true, unitCode: true, qtyMin: true, qtyStep: true,
           media: { where: { media: { kind: 'IMAGE' } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], take: 1, select: { media: { select: { url: true } } } },
         },
       },
@@ -140,6 +147,10 @@ export async function getCheckoutLine(storeId: string, variantId: string): Promi
     variantLabel: v.label,
     imageUrl: v.product.media[0]?.media.url ?? null,
     unitPrice: v.price.toNumber(),
+    unitCode: v.product.unitCode,
+    type: v.product.type,
+    qtyMin: v.product.qtyMin,
+    qtyStep: v.product.qtyStep,
     stock: v.stock,
     trackStock: v.trackStock,
   }

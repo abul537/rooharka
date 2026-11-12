@@ -7,8 +7,10 @@ import { audit } from '@/lib/audit'
 import { db } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
 import { AdminError } from '@/lib/admin/orders'
-import { parseProductEdit, parseSections, parseVariantFields } from '@/lib/admin/product-rules'
-import { addVariant, attachMedia, deleteProduct, deleteVariant, moveMedia, removeMedia, saveProduct, saveSections, setMediaAlt, setPrimaryMedia } from '@/lib/admin/products'
+import { parseProductEdit, parseSections, parseVariantFields, type SellMeta } from '@/lib/admin/product-rules'
+import { parseOptionGroups } from '@/lib/variants/rules'
+import type { ProductKind } from '@/lib/units/quantity'
+import { addVariant, attachMedia, deleteProduct, generateVariants, deleteVariant, moveMedia, removeMedia, saveProduct, saveSections, setMediaAlt, setPrimaryMedia } from '@/lib/admin/products'
 import { getServiceSecrets } from '@/lib/services/store-services'
 import { createUploadSignature, parseExternalMediaUrl, verifyUpload, type SignedUpload, type UploadReport } from '@/lib/media/cloudinary'
 import { destroyCloudFiles } from '@/lib/media/cloud-cleanup'
@@ -35,34 +37,60 @@ async function guarded(
   }
 }
 
+/** The selling rules of a product come from the database (type and unit are fixed when it is created), never from the form. */
+async function sellMeta(storeId: string, productId: string) {
+  const p = await db.product.findFirst({ where: { id: productId, storeId }, select: { type: true, unitCode: true, qtyMin: true, qtyStep: true, variants: { select: { id: true } } } })
+  return p && { meta: { type: p.type as ProductKind, unitCode: p.unitCode } satisfies SellMeta, current: { qtyMin: p.qtyMin, qtyStep: p.qtyStep }, variantIds: p.variants.map((v) => v.id) }
+}
+
 export async function saveProductAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const productId = str(fd, 'productId')
   const g = await adminOrError('products.edit'); if ('error' in g) return g
-  // Which sizes belong to this product comes from the database, never from the form.
-  const owned = await db.product.findFirst({ where: { id: productId, storeId: g.admin.storeId }, select: { variants: { select: { id: true } } } })
+  const owned = await sellMeta(g.admin.storeId, productId)
   if (!owned) return { error: 'Product not found.' }
-  const parsed = parseProductEdit(fd, owned.variants.map((v) => v.id))
+  const parsed = parseProductEdit(fd, owned.variantIds, owned.meta, owned.current)
   if (!parsed.ok) return { error: parsed.error }
   return guarded('update', productId, async (admin) => {
-    const changes = await saveProduct(admin, productId, parsed.value.product, parsed.value.variants, parsed.value.defaultId)
+    const v = parsed.value
+    const changes = await saveProduct(admin, productId, v.product, v.variants, v.defaultId, v)
     await audit({ storeId: admin.storeId, userId: admin.id, action: 'product.changes', entity: 'Product', entityId: productId, after: changes })
     return 'Product saved. The store is updated.'
   })
 }
 
 export async function addVariantAction(_: ActionState, fd: FormData): Promise<ActionState> {
-  const parsed = parseVariantFields(fd, 'nv_')
+  const g = await adminOrError('products.edit'); if ('error' in g) return g
+  const owned = await sellMeta(g.admin.storeId, str(fd, 'productId'))
+  if (!owned) return { error: 'Product not found.' }
+  const parsed = parseVariantFields(fd, 'nv_', owned.meta)
   if (!parsed.ok) return { error: parsed.error }
   return guarded('variant.add', str(fd, 'productId'), async (admin) => {
     await addVariant(admin, str(fd, 'productId'), parsed.value)
-    return `Size “${parsed.value.label}” added.`
+    return `Variant “${parsed.value.label}” added.`
+  })
+}
+
+/** Saves the options (Size: S, M, L / Colour: Red, Blue) and builds every combination automatically. */
+export async function generateVariantsAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const g = await adminOrError('products.edit'); if ('error' in g) return g
+  const productId = str(fd, 'productId')
+  const owned = await sellMeta(g.admin.storeId, productId)
+  if (!owned) return { error: 'Product not found.' }
+  const groups = parseOptionGroups(str(fd, 'options'))
+  if (!groups.ok) return { error: groups.error }
+  const start = parseVariantFields(fd, 'gen_', owned.meta, 'x')
+  if (!start.ok) return { error: start.error }
+  return guarded('variants.generate', productId, async (admin) => {
+    const r = await generateVariants(admin, productId, groups.value, { price: start.value.price, compareAtPrice: start.value.compareAtPrice, stock: start.value.stock })
+    const parts = [r.created && `${r.created} new variant${r.created === 1 ? '' : 's'} created`, r.switchedOn && `${r.switchedOn} switched back on`, r.switchedOff && `${r.switchedOff} switched off (no longer in your options)`].filter(Boolean)
+    return parts.length ? `${parts.join(', ')}. Review the prices and stock below.` : 'Nothing to change: the variants already match your options.'
   })
 }
 
 export async function deleteVariantAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return guarded('variant.delete', str(fd, 'productId'), async (admin) => {
     const r = await deleteVariant(admin, str(fd, 'productId'), str(fd, 'variantId'))
-    return `Size “${r.label}” deleted.`
+    return `Variant “${r.label}” deleted.`
   })
 }
 

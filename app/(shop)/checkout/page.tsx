@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { otpCookieName, verifiedPhone } from '@/lib/otp/service';
 import { getCurrentStore } from '@/lib/store';
 import { getCheckoutConfig, getCheckoutLine } from '@/lib/data/checkout';
+import { isBuyable, quantityRule, snapQuantity } from '@/lib/units/quantity';
 import CheckoutFlow from './CheckoutFlow';
 
 export const metadata: Metadata = { title: 'Checkout', robots: { index: false } };
@@ -29,10 +30,11 @@ export default async function CheckoutPage({ searchParams }: Props) {
     phone = verified.startsWith('+92') ? `0${verified.slice(3)}` : verified;
   }
 
-  const maxQuantity = Math.max(1, Math.min(config.maxQuantity, line.trackStock ? line.stock : config.maxQuantity));
-  const initialQuantity = Math.min(maxQuantity, Math.max(1, parseInt(qty ?? '1', 10) || 1));
+  // How much may be bought (whole units, or steps of a kg / litre / metre) comes from the product, never from the URL.
+  const rule = quantityRule(line, line.trackStock ? line.stock : null, config.maxQuantity);
+  const initialQuantity = snapQuantity(rule, parseInt(qty ?? '1', 10) || 1);
 
-  if (line.trackStock && line.stock <= 0) {
+  if (!isBuyable(rule)) {
     return (
       <div className="container mx-auto px-4 py-32 text-center">
         <h1 className="font-playfair text-4xl font-bold text-gray-900 mb-4">Sold out</h1>
@@ -52,7 +54,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
           config={{ currency: config.currency, fields: config.fields, pricing: config.pricing }}
           line={line}
           initialQuantity={initialQuantity}
-          maxQuantity={maxQuantity}
+          rule={rule}
           verifiedPhone={phone}
         />
       </div>

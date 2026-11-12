@@ -9,12 +9,14 @@ import AddressStep from './steps/addressStep';
 import PaymentStep from './steps/paymentStep';
 import StepIndicator from '@/components/checkout/stepIndicator';
 import OrderSummary from '@/components/checkout/OrderSummary';
+import { lineTotal } from '@/lib/units/quantity';
+import type { QuantityRule } from '@/lib/units/quantity';
 
 interface Props {
   config: Pick<CheckoutConfig, 'currency' | 'fields' | 'pricing'>;
   line: CheckoutLine;
   initialQuantity: number;
-  maxQuantity: number;
+  rule: QuantityRule;
   /** Set when the store requires phone verification: the verified number in local form (03XXXXXXXXX). */
   verifiedPhone?: string;
 }
@@ -27,7 +29,7 @@ function newKey(): string {
   return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 }
 
-export default function CheckoutFlow({ config, line, initialQuantity, maxQuantity, verifiedPhone }: Props) {
+export default function CheckoutFlow({ config, line, initialQuantity, rule, verifiedPhone }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [address, setAddress] = useState<AddressFormData | null>(null);
@@ -39,7 +41,7 @@ export default function CheckoutFlow({ config, line, initialQuantity, maxQuantit
   const idempotencyKey = useRef<string>('');
   if (!idempotencyKey.current) idempotencyKey.current = newKey();
 
-  const subtotal = line.unitPrice * quantity;
+  const subtotal = lineTotal(line.unitPrice, quantity, line.unitCode);
   const options = useMemo(() => buildPaymentOptions(config.pricing, subtotal), [config.pricing, subtotal]);
   // The summary shows the first/only option's split, or the plain total until a method is chosen.
   const summaryCharges = options.length === 1 ? options[0].charges : computeCharges(config.pricing, subtotal, 'COD');
@@ -115,7 +117,7 @@ export default function CheckoutFlow({ config, line, initialQuantity, maxQuantit
         </div>
       </div>
 
-      <OrderSummary line={line} quantity={quantity} maxQuantity={maxQuantity} onQuantityChange={setQuantity}
+      <OrderSummary line={line} quantity={quantity} rule={rule} onQuantityChange={setQuantity}
         charges={summaryCharges} currency={config.currency} locked={submitting} />
     </div>
   );

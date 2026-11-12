@@ -1,7 +1,31 @@
 import type { Getter, Parsed } from './settings-rules'
+import { COUNT_UNITS, MEASURE_UNITS, getUnit, parseAmount, toBase } from '@/lib/units/registry'
+import { PRODUCT_KINDS, type ProductKind } from '@/lib/units/quantity'
+import { parseOptionGroups, type OptionGroup } from '@/lib/variants/rules'
 
 const text = (g: Getter, k: string) => String(g.get(k) ?? '').trim()
 const whole = (s: string) => (/^\d{1,9}$/.test(s) ? Number(s) : null)
+const decimal2 = (s: string) => (/^\d{1,9}(\.\d{1,2})?$/.test(s) ? Number(s) : null)
+
+/** How a product is sold decides how its numbers are read: counted = whole rupees and units; measured = price per unit (paisa allowed), stock typed in that unit. */
+export interface SellMeta { type: ProductKind; unitCode: string | null }
+const LEGACY: SellMeta = { type: 'VARIANTS', unitCode: null }
+const isMeasuredMeta = (m: SellMeta) => m.type === 'MEASURABLE'
+const priceOf = (s: string, m: SellMeta) => (isMeasuredMeta(m) ? decimal2(s) : whole(s))
+const priceHint = (m: SellMeta) => (isMeasuredMeta(m) ? `a number above 0 (paisa allowed) per ${m.unitCode ?? 'unit'}` : 'a whole number above 0')
+const MAX_STOCK_COUNTED = 1_000_000
+const MAX_STOCK_BASE = 1_000_000_000
+
+/** Stock as typed (in the selling unit for measured products) -> the number stored (base units). null = invalid. */
+export function parseStock(raw: string, m: SellMeta): number | null {
+  const t = raw.trim()
+  if (!isMeasuredMeta(m)) { const n = whole(t || '0'); return n !== null && n <= MAX_STOCK_COUNTED ? n : null }
+  if (t === '' || /^0+([.,]0+)?$/.test(t)) return 0
+  const n = parseAmount(t, m.unitCode ?? '')
+  const base = n === null ? null : toBase(n, m.unitCode!)
+  return base !== null && base <= MAX_STOCK_BASE ? base : null
+}
+const stockHint = (m: SellMeta) => (isMeasuredMeta(m) ? `a number in ${m.unitCode} (like 25 or 12.5)` : `a whole number from 0 to ${MAX_STOCK_COUNTED}`)
 
 export const PRODUCT_STATUSES = ['DRAFT', 'ACTIVE', 'ARCHIVED'] as const
 
@@ -36,6 +60,32 @@ function parseCommon(g: Getter): R<Omit<ProductEdit, 'status'> & { status: Produ
     },
   }
 }
+/**
+ * The unit settings that go with a product's type. Measured: the unit is fixed when the product is created (changing
+ * kg to g would silently change every price), minimum and step are typed in that unit. Counted: just the unit label.
+ */
+function parseMeasureFields(g: Getter, meta: SellMeta, current: { qtyMin: number | null; qtyStep: number | null }): R<{ unitCode: string | null; qtyMin: number | null; qtyStep: number | null }> {
+  if (meta.type === 'MEASURABLE') {
+    const u = getUnit(meta.unitCode)
+    if (!u || u.dimension === 'COUNT') return { ok: false, error: 'This product has no valid selling unit.' }
+    const stepRaw = text(g, 'qtyStep'), minRaw = text(g, 'qtyMin')
+    const step = stepRaw ? parseAmount(stepRaw, u.code) : (current.qtyStep ? current.qtyStep / u.factor : u.defaultStep)
+    if (step === null) return { ok: false, error: `The order step must be a number above 0 in ${u.code}, like ${u.defaultStep}.` }
+    const stepBase = toBase(step, u.code)
+    if (stepBase < 1) return { ok: false, error: `The order step is too small for ${u.code}.` }
+    const min = minRaw ? parseAmount(minRaw, u.code) : (current.qtyMin ? current.qtyMin / u.factor : step)
+    if (min === null) return { ok: false, error: `The smallest order must be a number above 0 in ${u.code}.` }
+    const minBase = toBase(min, u.code)
+    if (minBase < stepBase) return { ok: false, error: 'The smallest order cannot be smaller than the order step.' }
+    if ((minBase - stepBase) % stepBase !== 0) return { ok: false, error: 'The smallest order must be a whole number of steps (for example step 0.25 and smallest 0.5).' }
+    return { ok: true, value: { unitCode: u.code, qtyMin: minBase, qtyStep: stepBase } }
+  }
+  const unit = text(g, 'unitCode')
+  if (!unit) return { ok: true, value: { unitCode: meta.unitCode, qtyMin: null, qtyStep: null } } // form without the field: keep as is
+  if (!COUNT_UNITS.some((u) => u.code === unit)) return { ok: false, error: 'Choose how this product is counted: piece, box, bag ...' }
+  return { ok: true, value: { unitCode: unit, qtyMin: null, qtyStep: null } }
+}
+
 export interface VariantEdit {
   id: string; label: string; badge: string | null; price: number; compareAtPrice: number | null
   /** Stock the admin saw when the form opened, and the stock they typed: the DIFFERENCE is applied, so orders placed meanwhile are never lost. */
@@ -46,22 +96,28 @@ export interface VariantEdit {
  * Parses the product form. `variantIds` are the variants that belong to this product (from the database),
  * so a tampered form cannot touch anyone else's variants.
  */
-export function parseProductEdit(g: Getter, variantIds: string[]): Parsed<{ product: ProductEdit; variants: VariantEdit[]; defaultId: string }> {
+export interface ProductEditResult { product: ProductEdit; variants: VariantEdit[]; defaultId: string; unitCode: string | null; qtyMin: number | null; qtyStep: number | null }
+
+export function parseProductEdit(g: Getter, variantIds: string[], meta: SellMeta = LEGACY, current: { qtyMin: number | null; qtyStep: number | null } = { qtyMin: null, qtyStep: null }): Parsed<ProductEditResult> {
   const common = parseCommon(g)
   if (!common.ok) return common
   const status = common.value.status
+  const measure = parseMeasureFields(g, meta, current)
+  if (!measure.ok) return measure
 
   const variants: VariantEdit[] = []
   for (const id of variantIds) {
     const label = text(g, `v_${id}_label`)
-    if (!label || label.length > 40) return { ok: false, error: 'Every size needs a name of up to 40 characters.' }
-    const price = whole(text(g, `v_${id}_price`))
-    if (price === null || price < 1) return { ok: false, error: `${label}: price must be a whole number above 0.` }
+    if (!label || label.length > 40) return { ok: false, error: 'Every variant needs a name of up to 40 characters.' }
+    const price = priceOf(text(g, `v_${id}_price`), meta)
+    if (price === null || price <= 0) return { ok: false, error: `${label}: price must be ${priceHint(meta)}.` }
     const cmpRaw = text(g, `v_${id}_compareAt`)
-    const compareAtPrice = cmpRaw ? whole(cmpRaw) : null
-    if (cmpRaw && (compareAtPrice === null || compareAtPrice < price)) return { ok: false, error: `${label}: the crossed-out price must be a whole number not lower than the price.` }
-    const stock = whole(text(g, `v_${id}_stock`)), stockWas = whole(text(g, `v_${id}_stockWas`))
-    if (stock === null || stock > 1_000_000) return { ok: false, error: `${label}: stock must be a whole number from 0 to 1000000.` }
+    const compareAtPrice = cmpRaw ? priceOf(cmpRaw, meta) : null
+    if (cmpRaw && (compareAtPrice === null || compareAtPrice < price)) return { ok: false, error: `${label}: the crossed-out price must be ${priceHint(meta)} and not lower than the price.` }
+    const typed = text(g, `v_${id}_stock`), stockWas = whole(text(g, `v_${id}_stockWas`))
+    // Untouched field: keep the stored number exactly (a unit like tola cannot round-trip through 3 decimals).
+    const stock = stockWas !== null && typed === text(g, `v_${id}_stockShown`) ? stockWas : parseStock(typed, meta)
+    if (stock === null) return { ok: false, error: `${label}: stock must be ${stockHint(meta)}.` }
     const badge = text(g, `v_${id}_badge`)
     if (badge.length > 30) return { ok: false, error: `${label}: badge must be 30 characters or fewer.` }
     variants.push({ id, label, badge: badge || null, price, compareAtPrice, stock, stockWas: stockWas ?? stock, isActive: g.get(`v_${id}_active`) === 'on' })
@@ -69,10 +125,10 @@ export function parseProductEdit(g: Getter, variantIds: string[]): Parsed<{ prod
 
   const defaultId = text(g, 'defaultVariant')
   const def = variants.find((v) => v.id === defaultId)
-  if (!def) return { ok: false, error: 'Choose which size is shown first.' }
-  if (!def.isActive) return { ok: false, error: 'The size shown first must be switched on.' }
-  if (status === 'ACTIVE' && !variants.some((v) => v.isActive)) return { ok: false, error: 'A live product needs at least one size switched on.' }
-  return { ok: true, value: { product: common.value, variants, defaultId } }
+  if (!def) return { ok: false, error: 'Choose which variant is shown first.' }
+  if (!def.isActive) return { ok: false, error: 'The variant shown first must be switched on.' }
+  if (status === 'ACTIVE' && !variants.some((v) => v.isActive)) return { ok: false, error: 'A live product needs at least one variant switched on.' }
+  return { ok: true, value: { product: common.value, variants, defaultId, ...measure.value } }
 }
 
 
@@ -91,17 +147,17 @@ export function uniqueSlug(base: string, taken: ReadonlySet<string>): string {
 
 export interface NewVariant { label: string; badge: string | null; sku: string; price: number; compareAtPrice: number | null; stock: number }
 
-/** Reads one size from a form; `prefix` lets the same code read "first size" and "add size" forms. */
-export function parseVariantFields(g: Getter, prefix = ''): R<NewVariant> {
-  const label = text(g, `${prefix}label`)
-  if (!label || label.length > 40) return { ok: false, error: 'Give the size a name of up to 40 characters, e.g. “100ml”.' }
-  const price = whole(text(g, `${prefix}price`))
-  if (price === null || price < 1) return { ok: false, error: 'Price must be a whole number above 0.' }
+/** Reads one variant from a form; `prefix` lets the same code read "first variant" and "add variant" forms. */
+export function parseVariantFields(g: Getter, prefix = '', meta: SellMeta = LEGACY, defaultLabel?: string): R<NewVariant> {
+  const label = text(g, `${prefix}label`) || defaultLabel || ''
+  if (!label || label.length > 40) return { ok: false, error: 'Give the variant a name of up to 40 characters, e.g. “100ml”.' }
+  const price = priceOf(text(g, `${prefix}price`), meta)
+  if (price === null || price <= 0) return { ok: false, error: `Price must be ${priceHint(meta)}.` }
   const cmpRaw = text(g, `${prefix}compareAt`)
-  const compareAtPrice = cmpRaw ? whole(cmpRaw) : null
-  if (cmpRaw && (compareAtPrice === null || compareAtPrice < price)) return { ok: false, error: 'The crossed-out price must be a whole number not lower than the price.' }
-  const stock = whole(text(g, `${prefix}stock`) || '0')
-  if (stock === null || stock > 1_000_000) return { ok: false, error: 'Stock must be a whole number from 0 to 1000000.' }
+  const compareAtPrice = cmpRaw ? priceOf(cmpRaw, meta) : null
+  if (cmpRaw && (compareAtPrice === null || compareAtPrice < price)) return { ok: false, error: `The crossed-out price must be ${priceHint(meta)} and not lower than the price.` }
+  const stock = parseStock(text(g, `${prefix}stock`), meta)
+  if (stock === null) return { ok: false, error: `Stock must be ${stockHint(meta)}.` }
   const badge = text(g, `${prefix}badge`)
   if (badge.length > 30) return { ok: false, error: 'Badge must be 30 characters or fewer.' }
   const sku = text(g, `${prefix}sku`).toUpperCase()
@@ -109,17 +165,46 @@ export function parseVariantFields(g: Getter, prefix = ''): R<NewVariant> {
   return { ok: true, value: { label, badge: badge || null, sku, price, compareAtPrice, stock } }
 }
 
-export interface NewProduct { product: ProductEdit; slug: string; variant: NewVariant }
+export interface NewProduct {
+  product: ProductEdit; slug: string
+  type: ProductKind; unitCode: string | null; qtyMin: number | null; qtyStep: number | null
+  /** VARIANTS with options: every combination is created from this one template. Empty = a single variant. */
+  optionGroups: OptionGroup[]
+  variant: NewVariant
+}
 
 export function parseNewProduct(g: Getter): R<NewProduct> {
   const common = parseCommon(g)
   if (!common.ok) return common
-  const variant = parseVariantFields(g, 'v_')
+  const type = PRODUCT_KINDS.find((t) => t === text(g, 'type')) ?? 'VARIANTS'
+  const unitRaw = text(g, 'unitCode')
+
+  let unitCode: string | null = null
+  if (type === 'MEASURABLE') {
+    const u = MEASURE_UNITS.find((x) => x.code === unitRaw)
+    if (!u) return { ok: false, error: 'Choose the unit this product is sold by: kg, g, litre, metre ...' }
+    unitCode = u.code
+  } else if (unitRaw) {
+    if (!COUNT_UNITS.some((u) => u.code === unitRaw)) return { ok: false, error: 'Choose how this product is counted: piece, box, bag ...' }
+    unitCode = unitRaw
+  } else if (type === 'SIMPLE') unitCode = 'piece'
+  const meta: SellMeta = { type, unitCode }
+
+  let optionGroups: OptionGroup[] = []
+  if (type === 'VARIANTS') {
+    const og = parseOptionGroups(String(g.get('options') ?? ''))
+    if (!og.ok) return og
+    optionGroups = og.value
+  }
+  const variant = parseVariantFields(g, 'v_', meta, optionGroups.length || type !== 'VARIANTS' ? 'Standard' : undefined)
   if (!variant.ok) return variant
+  const measure = parseMeasureFields(g, meta, { qtyMin: null, qtyStep: null })
+  if (!measure.ok) return measure
+
   const slugRaw = text(g, 'slug')
   if (slugRaw && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slugRaw)) return { ok: false, error: 'The page address may only use lowercase letters, digits and single dashes.' }
   if (slugRaw.length > 60) return { ok: false, error: 'The page address must be 60 characters or fewer.' }
-  return { ok: true, value: { product: common.value, slug: slugRaw || slugify(common.value.name), variant: variant.value } }
+  return { ok: true, value: { product: common.value, slug: slugRaw || slugify(common.value.name), type, unitCode: measure.value.unitCode ?? unitCode, qtyMin: measure.value.qtyMin, qtyStep: measure.value.qtyStep, optionGroups, variant: variant.value } }
 }
 
 // --------------------------------------------------------------------- page sections

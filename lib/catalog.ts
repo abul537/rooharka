@@ -7,6 +7,8 @@ export interface CatalogItem {
   /** Crossed-out price of the cheapest size, when it has one. */
   compareAt: number | null
   soldOut: boolean
+  /** "per kg" / "per box" for measured or boxed products; null for plain pieces. */
+  perUnit?: string | null
   rating: number | null; ratingCount: number
   /** Lower-case text the search box looks through. */
   haystack: string

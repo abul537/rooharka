@@ -1,3 +1,4 @@
+import { formatQuantity, perUnit } from '@/lib/units/registry'
 import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth/guard'
@@ -31,7 +32,7 @@ export default async function Receipt({ params }: { params: Promise<{ id: string
       {order.items.map((i) => (
         <div key={i.id} className="mb-1">
           <p>{i.name}{i.variantLabel ? ` (${i.variantLabel})` : ''}</p>
-          <p className="flex justify-between"><span>{i.quantity} × {formatPrice(i.unitPrice.toNumber())}</span><span>{formatPrice(i.lineTotal.toNumber())}</span></p>
+          <p className="flex justify-between"><span>{formatQuantity(i.quantity, i.unitCode)} × {formatPrice(i.unitPrice.toNumber())}{perUnit(i.unitCode) ? ` ${perUnit(i.unitCode)}` : ''}</span><span>{formatPrice(i.lineTotal.toNumber())}</span></p>
         </div>
       ))}
       <hr className="my-2 border-dashed" />

@@ -1,3 +1,4 @@
+import { readOptionGroups, readOptionValues } from '@/lib/variants/rules'
 import { cache } from 'react'
 import { db } from '@/lib/db'
 import { getCurrentStore } from '@/lib/store'
@@ -47,6 +48,8 @@ export interface VariantDTO {
   stock: number
   trackStock: boolean
   isDefault: boolean
+  /** Which option values this variant is ({ Size: "M" }); null for variants added by hand. */
+  optionValues: Record<string, string> | null
 }
 
 export interface MediaDTO {
@@ -92,6 +95,12 @@ export interface ProductPageData {
     description: string | null
     seoTitle: string | null
     seoDescription: string | null
+    /** How it is sold: counted, with variants, or measured. */
+    type: 'SIMPLE' | 'VARIANTS' | 'MEASURABLE'
+    unitCode: string | null
+    qtyMin: number | null
+    qtyStep: number | null
+    optionGroups: { name: string; values: string[] }[]
   }
   variants: VariantDTO[]
   media: MediaDTO[]
@@ -187,6 +196,11 @@ export const getProductPageData = cache(async (slug: string): Promise<ProductPag
       description: product.description,
       seoTitle: product.seoTitle,
       seoDescription: product.seoDescription,
+      type: product.type,
+      unitCode: product.unitCode,
+      qtyMin: product.qtyMin,
+      qtyStep: product.qtyStep,
+      optionGroups: readOptionGroups(product.optionGroups),
     },
     variants: product.variants.map((v) => ({
       id: v.id,
@@ -197,6 +211,7 @@ export const getProductPageData = cache(async (slug: string): Promise<ProductPag
       stock: v.stock,
       trackStock: v.trackStock,
       isDefault: v.isDefault,
+      optionValues: readOptionValues(v.optionValues),
     })),
     media: product.media.map((m) => ({
       id: m.media.id,

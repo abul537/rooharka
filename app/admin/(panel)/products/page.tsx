@@ -4,6 +4,7 @@ import { can } from '@/lib/auth/permissions'
 import { listProducts } from '@/lib/admin/products'
 import { formatPrice } from '@/lib/format'
 import { imageVariant } from '@/lib/media/urls'
+import { formatQuantity, perUnit } from '@/lib/units/registry'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               <span className="min-w-0 flex-1">
                 <span className="font-medium block truncate">{p.name}</span>
                 <span className="text-sm text-slate-500">
-                  {prices.length ? `${formatPrice(Math.min(...prices))}${Math.max(...prices) > Math.min(...prices) ? ` – ${formatPrice(Math.max(...prices))}` : ''}` : 'No sizes on sale'} · {stock} in stock
+                  {prices.length ? `${formatPrice(Math.min(...prices))}${Math.max(...prices) > Math.min(...prices) ? ` – ${formatPrice(Math.max(...prices))}` : ''}${p.type === 'MEASURABLE' ? ` ${perUnit(p.unitCode) ?? ''}` : ''}` : 'Nothing on sale'} · {formatQuantity(stock, p.unitCode)} in stock · {p.type === 'SIMPLE' ? 'simple' : p.type === 'VARIANTS' ? `${live.length} variant${live.length === 1 ? '' : 's'}` : 'measured'}
                 </span>
               </span>
               <span className={`text-xs font-medium rounded-full px-2.5 py-0.5 ${TONE[p.status] ?? ''}`}>{p.status.toLowerCase()}</span>

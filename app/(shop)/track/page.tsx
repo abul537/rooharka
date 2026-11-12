@@ -1,3 +1,4 @@
+import { formatQuantity } from '@/lib/units/registry';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { Check, Circle, PackageSearch } from 'lucide-react';
@@ -125,7 +126,7 @@ export default async function TrackPage({ searchParams }: Props) {
                 {order.items.map((it, i) => (
                   <li key={i} className="py-2 flex justify-between text-sm">
                     <span>{it.name}{it.variantLabel ? ` (${it.variantLabel})` : ''}</span>
-                    <span className="text-gray-600">× {it.quantity}</span>
+                    <span className="text-gray-600">× {formatQuantity(it.quantity, it.unitCode)}</span>
                   </li>
                 ))}
               </ul>

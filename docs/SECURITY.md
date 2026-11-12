@@ -81,3 +81,8 @@ The rules this platform keeps. Read this before changing sign-in, sign-up, billi
 - The limit and the POS switch are read on the server for every add / switch-on / sale; hiding a menu entry is only tidiness. Only platform staff with `csmi.manage` can change them, and each change is audited (`csmi.store.entitlements`).
 - Team changes need the owner-only `staff.manage` permission, only touch managers and staff of the caller's own store (never the owner, never another store), and are audited (`team.add/on/off/password`). Switching someone off or resetting their password signs them out everywhere.
 - Counter sales need `pos.sell` plus the POS switch; prices, stock and totals are recomputed on the server, a retry key stops double sales, sales are rate-limited per user, and cancelling a sale needs `orders.cancel`. The store row is locked while the staff count is checked so limits cannot be beaten by double clicks.
+
+## Measured quantities and variants
+- Type, unit, minimum and step are read from the database on every save, order and sale, never from the browser; the unit of a measured product cannot be changed after creation (it would silently reprice stock).
+- The server re-checks every quantity (minimum, whole steps, stock, store limit) and re-computes every line total; stock moves in whole base units under a guarded decrement, so overselling is impossible even with two simultaneous buyers.
+- Option text is parsed with strict limits (3 options, 30 values, 100 combinations); generated SKUs use letters and digits only and are made unique per product.

@@ -40,7 +40,7 @@ export default function ProductCard({ item, currency, priority = false }: { item
         )}
         <p className="mt-auto pt-3 text-lg font-bold text-gray-900">
           {hasRange && <span className="mr-1 text-sm font-normal text-gray-500">From</span>}
-          {formatPrice(item.minPrice, currency)}
+          {formatPrice(item.minPrice, currency)}{item.perUnit && <span className="ml-1 text-sm font-normal text-gray-500">{item.perUnit}</span>}
           {off && !hasRange && item.compareAt && <span className="ml-2 text-sm font-normal text-gray-400 line-through">{formatPrice(item.compareAt, currency)}</span>}
         </p>
       </div>

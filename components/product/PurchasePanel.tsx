@@ -6,6 +6,9 @@ import { Check, Clock, Heart, Leaf, Minus, Plus, Shield, ShoppingCart, Truck } f
 import { discountPercent, formatPrice } from '@/lib/format'
 import type { ProductPageData, SectionDTO, TrustIcon } from '@/lib/data/product'
 import { Stars } from './Reviews'
+import { fromBase, getUnit, formatQuantity, parseAmount, perUnit, toBase } from '@/lib/units/registry'
+import { isBuyable, lineTotal, quantityRule, snapQuantity, stepQuantity } from '@/lib/units/quantity'
+import { comboKey } from '@/lib/variants/rules'
 
 const TRUST_ICON = { truck: Truck, shield: Shield, leaf: Leaf, clock: Clock, heart: Heart } satisfies Record<TrustIcon, unknown>
 
@@ -15,16 +18,36 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
   const router = useRouter()
 
   const [variantId, setVariantId] = useState(() => (variants.find((v) => v.isDefault) ?? variants[0]).id)
-  const [quantity, setQuantity] = useState(1)
+  const [quantity, setQuantity] = useState(() => {
+    const v = variants.find((x) => x.isDefault) ?? variants[0]
+    return quantityRule(product, v.trackStock ? v.stock : null, settings.maxQuantity).min
+  })
+  const [typed, setTyped] = useState<string | null>(null) // what is being typed in the "how much" box
   const [showBar, setShowBar] = useState(false)
   const ctaRef = useRef<HTMLDivElement>(null)
 
   const variant = useMemo(() => variants.find((v) => v.id === variantId) ?? variants[0], [variants, variantId])
-  const soldOut = variant.trackStock && variant.stock <= 0
-  const maxQty = Math.max(1, variant.trackStock ? Math.min(settings.maxQuantity, variant.stock) : settings.maxQuantity)
-  const qty = Math.min(quantity, maxQty)
-  const total = variant.price * qty
-  const lowStock = variant.trackStock && variant.stock > 0 && variant.stock <= settings.lowStockThreshold
+  // Options (Size, Colour ...): used only when every live variant knows its option values; otherwise a plain list.
+  const grouped = product.optionGroups.length > 0 && variants.every((v) => v.optionValues)
+  const selection: Record<string, string> = grouped ? variant.optionValues ?? {} : {}
+  const variantFor = (want: Record<string, string>) => {
+    const exact = variants.find((v) => v.optionValues && comboKey(v.optionValues) === comboKey(want))
+    if (exact) return exact
+    // No such combination: the closest variant that has the clicked value, so a click always does something.
+    return variants.find((v) => Object.entries(want).every(([k, x]) => v.optionValues?.[k] === x)) ?? null
+  }
+  function pick(group: string, val: string) {
+    const target = variantFor({ ...selection, [group]: val }) ?? variants.find((v) => v.optionValues?.[group] === val)
+    if (target) { setVariantId(target.id); setQuantity((q) => snapQuantity(quantityRule(product, target.trackStock ? target.stock : null, settings.maxQuantity), q)) }
+  }
+
+  const rule = useMemo(() => quantityRule(product, variant.trackStock ? variant.stock : null, settings.maxQuantity), [product, variant, settings.maxQuantity])
+  const soldOut = !isBuyable(rule)
+  const qty = snapQuantity(rule, quantity)
+  const unit = getUnit(product.unitCode)
+  const total = lineTotal(variant.price, qty, product.unitCode)
+  const per = perUnit(product.unitCode)
+  const lowStock = variant.trackStock && !soldOut && (rule.measured ? variant.stock <= rule.step * settings.lowStockThreshold : variant.stock <= settings.lowStockThreshold)
   const off = discountPercent(variant.price, variant.compareAtPrice)
 
   // Show the sticky mobile bar only once the main order button has scrolled out of view.
@@ -72,7 +95,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
 
       {/* Price */}
       <div className="flex items-baseline flex-wrap gap-3 mb-8" aria-live="polite">
-        <span className="text-4xl font-bold text-gray-900">{formatPrice(variant.price, store.currency)}</span>
+        <span className="text-4xl font-bold text-gray-900">{formatPrice(variant.price, store.currency)}{per && <span className="ml-2 text-lg font-normal text-gray-500">{per}</span>}</span>
         {variant.compareAtPrice && variant.compareAtPrice > variant.price && (
           <>
             <span className="text-xl text-gray-500 line-through">{formatPrice(variant.compareAtPrice, store.currency)}</span>
@@ -81,13 +104,38 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
         )}
       </div>
 
-      {/* Size / variant selection */}
-      {variants.length > 1 && (
+      {/* Option pickers (Size, Colour ...) when the product has options */}
+      {grouped && (
+        <div className="mb-8 space-y-5">
+          {product.optionGroups.map((g) => (
+            <fieldset key={g.name}>
+              <legend className="text-lg font-bold text-gray-900 mb-3">{g.name}: <span className="font-normal text-gray-600">{selection[g.name]}</span></legend>
+              <div className="flex flex-wrap gap-2">
+                {g.values.map((val) => {
+                  const target = variantFor({ ...selection, [g.name]: val })
+                  if (!target) return null // that value is not offered at all (switched off)
+                  const out = target.trackStock && !isBuyable(quantityRule(product, target.stock, settings.maxQuantity))
+                  const exact = comboKey(target.optionValues ?? {}) === comboKey({ ...selection, [g.name]: val })
+                  return (
+                    <label key={val} className={`px-4 py-2 rounded-lg border-2 cursor-pointer text-sm font-medium transition ${selection[g.name] === val ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-gray-200 hover:border-brand-200'} ${out || !exact ? 'opacity-50' : ''}`}>
+                      <input type="radio" name={`opt-${g.name}`} value={val} checked={selection[g.name] === val} onChange={() => pick(g.name, val)} className="sr-only" />
+                      {val}{out && <span className="ml-1 text-xs text-gray-500">(sold out)</span>}
+                    </label>
+                  )
+                })}
+              </div>
+            </fieldset>
+          ))}
+        </div>
+      )}
+
+      {/* Size / variant selection (variants added by hand, or measured products with grades) */}
+      {!grouped && variants.length > 1 && (
         <fieldset className="mb-8">
-          <legend className="text-lg font-bold text-gray-900 mb-4">Select Size:</legend>
+          <legend className="text-lg font-bold text-gray-900 mb-4">Choose one:</legend>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {variants.map((v) => {
-              const out = v.trackStock && v.stock <= 0
+              const out = v.trackStock && !isBuyable(quantityRule(product, v.stock, settings.maxQuantity))
               return (
                 <label
                   key={v.id}
@@ -112,7 +160,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
                     )}
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xl font-bold text-gray-900">{formatPrice(v.price, store.currency)}</span>
+                    <span className="text-xl font-bold text-gray-900">{formatPrice(v.price, store.currency)}{per && <span className="ml-1 text-sm font-normal text-gray-500">{per}</span>}</span>
                     {v.compareAtPrice && v.compareAtPrice > v.price && (
                       <span className="text-sm text-gray-500 line-through">{formatPrice(v.compareAtPrice, store.currency)}</span>
                     )}
@@ -128,20 +176,32 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
       <div ref={ctaRef} className="mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
           <div className="flex items-center">
-            <span className="mr-4 font-medium" id="qty-label">Quantity:</span>
+            <span className="mr-4 font-medium" id="qty-label">{rule.measured ? 'How much:' : 'Quantity:'}</span>
             <div className="flex items-center border rounded-lg" role="group" aria-labelledby="qty-label">
-              <button type="button" aria-label="Decrease quantity" disabled={qty <= 1}
-                onClick={() => setQuantity(Math.max(1, qty - 1))}
+              <button type="button" aria-label="Decrease quantity" disabled={qty <= rule.min}
+                onClick={() => { setTyped(null); setQuantity(stepQuantity(rule, qty, -1)) }}
                 className="w-12 h-12 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40">
                 <Minus className="w-4 h-4" aria-hidden />
               </button>
-              <span className="w-12 h-12 flex items-center justify-center font-bold" aria-live="polite">{qty}</span>
-              <button type="button" aria-label="Increase quantity" disabled={qty >= maxQty}
-                onClick={() => setQuantity(Math.min(maxQty, qty + 1))}
+              {rule.measured && unit ? (
+                <span className="flex items-center">
+                  <input aria-label={`Amount in ${unit.code}`} inputMode="decimal" value={typed ?? String(fromBase(qty, unit.code))}
+                    onChange={(e) => setTyped(e.target.value)}
+                    onBlur={() => { const n = parseAmount(typed ?? '', unit.code); if (n !== null) setQuantity(snapQuantity(rule, toBase(n, unit.code))); setTyped(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                    className="w-16 h-12 text-center font-bold outline-none" />
+                  <span className="pr-3 text-sm text-gray-500">{unit.code}</span>
+                </span>
+              ) : (
+                <span className="min-w-12 h-12 px-2 flex items-center justify-center font-bold" aria-live="polite">{qty}</span>
+              )}
+              <button type="button" aria-label="Increase quantity" disabled={qty >= snapQuantity(rule, Number.MAX_SAFE_INTEGER)}
+                onClick={() => { setTyped(null); setQuantity(stepQuantity(rule, qty, 1)) }}
                 className="w-12 h-12 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40">
                 <Plus className="w-4 h-4" aria-hidden />
               </button>
             </div>
+            {rule.measured && <span className="ml-3 text-sm text-gray-500">({formatQuantity(qty, product.unitCode)})</span>}
           </div>
           <button
             type="button"
@@ -155,7 +215,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
         </div>
       </div>
       {settings.showStockCount && lowStock && (
-        <p className="text-sm font-medium text-red-600 mb-6">Only {variant.stock} left in stock: order soon.</p>
+        <p className="text-sm font-medium text-red-600 mb-6">Only {formatQuantity(variant.stock, product.unitCode)} left in stock: order soon.</p>
       )}
 
       {/* Trust badges */}
@@ -197,7 +257,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
           aria-hidden={!showBar}
         >
           <div className="min-w-0">
-            <p className="text-xs text-gray-500 truncate">{product.name} · {variant.label}</p>
+            <p className="text-xs text-gray-500 truncate">{product.name} · {variant.label}{rule.measured ? ` · ${formatQuantity(qty, product.unitCode)}` : ''}</p>
             <p className="font-bold text-gray-900">{formatPrice(total, store.currency)}</p>
           </div>
           <button type="button" onClick={order} disabled={soldOut} tabIndex={showBar ? 0 : -1}

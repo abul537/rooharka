@@ -2,11 +2,14 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { ringUpSaleAction, type SaleOutcome } from '@/app/admin/(panel)/pos/actions'
-import { POS_METHOD_LABEL, POS_PAYMENT_METHODS, cashChange, round2, saleTotals, type PosPaymentMethod } from '@/lib/pos/rules'
+import { POS_METHOD_LABEL, POS_PAYMENT_METHODS, cashChange, posRule, saleTotals, type PosPaymentMethod } from '@/lib/pos/rules'
+import { isBuyable, lineTotal, snapQuantity, stepQuantity } from '@/lib/units/quantity'
+import { formatQuantity, fromBase, parseAmount, perUnit, toBase } from '@/lib/units/registry'
 import { formatPrice } from '@/lib/format'
 import { inputCls, primaryBtn } from '@/components/admin/ui'
 
-export interface PosVariant { id: string; name: string; label: string; sku: string; price: number; stock: number | null }
+/** stock is in base units for measured products (grams, millilitres ...), null when stock is not tracked. */
+export interface PosVariant { id: string; name: string; label: string; sku: string; price: number; stock: number | null; type: string; unitCode: string | null; qtyMin: number | null; qtyStep: number | null }
 const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `k${Date.now()}${Math.random().toString(36).slice(2)}`)
 const num = (s: string) => (s.trim() === '' ? null : Number(s.replace(/,/g, '')))
 
@@ -19,6 +22,7 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
   const [tendered, setTendered] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  const [typed, setTyped] = useState<Record<string, string>>({})
   const [key, setKey] = useState(newKey)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<Extract<SaleOutcome, { ok: true }> | null>(null)
@@ -29,6 +33,7 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
     const t = q.trim().toLowerCase()
     return (t ? items.filter((i) => `${i.name} ${i.label} ${i.sku}`.toLowerCase().includes(t)) : items).slice(0, 40)
   }, [items, q])
+  const ruleOf = (v: PosVariant) => posRule(v, v.stock)
   const lines = Object.entries(cart).map(([id, quantity]) => ({ ...byId.get(id)!, quantity, unitPrice: byId.get(id)!.price }))
   const d = num(discount)
   const totals = saleTotals(lines, d !== null && Number.isFinite(d) && d >= 0 ? d : 0)
@@ -36,13 +41,15 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
   const tend = num(tendered)
   const change = method === 'CASH' && tend !== null && Number.isFinite(tend) ? cashChange(total, tend) : null
 
+  // Quantities always go through the product's rule: whole units, or steps of a kg / litre / metre.
   const setQty = (id: string, qty: number) => setCart((c) => {
-    const max = byId.get(id)?.stock ?? 999
+    const v = byId.get(id)!
     const next = { ...c }
-    if (qty <= 0) delete next[id]; else next[id] = Math.min(qty, max, 999)
+    if (qty <= 0) delete next[id]; else next[id] = snapQuantity(ruleOf(v), qty)
     return next
   })
-  const add = (v: PosVariant) => { if (v.stock !== null && v.stock <= 0) return; setQty(v.id, (cart[v.id] ?? 0) + 1); setError(null) }
+  const less = (v: PosVariant) => { const r = ruleOf(v), q = cart[v.id]; if (q <= r.min) setQty(v.id, 0); else setQty(v.id, stepQuantity(r, q, -1)) }
+  const add = (v: PosVariant) => { const r = ruleOf(v); if (!isBuyable(r)) return; setQty(v.id, cart[v.id] ? stepQuantity(r, cart[v.id], 1) : r.min); setError(null) }
 
   const reset = () => { setCart({}); setDiscount(''); setTendered(''); setName(''); setPhone(''); setMethod('CASH'); setError(null); setDone(null); setKey(newKey()) }
 
@@ -78,12 +85,12 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
         {items.length === 0 && <p className="mt-3 text-sm text-slate-600">No active products yet. Add products first.</p>}
         <ul className="mt-3 grid sm:grid-cols-2 gap-2">
           {shown.map((v) => {
-            const out = v.stock !== null && v.stock <= 0
+            const out = !isBuyable(ruleOf(v))
             return (
               <li key={v.id}>
                 <button type="button" onClick={() => add(v)} disabled={out} className="w-full text-left rounded-lg border border-slate-200 p-3 hover:bg-slate-50 disabled:opacity-50">
                   <span className="block text-sm font-medium">{v.name} <span className="font-normal text-slate-500">{v.label}</span></span>
-                  <span className="block text-sm">{formatPrice(v.price)} <span className="text-xs text-slate-500">{out ? 'out of stock' : v.stock !== null ? `${v.stock} in stock` : ''}</span></span>
+                  <span className="block text-sm">{formatPrice(v.price)}{perUnit(v.unitCode) && ` ${perUnit(v.unitCode)}`} <span className="text-xs text-slate-500">{out ? 'out of stock' : v.stock !== null ? `${formatQuantity(v.stock, v.unitCode)} in stock` : ''}</span></span>
                 </button>
               </li>
             )
@@ -96,17 +103,26 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
         <h2 className="font-semibold">Basket</h2>
         {lines.length === 0 ? <p className="text-sm text-slate-500">Tap an item to add it.</p> : (
           <ul className="divide-y divide-slate-100 text-sm">
-            {lines.map((l) => (
-              <li key={l.id} className="py-2 flex items-center justify-between gap-2">
-                <span className="min-w-0"><span className="block truncate">{l.name} <span className="text-slate-500">{l.label}</span></span><span className="text-xs text-slate-500">{formatPrice(l.unitPrice)} each</span></span>
-                <span className="flex items-center gap-1 shrink-0">
-                  <button type="button" aria-label={`One less ${l.name}`} onClick={() => setQty(l.id, l.quantity - 1)} className="w-8 h-8 rounded border border-slate-300">−</button>
-                  <span className="w-8 text-center">{l.quantity}</span>
-                  <button type="button" aria-label={`One more ${l.name}`} onClick={() => setQty(l.id, l.quantity + 1)} className="w-8 h-8 rounded border border-slate-300">+</button>
-                  <span className="w-24 text-right">{formatPrice(round2(l.unitPrice * l.quantity))}</span>
-                </span>
-              </li>
-            ))}
+            {lines.map((l) => {
+              const r = ruleOf(l)
+              return (
+                <li key={l.id} className="py-2 flex items-center justify-between gap-2">
+                  <span className="min-w-0"><span className="block truncate">{l.name} <span className="text-slate-500">{l.label}</span></span><span className="text-xs text-slate-500">{formatPrice(l.unitPrice)}{perUnit(l.unitCode) ? ` ${perUnit(l.unitCode)}` : ' each'}</span></span>
+                  <span className="flex items-center gap-1 shrink-0">
+                    <button type="button" aria-label={`Less ${l.name}`} onClick={() => less(l)} className="w-8 h-8 rounded border border-slate-300">−</button>
+                    {r.measured ? (
+                      <input aria-label={`Amount of ${l.name} in ${l.unitCode}`} inputMode="decimal" className="w-16 text-center rounded border border-slate-300 py-1"
+                        value={typed[l.id] ?? String(fromBase(l.quantity, l.unitCode!))}
+                        onChange={(e) => setTyped((t) => ({ ...t, [l.id]: e.target.value }))}
+                        onBlur={() => { const n = parseAmount(typed[l.id] ?? '', l.unitCode!); if (n !== null) setQty(l.id, toBase(n, l.unitCode!)); setTyped((t) => { const { [l.id]: _, ...rest } = t; return rest }) }} />
+                    ) : <span className="w-8 text-center">{l.quantity}</span>}
+                    {r.measured && <span className="text-xs text-slate-500">{l.unitCode}</span>}
+                    <button type="button" aria-label={`More ${l.name}`} onClick={() => setQty(l.id, stepQuantity(r, l.quantity, 1))} className="w-8 h-8 rounded border border-slate-300">+</button>
+                    <span className="w-24 text-right">{formatPrice(lineTotal(l.unitPrice, l.quantity, l.unitCode))}</span>
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         )}
 

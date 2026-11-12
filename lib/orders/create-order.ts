@@ -3,6 +3,8 @@ import { resolveAddress } from '@/lib/address-db'
 import { generateTrackingCode } from '@/lib/tracking-code'
 import { buildPaymentOptions, type PaymentOption } from '@/lib/pricing'
 import type { CheckoutConfig } from '@/lib/data/checkout'
+import { lineTotal, quantityProblem, quantityRule } from '@/lib/units/quantity'
+import { formatQuantity } from '@/lib/units/registry'
 import type { ValidOrder } from './validate'
 
 /** Errors we expect and can explain to the customer. Anything else is a genuine bug (HTTP 500). */
@@ -81,6 +83,7 @@ export async function createOrder(
           select: {
             id: true,
             name: true,
+            type: true, unitCode: true, qtyMin: true, qtyStep: true,
             media: { where: { media: { kind: 'IMAGE' } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], take: 1, select: { media: { select: { url: true } } } },
           },
         },
@@ -103,17 +106,20 @@ export async function createOrder(
   const lines = input.items.map((item) => {
     const v = variants.find((x) => x.id === item.variantId)!
     const unitPrice = v.price.toNumber()
-    return { v, quantity: item.quantity, unitPrice, lineTotal: unitPrice * item.quantity }
+    // Price is per selling unit (per kg); the quantity is in whole base units (grams). One rule for both kinds.
+    return { v, quantity: item.quantity, unitPrice, unitCode: v.product.unitCode, lineTotal: lineTotal(unitPrice, item.quantity, v.product.unitCode) }
   })
   for (const l of lines) {
-    if (l.quantity > config.maxQuantity) {
-      throw new OrderError('ITEM_UNAVAILABLE', `You can order at most ${config.maxQuantity} of one item at a time.`)
-    }
+    const name = `${l.v.product.name} (${l.v.label})`
+    const rule = quantityRule(l.v.product, l.v.trackStock ? l.v.stock : null, config.maxQuantity)
     if (l.v.trackStock && l.v.stock < l.quantity) {
       throw new OrderError('OUT_OF_STOCK', l.v.stock > 0
-        ? `Only ${l.v.stock} of "${l.v.product.name} (${l.v.label})" left in stock.`
-        : `"${l.v.product.name} (${l.v.label})" is sold out.`)
+        ? `Only ${formatQuantity(l.v.stock, l.v.product.unitCode)} of "${name}" left in stock.`
+        : `"${name}" is sold out.`)
     }
+    // Counted: at most the store's per-order limit. Measured: at least the minimum, in whole steps. Checked on the server, always.
+    const problem = quantityProblem(rule, l.quantity, name)
+    if (problem) throw new OrderError('ITEM_UNAVAILABLE', problem)
   }
 
   // Money + payment rule for this store.
@@ -228,6 +234,7 @@ export async function createOrder(
                 imageUrl: l.v.product.media[0]?.media.url ?? null,
                 unitPrice: l.unitPrice,
                 quantity: l.quantity,
+                unitCode: l.unitCode,
                 lineTotal: l.lineTotal,
               })),
             },

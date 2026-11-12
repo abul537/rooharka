@@ -3,6 +3,7 @@
  * The server re-prices everything from the database; the browser only says WHAT was sold and HOW it was paid.
  */
 import { normalizePkMobile } from '@/lib/phone'
+import { MAX_BASE_QUANTITY, lineTotal, quantityRule, type RuleInput } from '@/lib/units/quantity'
 
 /** Recorded, never processed: the money moves in the shop (cash, card machine, wallet app, bank app). */
 export const POS_PAYMENT_METHODS = ['CASH', 'CARD', 'JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'] as const
@@ -10,7 +11,10 @@ export type PosPaymentMethod = (typeof POS_PAYMENT_METHODS)[number]
 export const POS_METHOD_LABEL: Record<PosPaymentMethod, string> = { CASH: 'Cash', CARD: 'Card', JAZZCASH: 'JazzCash', EASYPAISA: 'EasyPaisa', BANK_TRANSFER: 'Bank transfer' }
 
 export const MAX_SALE_LINES = 50
+/** Most of one COUNTED item in one sale. Measured items (grams, millilitres ...) have their own minimum, step and stock limit. */
 export const MAX_LINE_QTY = 999
+/** The buying rule at the counter for one product and its current stock (null = not tracked). */
+export const posRule = (p: RuleInput, stock: number | null) => quantityRule(p, stock, MAX_LINE_QTY)
 /** Stored as the customer's phone for sales with no customer details, so every store has ONE "walk-in" profile. */
 export const WALK_IN_PHONE = 'WALK-IN'
 export const WALK_IN_NAME = 'Walk-in customer'
@@ -48,10 +52,11 @@ export function parseSale(body: unknown): { ok: true; value: SaleRequest } | { o
     const it = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>
     const id = str(it.variantId)
     const q = typeof it.quantity === 'number' ? it.quantity : Number(it.quantity)
-    if (!id || id.length > 40 || !Number.isInteger(q) || q < 1 || q > MAX_LINE_QTY) return { ok: false, error: `Each quantity must be a whole number from 1 to ${MAX_LINE_QTY}.` }
+    // The exact rule (whole units, or steps of a kg / litre / metre) is checked per product by the server.
+    if (!id || id.length > 40 || !Number.isInteger(q) || q < 1 || q > MAX_BASE_QUANTITY) return { ok: false, error: 'Each quantity must be a whole number above 0.' }
     merged.set(id, (merged.get(id) ?? 0) + q)
   }
-  for (const q of merged.values()) if (q > MAX_LINE_QTY) return { ok: false, error: `You can sell at most ${MAX_LINE_QTY} of one item at a time.` }
+  for (const q of merged.values()) if (q > MAX_BASE_QUANTITY) return { ok: false, error: 'That quantity is too large for one sale.' }
 
   const discount = money(b.discount)
   if (discount === undefined) return { ok: false, error: 'The discount must be an amount in rupees, like 200.' }
@@ -84,8 +89,8 @@ export function parseSale(body: unknown): { ok: true; value: SaleRequest } | { o
 export interface SaleTotals { subtotal: number; discount: number; total: number }
 
 /** Totals from the database prices. A discount can never take the total below zero. */
-export function saleTotals(lines: { unitPrice: number; quantity: number }[], discount: number): { ok: true; value: SaleTotals } | { ok: false; error: string } {
-  const subtotal = round2(lines.reduce((s, l) => s + round2(l.unitPrice * l.quantity), 0))
+export function saleTotals(lines: { unitPrice: number; quantity: number; unitCode?: string | null }[], discount: number): { ok: true; value: SaleTotals } | { ok: false; error: string } {
+  const subtotal = round2(lines.reduce((s, l) => s + lineTotal(l.unitPrice, l.quantity, l.unitCode), 0))
   if (discount > subtotal) return { ok: false, error: 'The discount is more than the total of the items.' }
   return { ok: true, value: { subtotal, discount: round2(discount), total: round2(subtotal - discount) } }
 }

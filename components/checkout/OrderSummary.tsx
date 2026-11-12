@@ -3,11 +3,13 @@ import MediaImage from '@/components/media/MediaImage';
 import { formatPrice } from '@/lib/format';
 import type { CheckoutLine } from '@/lib/data/checkout';
 import type { Charges } from '@/lib/pricing';
+import { stepQuantity, type QuantityRule } from '@/lib/units/quantity';
+import { formatQuantity, perUnit } from '@/lib/units/registry';
 
 interface Props {
   line: CheckoutLine;
   quantity: number;
-  maxQuantity: number;
+  rule: QuantityRule;
   onQuantityChange: (q: number) => void;
   charges: Charges;
   currency: string;
@@ -15,7 +17,7 @@ interface Props {
 }
 
 /** Order summary beside the form. Totals are the same numbers the server will charge. */
-export default function OrderSummary({ line, quantity, maxQuantity, onQuantityChange, charges, currency, locked }: Props) {
+export default function OrderSummary({ line, quantity, rule, onQuantityChange, charges, currency, locked }: Props) {
   return (
     <aside className="bg-white rounded-2xl shadow-xl p-6 lg:sticky lg:top-28" aria-label="Order summary">
       <h2 className="text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
@@ -28,15 +30,15 @@ export default function OrderSummary({ line, quantity, maxQuantity, onQuantityCh
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-medium text-gray-900">{line.productName}</p>
-          <p className="text-sm text-gray-500">{line.variantLabel} · {formatPrice(line.unitPrice, currency)}</p>
+          <p className="text-sm text-gray-500">{line.variantLabel} · {formatPrice(line.unitPrice, currency)}{perUnit(line.unitCode) ? ` ${perUnit(line.unitCode)}` : ''}</p>
           <div className="inline-flex items-center border rounded-lg mt-2" role="group" aria-label="Quantity">
-            <button type="button" aria-label="Decrease quantity" disabled={locked || quantity <= 1}
-              onClick={() => onQuantityChange(quantity - 1)} className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+            <button type="button" aria-label="Decrease quantity" disabled={locked || quantity <= rule.min}
+              onClick={() => onQuantityChange(stepQuantity(rule, quantity, -1))} className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40">
               <Minus className="w-4 h-4" aria-hidden />
             </button>
-            <span className="w-9 h-9 flex items-center justify-center font-bold" aria-live="polite">{quantity}</span>
-            <button type="button" aria-label="Increase quantity" disabled={locked || quantity >= maxQuantity}
-              onClick={() => onQuantityChange(quantity + 1)} className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+            <span className="min-w-9 h-9 px-1 flex items-center justify-center font-bold text-sm" aria-live="polite">{rule.measured || rule.unit ? formatQuantity(quantity, line.unitCode) : quantity}</span>
+            <button type="button" aria-label="Increase quantity" disabled={locked || quantity >= stepQuantity(rule, Number.MAX_SAFE_INTEGER, 1)}
+              onClick={() => onQuantityChange(stepQuantity(rule, quantity, 1))} className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40">
               <Plus className="w-4 h-4" aria-hidden />
             </button>
           </div>

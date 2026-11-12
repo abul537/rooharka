@@ -673,6 +673,14 @@ model Category {
   @@unique([storeId, slug])
 }
 
+/// How a product is sold. SIMPLE: one SKU counted in pieces/boxes/bags. VARIANTS: option combinations (size, colour),
+/// each its own SKU, price and stock. MEASURABLE: sold by weight, volume or length (see lib/units).
+enum ProductType {
+  SIMPLE
+  VARIANTS
+  MEASURABLE
+}
+
 /// What the product page shows: name, subtitle, descriptions, SEO, status.
 model Product {
   id               String        @id @default(cuid())
@@ -685,6 +693,14 @@ model Product {
   description      String?
   status           ProductStatus @default(DRAFT)
   isFeatured       Boolean       @default(false)
+  type             ProductType   @default(VARIANTS) // products from before this field behave as VARIANTS
+  /// VARIANTS: [{ name: "Size", values: ["S","M"] }, ...] (max 3 options, 100 combinations)
+  optionGroups     Json?
+  /// Selling unit from the unit table: a counting unit (piece, box, bag) or, for MEASURABLE, kg / g / L / mL / m ...
+  unitCode         String?
+  /// MEASURABLE: smallest order and order step, in BASE units (grams, millilitres, millimetres).
+  qtyMin           Int?
+  qtyStep          Int?
   seoTitle         String?
   seoDescription   String?
   createdAt        DateTime      @default(now())
@@ -712,9 +728,11 @@ model ProductVariant {
   badge          String?  // "Most Popular"
   price          Decimal  @db.Decimal(12, 2)
   compareAtPrice Decimal? @db.Decimal(12, 2) // the crossed-out price
-  stock          Int      @default(0)
+  stock          Int      @default(0) // counted products: units. MEASURABLE: BASE units (grams, millilitres, millimetres)
   trackStock     Boolean  @default(true)
   weightGrams    Int?
+  /// VARIANTS: which option values this variant is, e.g. { "Size": "M", "Colour": "Red" }. null = added by hand.
+  optionValues   Json?
   isDefault      Boolean  @default(false)
   isActive       Boolean  @default(true)
   sortOrder      Int      @default(0)
@@ -987,8 +1005,9 @@ model OrderItem {
   variantLabel String?
   sku         String?
   imageUrl    String?
-  unitPrice   Decimal @db.Decimal(12, 2)
-  quantity    Int
+  unitPrice   Decimal @db.Decimal(12, 2) // per selling unit (per kg for measured products)
+  quantity    Int     // counted: units. MEASURED: base units (grams, millilitres, millimetres)
+  unitCode    String? // selling unit at the time of the order (snapshot): kg, box ... null = plain pieces
   lineTotal   Decimal @db.Decimal(12, 2)
 
   order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)

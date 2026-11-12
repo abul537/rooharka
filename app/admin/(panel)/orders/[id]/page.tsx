@@ -1,3 +1,4 @@
+import { formatQuantity } from '@/lib/units/registry'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth/guard'
@@ -54,7 +55,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <ul className="divide-y divide-slate-100 text-sm">
               {order.items.map((i) => (
                 <li key={i.id} className="flex justify-between gap-3 py-2">
-                  <span>{i.name}{i.variantLabel ? ` · ${i.variantLabel}` : ''} <span className="text-slate-500">× {i.quantity}</span></span>
+                  <span>{i.name}{i.variantLabel ? ` · ${i.variantLabel}` : ''} <span className="text-slate-500">× {formatQuantity(i.quantity, i.unitCode)}</span></span>
                   <span>{formatPrice(i.lineTotal.toNumber())}</span>
                 </li>
               ))}

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import { slugify, uniqueSlug, type NewProduct, type NewVariant, type SectionEdit } from '@/lib/admin/product-rules'
+import { slugify, uniqueSlug, type NewProduct, type NewVariant, type ProductEditResult, type SectionEdit } from '@/lib/admin/product-rules'
+import { combinations, planGeneration, readOptionValues, skuFor, variantLabel, type OptionGroup } from '@/lib/variants/rules'
 import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import type { ProductEdit, VariantEdit } from './product-rules'
@@ -8,7 +9,7 @@ import { AdminError } from './orders'
 export async function listProducts(storeId: string) {
   return db.product.findMany({
     where: { storeId }, orderBy: { createdAt: 'asc' },
-    select: { id: true, name: true, status: true, media: { where: { isPrimary: true }, take: 1, select: { media: { select: { url: true } } } }, variants: { select: { price: true, stock: true, isActive: true, trackStock: true } } },
+    select: { id: true, name: true, status: true, type: true, unitCode: true, media: { where: { isPrimary: true }, take: 1, select: { media: { select: { url: true } } } }, variants: { select: { price: true, stock: true, isActive: true, trackStock: true } } },
   })
 }
 
@@ -16,22 +17,22 @@ export async function getProductForEdit(storeId: string, id: string) {
   return db.product.findFirst({
     where: { id, storeId },
     select: {
-      id: true, name: true, subtitle: true, shortDescription: true, description: true, status: true, slug: true, categoryId: true, seoTitle: true, seoDescription: true, isFeatured: true,
-      variants: { orderBy: { sortOrder: 'asc' }, select: { id: true, sku: true, label: true, badge: true, price: true, compareAtPrice: true, stock: true, trackStock: true, isDefault: true, isActive: true } },
+      id: true, name: true, subtitle: true, shortDescription: true, description: true, status: true, slug: true, categoryId: true, seoTitle: true, seoDescription: true, isFeatured: true, type: true, optionGroups: true, unitCode: true, qtyMin: true, qtyStep: true,
+      variants: { orderBy: { sortOrder: 'asc' }, select: { id: true, sku: true, optionValues: true, label: true, badge: true, price: true, compareAtPrice: true, stock: true, trackStock: true, isDefault: true, isActive: true } },
     },
   })
 }
 
 /** Saves the product and its sizes together. Returns what changed (for the audit log). */
-export async function saveProduct(admin: StoreAdmin, productId: string, p: ProductEdit, variants: VariantEdit[], defaultId: string) {
+export async function saveProduct(admin: StoreAdmin, productId: string, p: ProductEdit, variants: VariantEdit[], defaultId: string, measure: Pick<ProductEditResult, 'unitCode' | 'qtyMin' | 'qtyStep'>) {
   return db.$transaction(async (tx) => {
     const product = await tx.product.findFirst({ where: { id: productId, storeId: admin.storeId }, select: { id: true, name: true, status: true, variants: { select: { id: true, price: true, compareAtPrice: true, isActive: true } } } })
     if (!product) throw new AdminError('Product not found.')
     if (product.variants.length !== variants.length || !variants.every((v) => product.variants.some((x) => x.id === v.id))) {
-      throw new AdminError('The sizes changed while you were editing. Please reload the page.')
+      throw new AdminError('The variants changed while you were editing. Please reload the page.')
     }
     if (p.categoryId && !(await tx.category.count({ where: { id: p.categoryId, storeId: admin.storeId } }))) throw new AdminError('That category does not exist.')
-    await tx.product.update({ where: { id: product.id }, data: p })
+    await tx.product.update({ where: { id: product.id }, data: { ...p, unitCode: measure.unitCode, qtyMin: measure.qtyMin, qtyStep: measure.qtyStep } })
 
     const changes: Record<string, unknown> = {}
     for (const v of variants) {
@@ -79,7 +80,9 @@ export async function createProduct(admin: StoreAdmin, input: NewProduct): Promi
       const created = await db.product.create({
         data: {
           storeId: admin.storeId, slug, ...input.product,
-          variants: { create: { ...variantData(input.variant), isDefault: true, sortOrder: 0 } },
+          type: input.type, unitCode: input.unitCode, qtyMin: input.qtyMin, qtyStep: input.qtyStep,
+          optionGroups: input.optionGroups.length ? (input.optionGroups as never) : undefined,
+          variants: { create: initialVariants(input, slug) },
         },
         select: { id: true },
       })
@@ -91,25 +94,37 @@ export async function createProduct(admin: StoreAdmin, input: NewProduct): Promi
   throw new AdminError('Could not find a free page address. Please try a different name.')
 }
 
+/** The variants a new product starts with: every option combination from one template, or a single variant. */
+function initialVariants(input: NewProduct, slug: string) {
+  if (input.optionGroups.length === 0) return [{ ...variantData(input.variant), isDefault: true, sortOrder: 0 }]
+  const taken = new Set<string>()
+  return combinations(input.optionGroups).map((values, i) => {
+    const sku = skuFor(slug, values, input.optionGroups, taken)
+    taken.add(sku)
+    return { ...variantData({ ...input.variant, label: variantLabel(values, input.optionGroups), sku }), optionValues: values as never, isDefault: i === 0, sortOrder: i }
+  })
+}
+
 function variantData(v: NewVariant) {
   return { label: v.label, badge: v.badge, sku: v.sku || autoSku(v.label), price: v.price, compareAtPrice: v.compareAtPrice, stock: v.stock, isActive: true }
 }
 
 async function ownedProduct(tx: Pick<typeof db, 'product'>, admin: StoreAdmin, productId: string) {
-  const p = await tx.product.findFirst({ where: { id: productId, storeId: admin.storeId }, select: { id: true, slug: true } })
+  const p = await tx.product.findFirst({ where: { id: productId, storeId: admin.storeId }, select: { id: true, slug: true, type: true } })
   if (!p) throw new AdminError('Product not found.')
   return p
 }
 
 export async function addVariant(admin: StoreAdmin, productId: string, v: NewVariant) {
   return db.$transaction(async (tx) => {
-    await ownedProduct(tx, admin, productId)
+    const owned = await ownedProduct(tx, admin, productId)
+    if (owned.type === 'SIMPLE') throw new AdminError('A simple product has one item only. Create it as a product with variants if you need more.')
     const last = await tx.productVariant.findFirst({ where: { productId }, orderBy: { sortOrder: 'desc' }, select: { sortOrder: true } })
     try {
       const created = await tx.productVariant.create({ data: { productId, ...variantData(v), isDefault: false, sortOrder: (last?.sortOrder ?? -1) + 1 } })
       return created.id
     } catch (e) {
-      if (isUnique(e)) throw new AdminError('That SKU is already used by another size of this product.')
+      if (isUnique(e)) throw new AdminError('That SKU is already used by another variant of this product.')
       throw e
     }
   })
@@ -120,8 +135,8 @@ export async function deleteVariant(admin: StoreAdmin, productId: string, varian
     await ownedProduct(tx, admin, productId)
     const variants = await tx.productVariant.findMany({ where: { productId }, orderBy: { sortOrder: 'asc' }, select: { id: true, isDefault: true, isActive: true, label: true } })
     const target = variants.find((v) => v.id === variantId)
-    if (!target) throw new AdminError('Size not found.')
-    if (variants.length <= 1) throw new AdminError('A product needs at least one size. Add another size first, or delete the whole product.')
+    if (!target) throw new AdminError('Variant not found.')
+    if (variants.length <= 1) throw new AdminError('A product needs at least one variant. Add another first, or delete the whole product.')
     await tx.cartItem.deleteMany({ where: { variantId } })
     await tx.productVariant.delete({ where: { id: variantId } }) // old orders keep their own copy of the name and price
     if (target.isDefault) {
@@ -129,6 +144,43 @@ export async function deleteVariant(admin: StoreAdmin, productId: string, varian
       await tx.productVariant.update({ where: { id: next.id }, data: { isDefault: true } })
     }
     return { label: target.label }
+  })
+}
+
+/**
+ * Makes the variants match the options (Size: S, M / Colour: Red, Blue): creates the missing combinations with the
+ * given starting price and stock, switches off the ones that no longer exist, and revives ones that came back.
+ * Nothing is ever deleted, so past orders and stock history stay intact.
+ */
+export async function generateVariants(admin: StoreAdmin, productId: string, groups: OptionGroup[], start: { price: number; compareAtPrice: number | null; stock: number }) {
+  return db.$transaction(async (tx) => {
+    const p = await tx.product.findFirst({ where: { id: productId, storeId: admin.storeId }, select: { id: true, slug: true, type: true, variants: { orderBy: { sortOrder: 'asc' }, select: { id: true, sku: true, optionValues: true, isActive: true, isDefault: true, sortOrder: true } } } })
+    if (!p) throw new AdminError('Product not found.')
+    if (p.type !== 'VARIANTS') throw new AdminError('Options only apply to products with variants.')
+    const plan = planGeneration(groups, p.variants.map((v) => ({ id: v.id, optionValues: readOptionValues(v.optionValues), isActive: v.isActive })))
+    const stillActive = p.variants.filter((v) => v.isActive && !plan.deactivate.includes(v.id)).length + plan.reactivate.length + plan.create.length
+    if (stillActive === 0) throw new AdminError('That would switch off every variant. Keep at least one option value.')
+
+    const taken = new Set(p.variants.map((v) => v.sku))
+    let order = (p.variants.at(-1)?.sortOrder ?? -1) + 1
+    for (const c of plan.create) {
+      const sku = skuFor(p.slug, c.values, groups, taken)
+      taken.add(sku)
+      await tx.productVariant.create({ data: { productId, label: c.label, sku, optionValues: c.values as never, price: start.price, compareAtPrice: start.compareAtPrice, stock: start.stock, isActive: true, isDefault: false, sortOrder: order++ } })
+    }
+    if (plan.deactivate.length) await tx.productVariant.updateMany({ where: { productId, id: { in: plan.deactivate } }, data: { isActive: false, isDefault: false } })
+    if (plan.reactivate.length) await tx.productVariant.updateMany({ where: { productId, id: { in: plan.reactivate } }, data: { isActive: true } })
+    await tx.product.update({ where: { id: productId }, data: { optionGroups: groups as never } })
+
+    // The variant shown first must exist and be on.
+    const now = await tx.productVariant.findMany({ where: { productId }, orderBy: { sortOrder: 'asc' }, select: { id: true, isActive: true, isDefault: true } })
+    const def = now.find((v) => v.isDefault && v.isActive)
+    if (!def) {
+      const next = now.find((v) => v.isActive)!
+      await tx.productVariant.updateMany({ where: { productId }, data: { isDefault: false } })
+      await tx.productVariant.update({ where: { id: next.id }, data: { isDefault: true } })
+    }
+    return { created: plan.create.length, switchedOff: plan.deactivate.length, switchedOn: plan.reactivate.length, kept: plan.keep }
   })
 }
 

@@ -2,7 +2,9 @@ import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import { loadPosAccess } from '@/lib/entitlements/service'
 import { generateTrackingCode } from '@/lib/tracking-code'
-import { WALK_IN_NAME, WALK_IN_PHONE, cashChange, round2, saleTotals, type SaleRequest } from './rules'
+import { formatQuantity } from '@/lib/units/registry'
+import { lineTotal, quantityProblem } from '@/lib/units/quantity'
+import { WALK_IN_NAME, WALK_IN_PHONE, cashChange, posRule, saleTotals, type SaleRequest } from './rules'
 
 /** An error whose message is safe to show to the person at the counter. */
 export class PosError extends Error {}
@@ -23,7 +25,7 @@ export async function ringUpSale(admin: StoreAdmin, req: SaleRequest): Promise<S
     db.store.findUnique({ where: { id: storeId }, select: { slug: true } }),
     db.productVariant.findMany({
       where: { id: { in: req.items.map((i) => i.variantId) }, isActive: true, product: { storeId, status: 'ACTIVE' } },
-      include: { product: { select: { id: true, name: true, media: { where: { media: { kind: 'IMAGE' } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], take: 1, select: { media: { select: { url: true } } } } } } },
+      include: { product: { select: { id: true, name: true, type: true, unitCode: true, qtyMin: true, qtyStep: true, media: { where: { media: { kind: 'IMAGE' } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], take: 1, select: { media: { select: { url: true } } } } } } },
     }),
     // The same sale sent twice (double tap, retry after a bad connection): hand back the first one.
     db.payment.findUnique({ where: { idempotencyKey: `pos:${storeId}:${req.idempotencyKey}` }, select: { rawResponse: true, order: { select: { id: true, number: true, total: true } } } }),
@@ -39,12 +41,16 @@ export async function ringUpSale(admin: StoreAdmin, req: SaleRequest): Promise<S
   const lines = req.items.map((it) => {
     const v = variants.find((x) => x.id === it.variantId)!
     const unitPrice = v.price.toNumber()
-    return { v, quantity: it.quantity, unitPrice, lineTotal: round2(unitPrice * it.quantity) }
+    const unitCode = v.product.unitCode
+    return { v, quantity: it.quantity, unitPrice, unitCode, lineTotal: lineTotal(unitPrice, it.quantity, unitCode) }
   })
   for (const l of lines) {
+    const name = `${l.v.product.name} (${l.v.label})`
     if (l.v.trackStock && l.v.stock < l.quantity) {
-      throw new PosError(l.v.stock > 0 ? `Only ${l.v.stock} of “${l.v.product.name} (${l.v.label})” in stock.` : `“${l.v.product.name} (${l.v.label})” is out of stock.`)
+      throw new PosError(l.v.stock > 0 ? `Only ${formatQuantity(l.v.stock, l.unitCode)} of “${name}” in stock.` : `“${name}” is out of stock.`)
     }
+    const problem = quantityProblem(posRule(l.v.product, l.v.trackStock ? l.v.stock : null), l.quantity, `“${name}”`)
+    if (problem) throw new PosError(problem)
   }
   const t = saleTotals(lines, req.discount)
   if (!t.ok) throw new PosError(t.error)
@@ -81,7 +87,7 @@ export async function ringUpSale(admin: StoreAdmin, req: SaleRequest): Promise<S
             customerName: named ? (req.customerName ?? customer.firstName) : WALK_IN_NAME, customerPhone: named ? req.customerPhone! : '-',
             provinceName: 'In store', cityName: 'In store', localityName: 'In store',
             subtotal, deliveryCharge: 0, discount, total, amountPaid: total, amountDue: 0,
-            items: { create: lines.map((l) => ({ productId: l.v.product.id, variantId: l.v.id, name: l.v.product.name, variantLabel: l.v.label, sku: l.v.sku, imageUrl: l.v.product.media[0]?.media.url ?? null, unitPrice: l.unitPrice, quantity: l.quantity, lineTotal: l.lineTotal })) },
+            items: { create: lines.map((l) => ({ productId: l.v.product.id, variantId: l.v.id, name: l.v.product.name, variantLabel: l.v.label, sku: l.v.sku, imageUrl: l.v.product.media[0]?.media.url ?? null, unitPrice: l.unitPrice, quantity: l.quantity, unitCode: l.unitCode, lineTotal: l.lineTotal })) },
             history: { create: { status: 'DELIVERED', note: `Counter sale rung up by ${admin.name}`, isPublic: false, createdById: admin.id } },
             payments: { create: { method: req.paymentMethod, purpose: 'FULL_PAYMENT', status: 'SUCCEEDED', amount: total, paidAt: now, idempotencyKey: `pos:${storeId}:${req.idempotencyKey}`, rawResponse: { tendered: req.tendered, change: cash.change } } },
           },

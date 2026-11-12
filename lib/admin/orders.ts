@@ -1,3 +1,4 @@
+import { formatQuantity, isMeasured } from '@/lib/units/registry'
 import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import { afterPaymentReceived, checkTransition, isValidTrackingNo, label, type OrderStatus } from './order-rules'
@@ -208,8 +209,9 @@ export async function bookShipment(admin: StoreAdmin, orderId: string, courier: 
       address: [order.landmark, order.localityName].filter(Boolean).join(', '),
       city: order.cityName,
       codAmount: Math.max(0, order.total.toNumber() - order.amountPaid.toNumber()),
-      itemCount: order.items.reduce((n, i) => n + i.quantity, 0),
-      itemsSummary: order.items.map((i) => `${i.name}${i.variantLabel ? ` ${i.variantLabel}` : ''} x${i.quantity}`).join(', '),
+      // A measured line (1.5 kg of rice) is one parcel item, not 1500 grams.
+      itemCount: order.items.reduce((n, i) => n + (isMeasured(i.unitCode) ? 1 : i.quantity), 0),
+      itemsSummary: order.items.map((i) => `${i.name}${i.variantLabel ? ` ${i.variantLabel}` : ''} x${formatQuantity(i.quantity, i.unitCode)}`).join(', '),
       shipper: { name: settings?.displayName ?? 'Store', phone: settings?.supportPhone ?? '', email: settings?.supportEmail ?? '' },
     }
     const result = await adapter.book(input, secrets.credentials, secrets.config)

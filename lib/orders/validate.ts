@@ -2,6 +2,7 @@ import { validateEmail, validateLandmark, validateName } from '@/lib/validation'
 import { normalizePkMobile } from '@/lib/phone'
 import type { CheckoutFields } from '@/lib/data/checkout'
 import type { PaymentMethodCode } from '@/lib/pricing'
+import { MAX_BASE_QUANTITY } from '@/lib/units/quantity'
 
 /** What the browser sends. Prices are deliberately NOT part of it: the server looks them up. */
 export interface OrderRequest {
@@ -43,13 +44,14 @@ export function validateOrderRequest(body: unknown, fields: CheckoutFields): Val
     for (const it of b.items) {
       const id = str(it?.variantId)
       const q = Number(it?.quantity)
-      if (!id || !Number.isInteger(q) || q < 1 || q > 99) {
+      // Counted items are small numbers; measured ones are in grams / millilitres / millimetres. The server checks the exact rule per product.
+      if (!id || !Number.isInteger(q) || q < 1 || q > MAX_BASE_QUANTITY) {
         errors.items = 'Invalid item or quantity.'
         break
       }
       merged.set(id, (merged.get(id) ?? 0) + q)
     }
-    for (const [variantId, quantity] of merged) items.push({ variantId, quantity: Math.min(quantity, 99) })
+    for (const [variantId, quantity] of merged) items.push({ variantId, quantity: Math.min(quantity, MAX_BASE_QUANTITY) })
   }
 
   // ---- customer (rules come from the dashboard-controlled field settings)

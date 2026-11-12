@@ -22,7 +22,7 @@ export interface TrackedOrder {
   city: string
   status: string
   placedAt: string
-  items: { name: string; variantLabel: string | null; quantity: number }[]
+  items: { name: string; variantLabel: string | null; quantity: number; unitCode: string | null }[]
   total: number
   amountDue: number
   paymentNote: string
@@ -48,7 +48,7 @@ export async function lookupOrder(
   const [order, settings] = await Promise.all([db.order.findFirst({
     where: { storeId, trackingCode: code },
     include: {
-      items: { select: { name: true, variantLabel: true, quantity: true } },
+      items: { select: { name: true, variantLabel: true, quantity: true, unitCode: true } },
       history: { where: { isPublic: true }, orderBy: { createdAt: 'asc' } },
       shipments: { orderBy: { bookedAt: 'desc' }, take: 1 },
       payments: { select: { method: true, purpose: true, status: true, amount: true }, orderBy: { createdAt: 'asc' } },

@@ -5,11 +5,15 @@ import { can } from '@/lib/auth/permissions'
 import { getProductForEdit, listMedia, loadSections } from '@/lib/admin/products'
 import { listCategories } from '@/lib/admin/categories'
 import { loadServiceViews } from '@/lib/services/store-services'
+import { COUNT_UNITS, fromBase, getUnit } from '@/lib/units/registry'
+import { optionGroupsToText, readOptionGroups, readOptionValues } from '@/lib/variants/rules'
 import { PAIR_TYPES, PRODUCT_STATUSES, SECTION_TYPES, SECTION_TYPE_LABEL, sectionItemsToText, type SectionType } from '@/lib/admin/product-rules'
 import ActionForm from '@/components/admin/ActionForm'
 import MediaManager from '@/components/admin/MediaManager'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
-import { addVariantAction, deleteProductAction, deleteVariantAction, saveProductAction, saveSectionsAction } from './actions'
+import { addVariantAction, deleteProductAction, deleteVariantAction, generateVariantsAction, saveProductAction, saveSectionsAction } from './actions'
+
+const TYPE_LABEL = { SIMPLE: 'Simple product', VARIANTS: 'Product with variants', MEASURABLE: 'Measurable product (by weight, volume or length)' } as const
 
 export const dynamic = 'force-dynamic'
 const BLANK_SECTION_SLOTS = 3
@@ -24,6 +28,11 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
   if (!p) notFound()
   const editable = can(admin.role, 'products.edit')
   const cloud = services.get('cloudinary')
+  const unit = getUnit(p.unitCode)
+  const measured = p.type === 'MEASURABLE' && !!unit
+  const simple = p.type === 'SIMPLE'
+  const shownStock = (stock: number) => String(measured ? fromBase(stock, unit!.code) : stock)
+  const defaultVariant = p.variants.find((v) => v.isDefault) ?? p.variants[0]
   const slots = [...sections, ...Array.from({ length: BLANK_SECTION_SLOTS }, () => null)]
 
   return (
@@ -35,6 +44,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
           {p.status === 'ACTIVE' ? <>Live at <Link className="underline" href={`/product/${p.slug}`} target="_blank">/product/{p.slug}</Link></> : <>Not visible to customers yet (status: {p.status.toLowerCase()}).</>}
           {!editable && ' · You can view but not edit.'}
         </p>
+        <p className="text-sm text-slate-500">Type: <strong>{TYPE_LABEL[p.type]}</strong>{unit && ` · sold by ${measured ? unit.code : unit.label.toLowerCase()}`}. The type is chosen when a product is created.</p>
       </div>
       {created && <p role="status" className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900">Product created. Now add photos and, when ready, set the status to Active.</p>}
 
@@ -56,6 +66,14 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
                 </Field>
               </div>
               <Check name="isFeatured" label="Feature this product (shown first on the shop page)" defaultChecked={p.isFeatured} />
+              {measured ? (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label={`Smallest order (${unit!.code})`} hint="The least a customer can buy, e.g. 0.5"><input name="qtyMin" inputMode="decimal" defaultValue={fromBase(p.qtyMin ?? p.qtyStep ?? unit!.factor * unit!.defaultStep, unit!.code)} className={inputCls} /></Field>
+                  <Field label={`Order step (${unit!.code})`} hint="Customers add or remove this much at a time, e.g. 0.25"><input name="qtyStep" inputMode="decimal" defaultValue={fromBase(p.qtyStep ?? unit!.factor * unit!.defaultStep, unit!.code)} className={inputCls} /></Field>
+                </div>
+              ) : (
+                <Field label="Counted in" hint="Stock and orders are whole numbers of this unit."><select name="unitCode" defaultValue={p.unitCode ?? 'piece'} className={inputCls}>{COUNT_UNITS.map((u) => <option key={u.code} value={u.code}>{u.label}</option>)}</select></Field>
+              )}
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Search engine title (optional)" hint="Up to 70 characters"><input name="seoTitle" defaultValue={p.seoTitle ?? ''} maxLength={70} className={inputCls} /></Field>
                 <Field label="Search engine description (optional)" hint="Up to 160 characters"><input name="seoDescription" defaultValue={p.seoDescription ?? ''} maxLength={160} className={inputCls} /></Field>
@@ -63,24 +81,29 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
             </div>
           </Card>
 
-          <Card title="Sizes, prices and stock" hint="Prices are in whole rupees. Stock goes down automatically when orders arrive and back up when an order is cancelled.">
+          <Card title={simple ? 'Price and stock' : measured ? `Price per ${unit!.code} and stock` : 'Variants, prices and stock'}
+            hint={measured ? `Price is for one ${unit!.code} (paisa allowed). Stock is typed in ${unit!.code}, for example 25 or 12.5. It goes down automatically when orders arrive and back up when an order is cancelled.` : 'Prices are in whole rupees. Stock goes down automatically when orders arrive and back up when an order is cancelled.'}>
             <div className="space-y-4">
               {p.variants.map((v) => (
                 <div key={v.id} className="rounded-lg border border-slate-200 p-4">
                   <input type="hidden" name={`v_${v.id}_stockWas`} value={v.stock} />
-                  <div className="grid sm:grid-cols-4 gap-3">
-                    <Field label="Size name"><input name={`v_${v.id}_label`} defaultValue={v.label} maxLength={40} className={inputCls} /></Field>
-                    <Field label="Price (Rs.)"><input name={`v_${v.id}_price`} inputMode="numeric" defaultValue={v.price.toNumber()} className={inputCls} /></Field>
-                    <Field label="Crossed-out price"><input name={`v_${v.id}_compareAt`} inputMode="numeric" defaultValue={v.compareAtPrice?.toNumber() ?? ''} className={inputCls} /></Field>
-                    <Field label="In stock"><input name={`v_${v.id}_stock`} inputMode="numeric" defaultValue={v.stock} className={inputCls} /></Field>
+                  <input type="hidden" name={`v_${v.id}_stockShown`} value={shownStock(v.stock)} />
+                  {simple && <><input type="hidden" name={`v_${v.id}_label`} value={v.label} /><input type="hidden" name="defaultVariant" value={v.id} /><input type="hidden" name={`v_${v.id}_active`} value="on" /></>}
+                  <div className={`grid gap-3 ${simple ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
+                    {!simple && <Field label="Variant name"><input name={`v_${v.id}_label`} defaultValue={v.label} maxLength={40} className={inputCls} /></Field>}
+                    <Field label={measured ? `Price (Rs. per ${unit!.code})` : 'Price (Rs.)'}><input name={`v_${v.id}_price`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={v.price.toNumber()} className={inputCls} /></Field>
+                    <Field label="Crossed-out price"><input name={`v_${v.id}_compareAt`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={v.compareAtPrice?.toNumber() ?? ''} className={inputCls} /></Field>
+                    <Field label={measured ? `In stock (${unit!.code})` : `In stock${unit && unit.code !== 'piece' ? ` (${unit.plural})` : ''}`}><input name={`v_${v.id}_stock`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={shownStock(v.stock)} className={inputCls} /></Field>
                   </div>
-                  <div className="grid sm:grid-cols-[1fr_auto_auto_auto] gap-3 mt-3 items-end">
-                    <Field label="Badge (optional)"><input name={`v_${v.id}_badge`} defaultValue={v.badge ?? ''} maxLength={30} placeholder="Most Popular" className={inputCls} /></Field>
-                    <Check name={`v_${v.id}_active`} label="On sale" defaultChecked={v.isActive} />
-                    <label className="flex items-center gap-2 text-sm"><input type="radio" name="defaultVariant" value={v.id} defaultChecked={v.isDefault} /> Shown first</label>
-                    {editable && p.variants.length > 1 && <button type="submit" form={`rm-${v.id}`} className="text-sm text-red-700 underline">Delete size</button>}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-2">SKU: {v.sku}</p>
+                  {!simple && (
+                    <div className="grid sm:grid-cols-[1fr_auto_auto_auto] gap-3 mt-3 items-end">
+                      <Field label="Badge (optional)"><input name={`v_${v.id}_badge`} defaultValue={v.badge ?? ''} maxLength={30} placeholder="Most Popular" className={inputCls} /></Field>
+                      <Check name={`v_${v.id}_active`} label="On sale" defaultChecked={v.isActive} />
+                      <label className="flex items-center gap-2 text-sm"><input type="radio" name="defaultVariant" value={v.id} defaultChecked={v.isDefault} /> Shown first</label>
+                      {editable && p.variants.length > 1 && <button type="submit" form={`rm-${v.id}`} className="text-sm text-red-700 underline">Delete variant</button>}
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-500 mt-2">SKU: {v.sku}{readOptionValues(v.optionValues) && ' · made from your options'}</p>
                 </div>
               ))}
             </div>
@@ -91,23 +114,38 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
 
       {/* Forms for the "Delete size" buttons above (a form cannot sit inside another form). */}
       {editable && p.variants.map((v) => (
-        <ActionForm key={v.id} id={`rm-${v.id}`} action={deleteVariantAction} confirm={`Delete the size “${v.label}”? Past orders keep their details.`}>
+        <ActionForm key={v.id} id={`rm-${v.id}`} action={deleteVariantAction} confirm={`Delete the variant “${v.label}”? Past orders keep their details.`}>
           <input type="hidden" name="productId" value={p.id} /><input type="hidden" name="variantId" value={v.id} />
         </ActionForm>
       ))}
 
-      {editable && (
-        <Card title="Add another size">
+      {editable && p.type === 'VARIANTS' && (
+        <Card title="Options and automatic variants" hint="List your options, one per line, like “Size: S, M, L” and “Colour: Red, Blue”. The system builds every combination as its own variant with its own SKU, price and stock. Existing variants keep their price and stock; combinations you remove are switched off, never deleted. Save your changes above first.">
+          <ActionForm action={generateVariantsAction} className="space-y-3">
+            <input type="hidden" name="productId" value={p.id} />
+            <Field label="Options"><textarea name="options" rows={3} defaultValue={optionGroupsToText(readOptionGroups(p.optionGroups))} placeholder={'Size: S, M, L\nColour: Red, Blue'} className={`${inputCls} font-mono`} /></Field>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <Field label="Starting price for NEW variants (Rs.)"><input name="gen_price" required inputMode="numeric" defaultValue={defaultVariant?.price.toNumber()} className={inputCls} /></Field>
+              <Field label="Crossed-out price"><input name="gen_compareAt" inputMode="numeric" defaultValue={defaultVariant?.compareAtPrice?.toNumber() ?? ''} className={inputCls} /></Field>
+              <Field label="Starting stock for NEW variants"><input name="gen_stock" inputMode="numeric" defaultValue="0" className={inputCls} /></Field>
+            </div>
+            <button className={primaryBtn}>Build variants</button>
+          </ActionForm>
+        </Card>
+      )}
+
+      {editable && !simple && (
+        <Card title={p.type === 'VARIANTS' ? 'Add one variant by hand' : 'Add another variant'} hint={measured ? 'For example a second grade of the same product, each with its own price per unit.' : undefined}>
           <ActionForm action={addVariantAction} className="space-y-3">
             <input type="hidden" name="productId" value={p.id} />
             <div className="grid sm:grid-cols-5 gap-3 items-end">
-              <Field label="Size name"><input name="nv_label" required maxLength={40} placeholder="200ml" className={inputCls} /></Field>
-              <Field label="Price (Rs.)"><input name="nv_price" required inputMode="numeric" className={inputCls} /></Field>
-              <Field label="Crossed-out price"><input name="nv_compareAt" inputMode="numeric" className={inputCls} /></Field>
-              <Field label="In stock"><input name="nv_stock" inputMode="numeric" defaultValue="0" className={inputCls} /></Field>
+              <Field label="Variant name"><input name="nv_label" required maxLength={40} placeholder={measured ? 'Grade B' : '200ml'} className={inputCls} /></Field>
+              <Field label={measured ? `Price (Rs. per ${unit!.code})` : 'Price (Rs.)'}><input name="nv_price" required inputMode={measured ? 'decimal' : 'numeric'} className={inputCls} /></Field>
+              <Field label="Crossed-out price"><input name="nv_compareAt" inputMode={measured ? 'decimal' : 'numeric'} className={inputCls} /></Field>
+              <Field label={measured ? `In stock (${unit!.code})` : 'In stock'}><input name="nv_stock" inputMode={measured ? 'decimal' : 'numeric'} defaultValue="0" className={inputCls} /></Field>
               <Field label="Badge"><input name="nv_badge" maxLength={30} className={inputCls} /></Field>
             </div>
-            <button className={primaryBtn}>Add size</button>
+            <button className={primaryBtn}>Add variant</button>
           </ActionForm>
         </Card>
       )}
@@ -147,7 +185,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
       {editable && (
         <section className="rounded-xl bg-white border border-red-200 p-5 sm:p-6">
           <h2 className="font-semibold text-lg text-red-800">Delete product</h2>
-          <p className="text-sm text-slate-600 mt-1 mb-4">Deleting removes the product, its sizes, photos and sections for good. Products that have been ordered cannot be deleted; archive them instead.</p>
+          <p className="text-sm text-slate-600 mt-1 mb-4">Deleting removes the product, its variants, photos and sections for good. Products that have been ordered cannot be deleted; archive them instead.</p>
           <ActionForm action={deleteProductAction} confirm={`Delete “${p.name}” permanently?`}>
             <input type="hidden" name="productId" value={p.id} />
             <button className="rounded-lg bg-red-600 text-white px-5 py-2 text-sm font-medium">Delete this product</button>
