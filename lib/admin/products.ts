@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import type { ProductEdit, VariantEdit } from './product-rules'
 import { AdminError } from './orders'
+import { handleTakenError } from '@/lib/admin/product-mvp'
 import { LIST_PAGE_SIZE, LOW_STOCK_AT, cloneName, cloneSku, mergeTags, type BulkRequest, type ListQuery } from '@/lib/admin/product-extras'
 
 /** The database filter for the product list. Always starts from the store, so no filter can reach another store. */
@@ -52,14 +53,14 @@ export async function getProductForEdit(storeId: string, id: string) {
   return db.product.findFirst({
     where: { id, storeId },
     select: {
-      id: true, name: true, subtitle: true, shortDescription: true, description: true, status: true, slug: true, categoryId: true, seoTitle: true, seoDescription: true, isFeatured: true, type: true, optionGroups: true, unitCode: true, qtyMin: true, qtyStep: true, vendor: true, tags: true, createdAt: true, updatedAt: true,
-      variants: { orderBy: { sortOrder: 'asc' }, select: { id: true, sku: true, barcode: true, costPrice: true, weightGrams: true, optionValues: true, label: true, badge: true, price: true, compareAtPrice: true, stock: true, trackStock: true, isDefault: true, isActive: true } },
+      id: true, name: true, subtitle: true, shortDescription: true, description: true, status: true, slug: true, categoryId: true, seoTitle: true, seoDescription: true, isFeatured: true, type: true, optionGroups: true, unitCode: true, qtyMin: true, qtyStep: true, vendor: true, tags: true, createdAt: true, updatedAt: true, productType: true, taxonomyId: true, taxonomyPath: true, taxable: true, requiresShipping: true, weightUnit: true, originCountry: true, hsCode: true,
+      variants: { orderBy: { sortOrder: 'asc' }, select: { id: true, sku: true, barcode: true, costPrice: true, weightGrams: true, allowBackorder: true, imageId: true, optionValues: true, label: true, badge: true, price: true, compareAtPrice: true, stock: true, trackStock: true, isDefault: true, isActive: true } },
     },
   })
 }
 
 /** Saves the product and its sizes together. Returns what changed (for the audit log). */
-export async function saveProduct(admin: StoreAdmin, productId: string, p: ProductEdit, variants: VariantEdit[], defaultId: string, measure: Pick<ProductEditResult, 'unitCode' | 'qtyMin' | 'qtyStep' | 'slug'>) {
+export async function saveProduct(admin: StoreAdmin, productId: string, p: ProductEdit, variants: VariantEdit[], defaultId: string, measure: Pick<ProductEditResult, 'unitCode' | 'qtyMin' | 'qtyStep' | 'slug' | 'allowBackorder'>) {
   return saveProductTx(admin, productId, p, variants, defaultId, measure).catch((e) => {
     // The database refuses a second product with the same page address, or a second variant with the same SKU.
     if (isUnique(e)) throw new AdminError(String((e as { meta?: { target?: unknown } }).meta?.target ?? '').includes('slug') ? 'That page address is already used by another product.' : 'That SKU or page address is already in use. Every SKU must be different.')
@@ -67,7 +68,7 @@ export async function saveProduct(admin: StoreAdmin, productId: string, p: Produ
   })
 }
 
-function saveProductTx(admin: StoreAdmin, productId: string, p: ProductEdit, variants: VariantEdit[], defaultId: string, measure: Pick<ProductEditResult, 'unitCode' | 'qtyMin' | 'qtyStep' | 'slug'>) {
+function saveProductTx(admin: StoreAdmin, productId: string, p: ProductEdit, variants: VariantEdit[], defaultId: string, measure: Pick<ProductEditResult, 'unitCode' | 'qtyMin' | 'qtyStep' | 'slug' | 'allowBackorder'>) {
   return db.$transaction(async (tx) => {
     const product = await tx.product.findFirst({ where: { id: productId, storeId: admin.storeId }, select: { id: true, name: true, status: true, slug: true, variants: { select: { id: true, price: true, compareAtPrice: true, isActive: true, sku: true } } } })
     if (!product) throw new AdminError('Product not found.')
@@ -75,6 +76,17 @@ function saveProductTx(admin: StoreAdmin, productId: string, p: ProductEdit, var
       throw new AdminError('The variants changed while you were editing. Please reload the page.')
     }
     if (p.categoryId && !(await tx.category.count({ where: { id: p.categoryId, storeId: admin.storeId } }))) throw new AdminError('That category does not exist.')
+    if (measure.slug && measure.slug !== product.slug) {
+      const taken = await slugsLike(tx, admin.storeId, measure.slug, product.id)
+      if (taken.has(measure.slug)) throw new AdminError(handleTakenError(measure.slug, taken))
+    }
+    await assertSkusFree(tx, admin.storeId, variants.map((v) => v.sku).filter((x): x is string => !!x), product.id)
+    // A variant's photo must be one of THIS product's own photos.
+    const wanted = [...new Set(variants.map((v) => v.imageId).filter((x): x is string => !!x))]
+    if (wanted.length) {
+      const own = await tx.productMedia.findMany({ where: { productId: product.id, mediaId: { in: wanted }, media: { kind: 'IMAGE' } }, select: { mediaId: true } })
+      if (own.length !== wanted.length) throw new AdminError('A variant photo must be one of this product’s own photos. Please reload the page.')
+    }
     await tx.product.update({ where: { id: product.id }, data: { ...p, unitCode: measure.unitCode, qtyMin: measure.qtyMin, qtyStep: measure.qtyStep, ...(measure.slug ? { slug: measure.slug } : {}) } })
 
     const changes: Record<string, unknown> = {}
@@ -90,13 +102,13 @@ function saveProductTx(admin: StoreAdmin, productId: string, p: ProductEdit, var
       await tx.productVariant.update({
         where: { id: v.id },
         // sku / barcode / cost / weight / trackStock are undefined when the form did not carry them: then they stay as they are.
-        data: { label: v.label, badge: v.badge, price: v.price, compareAtPrice: v.compareAtPrice, isActive: v.isActive, isDefault: v.id === defaultId, sku: v.sku, barcode: v.barcode, costPrice: v.costPrice, weightGrams: v.weightGrams, trackStock: v.trackStock },
+        data: { label: v.label, badge: v.badge, price: v.price, compareAtPrice: v.compareAtPrice, isActive: v.isActive, isDefault: v.id === defaultId, sku: v.sku, barcode: v.barcode, costPrice: v.costPrice, weightGrams: v.weightGrams, trackStock: v.trackStock, imageId: v.imageId, allowBackorder: measure.allowBackorder, storeId: admin.storeId },
       })
       const delta = v.stock - v.stockWas
       if (delta !== 0) {
         // Apply the difference so orders placed while the form was open are not overwritten.
         const after = await tx.productVariant.update({ where: { id: v.id }, data: { stock: { increment: delta } }, select: { stock: true } })
-        if (after.stock < 0) await tx.productVariant.update({ where: { id: v.id }, data: { stock: 0 } })
+        if (after.stock < 0 && !measure.allowBackorder) await tx.productVariant.update({ where: { id: v.id }, data: { stock: 0 } })
         changes[`${v.label}.stockChange`] = delta
       }
     }
@@ -106,6 +118,25 @@ function saveProductTx(admin: StoreAdmin, productId: string, p: ProductEdit, var
 }
 
 // ============================================================================ create / delete
+/**
+ * A SKU must be unique in the whole store (not just inside one product), so a scan at the counter or a line in a
+ * spreadsheet always means exactly one item. The database enforces it too (unique storeId + sku); this gives the
+ * readable message, and also covers older rows that do not carry their store yet.
+ */
+async function assertSkusFree(tx: Pick<typeof db, 'productVariant'>, storeId: string, skus: string[], exceptProductId?: string) {
+  if (skus.length === 0) return
+  const clash = await tx.productVariant.findFirst({
+    where: { sku: { in: skus }, product: { storeId }, ...(exceptProductId ? { productId: { not: exceptProductId } } : {}) },
+    select: { sku: true, product: { select: { name: true } } },
+  })
+  if (clash) throw new AdminError(`The SKU ${clash.sku} is already used by “${clash.product.name}”. Every SKU in your store must be different.`)
+}
+
+async function slugsLike(tx: Pick<typeof db, 'product'>, storeId: string, base: string, exceptId?: string): Promise<Set<string>> {
+  const rows = await tx.product.findMany({ where: { storeId, slug: { startsWith: base }, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { slug: true } })
+  return new Set(rows.map((p: { slug: string }) => p.slug))
+}
+
 
 const isUnique = (e: unknown) => (e as { code?: string })?.code === 'P2002'
 const MAX_MEDIA = 12
@@ -123,7 +154,8 @@ export async function createProduct(admin: StoreAdmin, input: NewProduct): Promi
   const userChoseSlug = input.slug !== slugify(input.product.name)
   for (let attempt = 0; attempt < 3; attempt++) {
     const taken = new Set((await db.product.findMany({ where: { storeId: admin.storeId, slug: { startsWith: input.slug } }, select: { slug: true } })).map((p) => p.slug))
-    if (userChoseSlug && taken.has(input.slug)) throw new AdminError('That page address is already used by another product.')
+    if (userChoseSlug && taken.has(input.slug)) throw new AdminError(handleTakenError(input.slug, taken))
+    if (input.variant.sku) await assertSkusFree(db, admin.storeId, [input.variant.sku])
     const slug = uniqueSlug(input.slug, taken)
     try {
       const created = await db.product.create({
@@ -131,7 +163,7 @@ export async function createProduct(admin: StoreAdmin, input: NewProduct): Promi
           storeId: admin.storeId, slug, ...input.product,
           type: input.type, unitCode: input.unitCode, qtyMin: input.qtyMin, qtyStep: input.qtyStep,
           optionGroups: input.optionGroups.length ? (input.optionGroups as never) : undefined,
-          variants: { create: initialVariants(input, slug) },
+          variants: { create: initialVariants(input, slug).map((v) => ({ ...v, storeId: admin.storeId })) },
         },
         select: { id: true },
       })
@@ -155,7 +187,7 @@ function initialVariants(input: NewProduct, slug: string) {
 }
 
 function variantData(v: NewVariant) {
-  return { label: v.label, badge: v.badge, sku: v.sku || autoSku(v.label), price: v.price, compareAtPrice: v.compareAtPrice, stock: v.stock, isActive: true, barcode: v.barcode ?? null, costPrice: v.costPrice ?? null, weightGrams: v.weightGrams ?? null, ...(v.trackStock === undefined ? {} : { trackStock: v.trackStock }) }
+  return { label: v.label, badge: v.badge, sku: v.sku || autoSku(v.label), price: v.price, compareAtPrice: v.compareAtPrice, stock: v.stock, isActive: true, barcode: v.barcode ?? null, costPrice: v.costPrice ?? null, weightGrams: v.weightGrams ?? null, ...(v.trackStock === undefined ? {} : { trackStock: v.trackStock }), ...(v.allowBackorder === undefined ? {} : { allowBackorder: v.allowBackorder }) }
 }
 
 async function ownedProduct(tx: Pick<typeof db, 'product'>, admin: StoreAdmin, productId: string) {
@@ -169,11 +201,12 @@ export async function addVariant(admin: StoreAdmin, productId: string, v: NewVar
     const owned = await ownedProduct(tx, admin, productId)
     if (owned.type === 'SIMPLE') throw new AdminError('A simple product has one item only. Create it as a product with variants if you need more.')
     const last = await tx.productVariant.findFirst({ where: { productId }, orderBy: { sortOrder: 'desc' }, select: { sortOrder: true } })
+    if (v.sku) await assertSkusFree(tx, admin.storeId, [v.sku], productId)
     try {
-      const created = await tx.productVariant.create({ data: { productId, ...variantData(v), isDefault: false, sortOrder: (last?.sortOrder ?? -1) + 1 } })
+      const created = await tx.productVariant.create({ data: { productId, storeId: admin.storeId, ...variantData(v), isDefault: false, sortOrder: (last?.sortOrder ?? -1) + 1 } })
       return created.id
     } catch (e) {
-      if (isUnique(e)) throw new AdminError('That SKU is already used by another variant of this product.')
+      if (isUnique(e)) throw new AdminError('That SKU is already used in your store. Every SKU must be different.')
       throw e
     }
   })
@@ -215,7 +248,7 @@ export async function generateVariants(admin: StoreAdmin, productId: string, gro
     for (const c of plan.create) {
       const sku = skuFor(p.slug, c.values, groups, taken)
       taken.add(sku)
-      await tx.productVariant.create({ data: { productId, label: c.label, sku, optionValues: c.values as never, price: start.price, compareAtPrice: start.compareAtPrice, stock: start.stock, isActive: true, isDefault: false, sortOrder: order++ } })
+      await tx.productVariant.create({ data: { productId, storeId: admin.storeId, label: c.label, sku, optionValues: c.values as never, price: start.price, compareAtPrice: start.compareAtPrice, stock: start.stock, isActive: true, isDefault: false, sortOrder: order++ } })
     }
     if (plan.deactivate.length) await tx.productVariant.updateMany({ where: { productId, id: { in: plan.deactivate } }, data: { isActive: false, isDefault: false } })
     if (plan.reactivate.length) await tx.productVariant.updateMany({ where: { productId, id: { in: plan.reactivate } }, data: { isActive: true } })
@@ -252,16 +285,18 @@ export async function duplicateProduct(admin: StoreAdmin, productId: string, opt
         if (!src) throw new AdminError('Product not found.')
         const base = `${src.slug}-copy`.slice(0, 56)
         const taken = new Set((await tx.product.findMany({ where: { storeId: admin.storeId, slug: { startsWith: base } }, select: { slug: true } })).map((p: { slug: string }) => p.slug))
-        const skus = new Set<string>(src.variants.map((v: { sku: string }) => v.sku))
+        // SKUs are unique in the whole store, so the copy's codes must be free everywhere, not just in this product.
+        const skus = new Set<string>([...src.variants.map((v: { sku: string }) => v.sku), ...(await tx.productVariant.findMany({ where: { product: { storeId: admin.storeId }, sku: { contains: '-COPY' } }, select: { sku: true } })).map((v: { sku: string }) => v.sku)])
         const name = cloneName(src.name)
         const created = await tx.product.create({
           data: {
             storeId: admin.storeId, categoryId: src.categoryId, name, slug: uniqueSlug(base, taken), subtitle: src.subtitle, shortDescription: src.shortDescription, description: src.description,
             status: 'DRAFT', isFeatured: false, type: src.type, optionGroups: (src.optionGroups ?? undefined) as never, unitCode: src.unitCode, qtyMin: src.qtyMin, qtyStep: src.qtyStep,
             vendor: src.vendor, tags: src.tags, seoTitle: src.seoTitle, seoDescription: src.seoDescription,
+            productType: src.productType, taxonomyId: src.taxonomyId, taxonomyPath: src.taxonomyPath, taxable: src.taxable, requiresShipping: src.requiresShipping, weightUnit: src.weightUnit, originCountry: src.originCountry, hsCode: src.hsCode,
             variants: { create: src.variants.map((v: typeof src.variants[number]) => {
               const sku = cloneSku(v.sku, skus); skus.add(sku)
-              return { sku, label: v.label, badge: v.badge, price: v.price, compareAtPrice: v.compareAtPrice, costPrice: v.costPrice, barcode: null, stock: opts.copyStock ? v.stock : 0, trackStock: v.trackStock, weightGrams: v.weightGrams, optionValues: (v.optionValues ?? undefined) as never, isDefault: v.isDefault, isActive: v.isActive, sortOrder: v.sortOrder }
+              return { sku, storeId: admin.storeId, allowBackorder: v.allowBackorder, imageId: v.imageId, label: v.label, badge: v.badge, price: v.price, compareAtPrice: v.compareAtPrice, costPrice: v.costPrice, barcode: null, stock: opts.copyStock ? v.stock : 0, trackStock: v.trackStock, weightGrams: v.weightGrams, optionValues: (v.optionValues ?? undefined) as never, isDefault: v.isDefault, isActive: v.isActive, sortOrder: v.sortOrder }
             }) },
             media: { create: src.media.map((m: typeof src.media[number]) => ({ mediaId: m.mediaId, isPrimary: m.isPrimary, sortOrder: m.sortOrder })) },
             sections: { create: src.sections.map((x: typeof src.sections[number]) => ({ type: x.type, tab: x.tab, tabLabel: x.tabLabel, title: x.title, items: x.items as never, sortOrder: x.sortOrder, isVisible: x.isVisible })) },

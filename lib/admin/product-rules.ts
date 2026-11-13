@@ -3,6 +3,7 @@ import { COUNT_UNITS, MEASURE_UNITS, getUnit, parseAmount, toBase } from '@/lib/
 import { PRODUCT_KINDS, type ProductKind } from '@/lib/units/quantity'
 import { parseOptionGroups, type OptionGroup } from '@/lib/variants/rules'
 import { parseBarcode, parseCost, parseSku, parseSlug, parseTags, parseVendor, parseWeightGrams } from '@/lib/admin/product-extras'
+import { isWeightUnit, optionCapProblem, parseCountry, parseDescription, parseHsCode, parseProductType, parseWeight, type WeightUnit } from '@/lib/admin/product-mvp'
 
 const text = (g: Getter, k: string) => String(g.get(k) ?? '').trim()
 const whole = (s: string) => (/^\d{1,9}$/.test(s) ? Number(s) : null)
@@ -36,6 +37,8 @@ export interface ProductEdit {
   status: (typeof PRODUCT_STATUSES)[number]
   /** Present only when the form has the field (older / smaller forms leave these untouched). */
   vendor?: string | null; tags?: string[]
+  productType?: string | null; taxable?: boolean; requiresShipping?: boolean; weightUnit?: WeightUnit; originCountry?: string | null; hsCode?: string | null
+  taxonomyId?: number | null; taxonomyPath?: string | null
 }
 
 type R<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -44,17 +47,36 @@ type R<T> = { ok: true; value: T } | { ok: false; error: string }
 function parseCommon(g: Getter): R<Omit<ProductEdit, 'status'> & { status: ProductEdit['status'] }> {
   const name = text(g, 'name')
   if (name.length < 2 || name.length > 120) return { ok: false, error: 'Product name must be 2 to 120 characters.' }
-  const subtitle = text(g, 'subtitle'), shortDescription = text(g, 'shortDescription'), description = text(g, 'description')
+  const subtitle = text(g, 'subtitle'), shortDescription = text(g, 'shortDescription')
+  // The description may be rich text: the server rebuilds it from an allow-list (see product-mvp.ts) before it is saved.
+  const desc = parseDescription(String(g.get('description') ?? ''))
+  if (!desc.ok) return desc
+  const description = desc.value ?? ''
   const seoTitle = text(g, 'seoTitle'), seoDescription = text(g, 'seoDescription'), categoryId = text(g, 'categoryId')
   if (subtitle.length > 160) return { ok: false, error: 'Subtitle must be 160 characters or fewer.' }
   if (shortDescription.length > 500) return { ok: false, error: 'Short description must be 500 characters or fewer.' }
-  if (description.length > 10_000) return { ok: false, error: 'Description must be 10000 characters or fewer.' }
   if (seoTitle.length > 70) return { ok: false, error: 'Search title must be 70 characters or fewer.' }
   if (seoDescription.length > 160) return { ok: false, error: 'Search description must be 160 characters or fewer.' }
   if (categoryId && !/^[A-Za-z0-9_-]{1,40}$/.test(categoryId)) return { ok: false, error: 'Invalid category.' }
   const status = PRODUCT_STATUSES.find((x) => x === text(g, 'status'))
   if (!status) return { ok: false, error: 'Choose a status.' }
-  const extra: { vendor?: string | null; tags?: string[] } = {}
+  const extra: Pick<ProductEdit, 'vendor' | 'tags' | 'productType' | 'taxable' | 'requiresShipping' | 'weightUnit' | 'originCountry' | 'hsCode' | 'taxonomyId' | 'taxonomyPath'> = {}
+  if (g.get('productType') != null) { const v = parseProductType(text(g, 'productType')); if (!v.ok) return v; extra.productType = v.value }
+  // Tick boxes send nothing when unticked, so a hidden "optionsSent" marker says the form carries them.
+  if (g.get('optionsSent') != null) {
+    extra.taxable = g.get('taxable') === 'on'
+    extra.requiresShipping = g.get('requiresShipping') === 'on'
+    const wu = text(g, 'weightUnit'); if (isWeightUnit(wu)) extra.weightUnit = wu
+    const c = parseCountry(text(g, 'originCountry')); if (!c.ok) return c
+    const h = parseHsCode(text(g, 'hsCode')); if (!h.ok) return h
+    // A product that is not shipped has no origin or customs code.
+    extra.originCountry = extra.requiresShipping ? c.value : null; extra.hsCode = extra.requiresShipping ? h.value : null
+  }
+  if (g.get('taxonomyId') != null) {
+    const raw = text(g, 'taxonomyId')
+    if (raw && !/^\d{1,7}$/.test(raw)) return { ok: false, error: 'Choose the category from the list.' }
+    extra.taxonomyId = raw ? Number(raw) : null // the path is filled in by the server from the official list, never from the form
+  }
   if (g.get('vendor') != null) { const v = parseVendor(text(g, 'vendor')); if (!v.ok) return v; extra.vendor = v.value }
   if (g.get('tags') != null) { const t = parseTags(text(g, 'tags')); if (!t.ok) return t; extra.tags = t.value }
   return {
@@ -99,13 +121,16 @@ export interface VariantEdit {
   stockWas: number; stock: number; isActive: boolean
   /** Present only when the form has the field. */
   sku?: string; barcode?: string | null; costPrice?: number | null; weightGrams?: number | null; trackStock?: boolean
+  /** The photo for this variant: the id of one of the product's own media files ('' = none). Checked against the product by the server. */
+  imageId?: string | null
 }
 
 /**
  * Parses the product form. `variantIds` are the variants that belong to this product (from the database),
  * so a tampered form cannot touch anyone else's variants.
  */
-export interface ProductEditResult { product: ProductEdit; variants: VariantEdit[]; defaultId: string; unitCode: string | null; qtyMin: number | null; qtyStep: number | null; /** New page address, when the form asked to change it. */ slug?: string }
+/** `allowBackorder` (continue selling when out of stock) is one switch for the whole product; undefined = the form did not carry it. */
+export interface ProductEditResult { allowBackorder?: boolean; product: ProductEdit; variants: VariantEdit[]; defaultId: string; unitCode: string | null; qtyMin: number | null; qtyStep: number | null; /** New page address, when the form asked to change it. */ slug?: string }
 
 export function parseProductEdit(g: Getter, variantIds: string[], meta: SellMeta = LEGACY, current: { qtyMin: number | null; qtyStep: number | null } = { qtyMin: null, qtyStep: null }): Parsed<ProductEditResult> {
   const common = parseCommon(g)
@@ -122,18 +147,19 @@ export function parseProductEdit(g: Getter, variantIds: string[], meta: SellMeta
     if (price === null || price <= 0) return { ok: false, error: `${label}: price must be ${priceHint(meta)}.` }
     const cmpRaw = text(g, `v_${id}_compareAt`)
     const compareAtPrice = cmpRaw ? priceOf(cmpRaw, meta) : null
-    if (cmpRaw && (compareAtPrice === null || compareAtPrice < price)) return { ok: false, error: `${label}: the crossed-out price must be ${priceHint(meta)} and not lower than the price.` }
+    if (cmpRaw && (compareAtPrice === null || compareAtPrice <= price)) return { ok: false, error: `${label}: the crossed-out price must be ${priceHint(meta)} and higher than the price (or leave it empty).` }
     const typed = text(g, `v_${id}_stock`), stockWas = whole(text(g, `v_${id}_stockWas`))
     // Untouched field: keep the stored number exactly (a unit like tola cannot round-trip through 3 decimals).
     const stock = stockWas !== null && typed === text(g, `v_${id}_stockShown`) ? stockWas : parseStock(typed, meta)
     if (stock === null) return { ok: false, error: `${label}: stock must be ${stockHint(meta)}.` }
     const badge = text(g, `v_${id}_badge`)
     if (badge.length > 30) return { ok: false, error: `${label}: badge must be 30 characters or fewer.` }
-    const more: Pick<VariantEdit, 'sku' | 'barcode' | 'costPrice' | 'weightGrams' | 'trackStock'> = {}
+    const more: Pick<VariantEdit, 'sku' | 'barcode' | 'costPrice' | 'weightGrams' | 'trackStock' | 'imageId'> = {}
     if (g.get(`v_${id}_sku`) != null) { const r = parseSku(text(g, `v_${id}_sku`)); if (!r.ok) return { ok: false, error: `${label}: ${r.error}` }; more.sku = r.value }
     if (g.get(`v_${id}_barcode`) != null) { const r = parseBarcode(text(g, `v_${id}_barcode`)); if (!r.ok) return { ok: false, error: `${label}: ${r.error}` }; more.barcode = r.value }
     if (g.get(`v_${id}_cost`) != null) { const r = parseCost(text(g, `v_${id}_cost`)); if (!r.ok) return { ok: false, error: `${label}: ${r.error}` }; more.costPrice = r.value }
-    if (g.get(`v_${id}_weight`) != null) { const r = parseWeightGrams(text(g, `v_${id}_weight`)); if (!r.ok) return { ok: false, error: `${label}: ${r.error}` }; more.weightGrams = r.value }
+    if (g.get(`v_${id}_weight`) != null) { const wu = text(g, 'weightUnit'); const r = isWeightUnit(wu) ? parseWeight(text(g, `v_${id}_weight`), wu) : parseWeightGrams(text(g, `v_${id}_weight`)); if (!r.ok) return { ok: false, error: `${label}: ${r.error}` }; more.weightGrams = r.value }
+    if (g.get(`v_${id}_image`) != null) { const im = text(g, `v_${id}_image`); if (im && !/^[A-Za-z0-9_-]{1,40}$/.test(im)) return { ok: false, error: `${label}: choose a photo from the list.` }; more.imageId = im || null }
     // A checkbox that is not ticked sends nothing, so a hidden marker says "this form has the tick box".
     if (g.get(`v_${id}_trackSent`) != null) more.trackStock = g.get(`v_${id}_track`) === 'on'
     variants.push({ id, label, badge: badge || null, price, compareAtPrice, stock, stockWas: stockWas ?? stock, isActive: g.get(`v_${id}_active`) === 'on', ...more })
@@ -148,24 +174,15 @@ export function parseProductEdit(g: Getter, variantIds: string[], meta: SellMeta
   if (!def) return { ok: false, error: 'Choose which variant is shown first.' }
   if (!def.isActive) return { ok: false, error: 'The variant shown first must be switched on.' }
   if (status === 'ACTIVE' && !variants.some((v) => v.isActive)) return { ok: false, error: 'A live product needs at least one variant switched on.' }
-  return { ok: true, value: { product: common.value, variants, defaultId, ...measure.value, ...(slug ? { slug } : {}) } }
+  return { ok: true, value: { product: common.value, variants, defaultId, ...measure.value, ...(slug ? { slug } : {}), ...(g.get('optionsSent') != null ? { allowBackorder: g.get('allowBackorder') === 'on' } : {}) } }
 }
 
 
 // ----------------------------------------------------------------------------- create
-/** "Darwaish Sacred Oil!" -> "darwaish-sacred-oil". Non-latin names fall back to "product". */
-export function slugify(name: string): string {
-  const s = name.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '')
-  return s || 'product'
-}
-/** First free slug among base, base-2, base-3 ... */
-export function uniqueSlug(base: string, taken: ReadonlySet<string>): string {
-  if (!taken.has(base)) return base
-  for (let i = 2; i < 10_000; i++) if (!taken.has(`${base}-${i}`)) return `${base}-${i}`
-  return `${base}-${Date.now()}`
-}
+export { slugify, uniqueSlug } from '@/lib/admin/slug'
+import { slugify } from '@/lib/admin/slug'
 
-export interface NewVariant { label: string; badge: string | null; sku: string; price: number; compareAtPrice: number | null; stock: number; barcode?: string | null; costPrice?: number | null; weightGrams?: number | null; trackStock?: boolean }
+export interface NewVariant { label: string; badge: string | null; sku: string; price: number; compareAtPrice: number | null; stock: number; barcode?: string | null; costPrice?: number | null; weightGrams?: number | null; trackStock?: boolean; allowBackorder?: boolean }
 
 /** Reads one variant from a form; `prefix` lets the same code read "first variant" and "add variant" forms. */
 export function parseVariantFields(g: Getter, prefix = '', meta: SellMeta = LEGACY, defaultLabel?: string): R<NewVariant> {
@@ -175,7 +192,7 @@ export function parseVariantFields(g: Getter, prefix = '', meta: SellMeta = LEGA
   if (price === null || price <= 0) return { ok: false, error: `Price must be ${priceHint(meta)}.` }
   const cmpRaw = text(g, `${prefix}compareAt`)
   const compareAtPrice = cmpRaw ? priceOf(cmpRaw, meta) : null
-  if (cmpRaw && (compareAtPrice === null || compareAtPrice < price)) return { ok: false, error: `The crossed-out price must be ${priceHint(meta)} and not lower than the price.` }
+  if (cmpRaw && (compareAtPrice === null || compareAtPrice <= price)) return { ok: false, error: `The crossed-out price must be ${priceHint(meta)} and higher than the price (or leave it empty).` }
   const stock = parseStock(text(g, `${prefix}stock`), meta)
   if (stock === null) return { ok: false, error: `Stock must be ${stockHint(meta)}.` }
   const badge = text(g, `${prefix}badge`)
@@ -184,8 +201,9 @@ export function parseVariantFields(g: Getter, prefix = '', meta: SellMeta = LEGA
   if (sku && !/^[A-Z0-9_-]{1,30}$/.test(sku)) return { ok: false, error: 'SKU may contain letters, digits, - and _ only.' }
   const barcode = parseBarcode(text(g, `${prefix}barcode`)); if (!barcode.ok) return barcode
   const cost = parseCost(text(g, `${prefix}cost`)); if (!cost.ok) return cost
-  const weight = parseWeightGrams(text(g, `${prefix}weight`)); if (!weight.ok) return weight
-  return { ok: true, value: { label, badge: badge || null, sku, price, compareAtPrice, stock, barcode: barcode.value, costPrice: cost.value, weightGrams: weight.value, ...(g.get(`${prefix}trackSent`) != null ? { trackStock: g.get(`${prefix}track`) === 'on' } : {}) } }
+  const wu = text(g, 'weightUnit')
+  const weight = isWeightUnit(wu) ? parseWeight(text(g, `${prefix}weight`), wu) : parseWeightGrams(text(g, `${prefix}weight`)); if (!weight.ok) return weight
+  return { ok: true, value: { label, badge: badge || null, sku, price, compareAtPrice, stock, barcode: barcode.value, costPrice: cost.value, weightGrams: weight.value, ...(g.get(`${prefix}trackSent`) != null ? { trackStock: g.get(`${prefix}track`) === 'on' } : {}), ...(g.get('optionsSent') != null ? { allowBackorder: g.get('allowBackorder') === 'on' } : {}) } }
 }
 
 export interface NewProduct {
@@ -217,6 +235,8 @@ export function parseNewProduct(g: Getter): R<NewProduct> {
   if (type === 'VARIANTS') {
     const og = parseOptionGroups(String(g.get('options') ?? ''))
     if (!og.ok) return og
+    const cap = optionCapProblem(og.value)
+    if (cap) return { ok: false, error: cap }
     optionGroups = og.value
   }
   const variant = parseVariantFields(g, 'v_', meta, optionGroups.length || type !== 'VARIANTS' ? 'Standard' : undefined)

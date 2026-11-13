@@ -71,3 +71,9 @@ export function lineTotal(unitPrice: number, quantity: number, unitCode: string 
   const u = getUnit(unitCode)
   return u && u.dimension !== 'COUNT' ? Math.round((unitPrice * quantity) / u.factor) : round2(unitPrice * quantity)
 }
+
+/**
+ * Does the stock number LIMIT what can be bought? Not when stock is not tracked, and not when the owner ticked
+ * "continue selling when out of stock" (then the stock is still counted down, and may go below zero).
+ */
+export const stockLimited = (v: { trackStock: boolean; allowBackorder?: boolean | null }) => v.trackStock && !v.allowBackorder

@@ -209,7 +209,8 @@ export const getProductPageData = cache(async (slug: string): Promise<ProductPag
       price: dec(v.price),
       compareAtPrice: v.compareAtPrice ? dec(v.compareAtPrice) : null,
       stock: v.stock,
-      trackStock: v.trackStock,
+      // For the shop, a variant that keeps selling at zero behaves like one whose stock is not tracked.
+      trackStock: v.trackStock && !v.allowBackorder,
       isDefault: v.isDefault,
       optionValues: readOptionValues(v.optionValues),
     })),

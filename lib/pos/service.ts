@@ -3,7 +3,7 @@ import type { StoreAdmin } from '@/lib/auth/guard'
 import { loadPosAccess } from '@/lib/entitlements/service'
 import { generateTrackingCode } from '@/lib/tracking-code'
 import { formatQuantity } from '@/lib/units/registry'
-import { lineTotal, quantityProblem } from '@/lib/units/quantity'
+import { lineTotal, quantityProblem, stockLimited } from '@/lib/units/quantity'
 import { WALK_IN_NAME, WALK_IN_PHONE, cashChange, posRule, saleTotals, type SaleRequest } from './rules'
 
 /** An error whose message is safe to show to the person at the counter. */
@@ -46,10 +46,10 @@ export async function ringUpSale(admin: StoreAdmin, req: SaleRequest): Promise<S
   })
   for (const l of lines) {
     const name = `${l.v.product.name} (${l.v.label})`
-    if (l.v.trackStock && l.v.stock < l.quantity) {
+    if (stockLimited(l.v) && l.v.stock < l.quantity) {
       throw new PosError(l.v.stock > 0 ? `Only ${formatQuantity(l.v.stock, l.unitCode)} of “${name}” in stock.` : `“${name}” is out of stock.`)
     }
-    const problem = quantityProblem(posRule(l.v.product, l.v.trackStock ? l.v.stock : null), l.quantity, `“${name}”`)
+    const problem = quantityProblem(posRule(l.v.product, stockLimited(l.v) ? l.v.stock : null), l.quantity, `“${name}”`)
     if (problem) throw new PosError(problem)
   }
   const t = saleTotals(lines, req.discount)
@@ -63,7 +63,7 @@ export async function ringUpSale(admin: StoreAdmin, req: SaleRequest): Promise<S
       return await db.$transaction(async (tx) => {
         for (const l of lines) {
           if (!l.v.trackStock) continue
-          const r = await tx.productVariant.updateMany({ where: { id: l.v.id, stock: { gte: l.quantity } }, data: { stock: { decrement: l.quantity } } })
+          const r = await tx.productVariant.updateMany({ where: { id: l.v.id, ...(stockLimited(l.v) ? { stock: { gte: l.quantity } } : {}) }, data: { stock: { decrement: l.quantity } } })
           if (r.count === 0) throw new PosError(`“${l.v.product.name} (${l.v.label})” just sold out.`)
         }
 

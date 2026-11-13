@@ -18,7 +18,7 @@ const loadCatalog = memoKeyed(15_000, async (storeId: string) => {
         id: true, slug: true, name: true, subtitle: true, shortDescription: true, isFeatured: true, createdAt: true, unitCode: true,
         category: { select: { slug: true, isActive: true } },
         media: { where: { media: { kind: 'IMAGE' } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], take: 1, select: { media: { select: { url: true, alt: true } } } },
-        variants: { where: { isActive: true }, select: { price: true, compareAtPrice: true, stock: true, trackStock: true } },
+        variants: { where: { isActive: true }, select: { price: true, compareAtPrice: true, stock: true, trackStock: true, allowBackorder: true } },
       },
     }),
     db.review.groupBy({ by: ['productId'], where: { isApproved: true, product: { storeId } }, _avg: { rating: true }, _count: { _all: true } }),
@@ -39,7 +39,7 @@ const loadCatalog = memoKeyed(15_000, async (storeId: string) => {
       minPrice: Math.min(...prices), maxPrice: Math.max(...prices),
       compareAt: cheapest.compareAtPrice?.toNumber() ?? null,
       perUnit: perUnit(p.unitCode),
-      soldOut: p.variants.every((v) => v.trackStock && v.stock <= 0),
+      soldOut: p.variants.every((v) => v.trackStock && !v.allowBackorder && v.stock <= 0),
       rating: r?._avg.rating ? Math.round(r._avg.rating * 10) / 10 : null, ratingCount: r?._count._all ?? 0,
       haystack: `${p.name} ${p.subtitle ?? ''} ${p.shortDescription ?? ''}`.toLowerCase(),
     }

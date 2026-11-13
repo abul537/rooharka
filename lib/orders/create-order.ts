@@ -3,7 +3,7 @@ import { resolveAddress } from '@/lib/address-db'
 import { generateTrackingCode } from '@/lib/tracking-code'
 import { buildPaymentOptions, type PaymentOption } from '@/lib/pricing'
 import type { CheckoutConfig } from '@/lib/data/checkout'
-import { lineTotal, quantityProblem, quantityRule } from '@/lib/units/quantity'
+import { lineTotal, quantityProblem, quantityRule, stockLimited } from '@/lib/units/quantity'
 import { formatQuantity } from '@/lib/units/registry'
 import type { ValidOrder } from './validate'
 
@@ -111,8 +111,8 @@ export async function createOrder(
   })
   for (const l of lines) {
     const name = `${l.v.product.name} (${l.v.label})`
-    const rule = quantityRule(l.v.product, l.v.trackStock ? l.v.stock : null, config.maxQuantity)
-    if (l.v.trackStock && l.v.stock < l.quantity) {
+    const rule = quantityRule(l.v.product, stockLimited(l.v) ? l.v.stock : null, config.maxQuantity)
+    if (stockLimited(l.v) && l.v.stock < l.quantity) {
       throw new OrderError('OUT_OF_STOCK', l.v.stock > 0
         ? `Only ${formatQuantity(l.v.stock, l.v.product.unitCode)} of "${name}" left in stock.`
         : `"${name}" is sold out.`)
@@ -152,7 +152,8 @@ export async function createOrder(
         for (const l of lines) {
           if (!l.v.trackStock) continue
           const res = await tx.productVariant.updateMany({
-            where: { id: l.v.id, stock: { gte: l.quantity } },
+            // "Continue selling when out of stock": still counted down, but never refused.
+            where: { id: l.v.id, ...(stockLimited(l.v) ? { stock: { gte: l.quantity } } : {}) },
             data: { stock: { decrement: l.quantity } },
           })
           if (res.count === 0) throw new OrderError('OUT_OF_STOCK', `"${l.v.product.name} (${l.v.label})" just sold out.`)

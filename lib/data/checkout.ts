@@ -152,6 +152,6 @@ export async function getCheckoutLine(storeId: string, variantId: string): Promi
     qtyMin: v.product.qtyMin,
     qtyStep: v.product.qtyStep,
     stock: v.stock,
-    trackStock: v.trackStock,
+    trackStock: v.trackStock && !v.allowBackorder,
   }
 }

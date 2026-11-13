@@ -9,6 +9,7 @@ import { rateLimit } from '@/lib/rate-limit'
 import { AdminError } from '@/lib/admin/orders'
 import { parseProductEdit, parseSections, parseVariantFields, type SellMeta } from '@/lib/admin/product-rules'
 import { parseOptionGroups } from '@/lib/variants/rules'
+import { optionCapProblem } from '@/lib/admin/product-mvp'
 import type { ProductKind } from '@/lib/units/quantity'
 import { addVariant, attachMedia, deleteProduct, generateVariants, deleteVariant, moveMedia, removeMedia, saveProduct, saveSections, setMediaAlt, setPrimaryMedia } from '@/lib/admin/products'
 import { getServiceSecrets } from '@/lib/services/store-services'
@@ -78,6 +79,8 @@ export async function generateVariantsAction(_: ActionState, fd: FormData): Prom
   if (!owned) return { error: 'Product not found.' }
   const groups = parseOptionGroups(str(fd, 'options'))
   if (!groups.ok) return { error: groups.error }
+  const cap = optionCapProblem(groups.value)
+  if (cap) return { error: cap }
   const start = parseVariantFields(fd, 'gen_', owned.meta, 'x')
   if (!start.ok) return { error: start.error }
   return guarded('variants.generate', productId, async (admin) => {
