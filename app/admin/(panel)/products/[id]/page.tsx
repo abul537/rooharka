@@ -52,7 +52,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
         <Link href="/admin/products" className="text-sm text-slate-600 underline">← All products</Link>
         <h1 className="text-2xl font-bold mt-2">{p.name}</h1>
         <p className="text-sm text-slate-500">
-          {p.status === 'ACTIVE' ? <>Live at <Link className="underline" href={`/product/${p.slug}`} target="_blank">/product/{p.slug}</Link></> : <>Not visible to customers yet (status: {p.status.toLowerCase()}).</>}
+          {p.status === 'ACTIVE' ? <>Live at <Link className="underline" href={`/product/${p.slug}`} target="_blank">/product/{p.slug}</Link></> : <>Not visible to customers yet (status: {p.status.toLowerCase()}).{p.status === 'DRAFT' && <> <a className="underline font-medium" href={`/admin/preview?path=${encodeURIComponent(`/product/${p.slug}`)}`} target="_blank" rel="noopener">Preview it in your shop</a></>}</>}
           {!editable && ' · You can view but not edit.'}
         </p>
       </div>

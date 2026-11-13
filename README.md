@@ -252,3 +252,16 @@ How the brief maps onto this codebase: `title` = `Product.name`, `handle` = `Pro
 - **Tenant isolation:** `tests/tenant-isolation.test.ts` reviews every query in the product, collection and courier code for a store filter.
 
 After pulling: `pnpm db:push`, `pnpm exec prisma generate`, then once `pnpm exec tsx scripts/backfill-variant-store.ts` (gives old variants their store so the store-wide SKU rule covers them).
+
+## Preview store
+
+The eye button in the dashboard ("Preview store", and "Preview it in your shop" on a draft product) opens the shop as the owner sees it: draft products included, and even before the shop is approved.
+
+1. `/admin/preview?path=...` (signed-in staff only) makes a **one-minute link token** for this store and this person at the moment of the click and sends the browser to the shop's own address.
+2. `/api/preview?secret=...&slug=...` checks the token, checks that the shop at this address IS the token's store and that the person is still an active member, switches on Next.js draft mode, and sets a signed one-hour **session pass** cookie (`rk_preview`). Cookies are `SameSite=None; Secure` on https.
+3. Shop data (`lib/data/catalog.ts`, `lib/data/product.ts`) asks `isPreviewFor(storeId)` and uses `visibleStatuses()`: live only for customers, live + draft in preview, never archived. The preview catalogue is never put in the shared 15-second memory.
+4. `PreviewBanner` (bottom bar) with **Exit preview** -> `/api/disable-preview`.
+
+Why not draft mode alone: its cookie has the same value for every store on the platform, so it cannot tell one store's owner from another's. Drafts show only with draft mode AND a valid pass for the store being viewed. Orders and phone codes are refused in preview. Rules and tests: `lib/preview/rules.ts`, `tests/preview.test.ts`. No database change.
+
+Note: pages still send `X-Frame-Options: DENY` (anti-clickjacking), so the preview opens in a new tab, not inside a frame.

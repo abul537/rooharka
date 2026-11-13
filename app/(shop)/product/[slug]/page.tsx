@@ -77,6 +77,11 @@ export default async function ProductPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
 
+      {product.isDraft && (
+        <p role="note" className="bg-amber-100 px-4 py-2 text-center text-sm font-medium text-amber-900">
+          Draft: only you can see this product. Set its status to Active in your dashboard when it is ready. Customers cannot order it yet.
+        </p>
+      )}
       <section className="py-8 md:py-14 bg-gradient-to-b from-brand-50 to-white">
         <div className="container mx-auto px-4">
           <nav aria-label="Breadcrumb" className="mb-6 text-sm text-gray-500">

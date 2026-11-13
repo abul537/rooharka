@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { clientIp, rateLimit } from '@/lib/rate-limit'
 import { getCurrentStore } from '@/lib/store'
+import { isPreviewFor } from '@/lib/preview/server'
+import { PREVIEW_NO_ORDERS } from '@/lib/preview/rules'
 
 /** Shared start of both OTP endpoints: per-IP speed limit, size limit, JSON body, current store. */
 export async function openOtpRequest(request: Request, bucket: string, limit: number) {
@@ -17,5 +19,7 @@ export async function openOtpRequest(request: Request, bucket: string, limit: nu
   } catch { return { response: NextResponse.json({ error: 'Invalid request.' }, { status: 400 }) } }
   const store = await getCurrentStore()
   if (!store) return { response: NextResponse.json({ error: 'This store is not available.' }, { status: 404 }) }
+  // No codes are sent from a preview (each one costs the store owner money, and no order can follow anyway).
+  if (await isPreviewFor(store.id)) return { response: NextResponse.json({ error: PREVIEW_NO_ORDERS }, { status: 403 }) }
   return { ip, body, store }
 }

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { getCurrentStore } from '@/lib/store'
 import { getCatalog } from '@/lib/data/catalog'
 import { getPublicCollection } from '@/lib/admin/collections'
+import { isPreviewFor } from '@/lib/preview/server'
 import ProductCard from '@/components/shop/ProductCard'
 
 export const dynamic = 'force-dynamic'
@@ -19,9 +20,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function CollectionPage({ params }: Props) {
   const [{ handle }, store] = await Promise.all([params, getCurrentStore()])
   if (!store) notFound()
-  const c = await getPublicCollection(store.id, handle) // limited to THIS store and to visible collections
+  const c = await getPublicCollection(store.id, handle, await isPreviewFor(store.id)) // limited to THIS store; hidden ones only in the owner's preview
   if (!c) notFound()
-  // The catalogue only holds this store's ACTIVE products, so drafts and archived products drop out here.
+  // The catalogue only holds this store's live products (plus drafts in the owner's preview), so the rest drop out here.
   const byId = new Map((await getCatalog(store.id)).items.map((i) => [i.id, i]))
   const items = c.products.map((p) => byId.get(p.productId)).filter((i): i is NonNullable<typeof i> => !!i)
   return (

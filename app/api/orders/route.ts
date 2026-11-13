@@ -3,6 +3,8 @@ import { after, NextResponse } from 'next/server'
 import { autoBookByNumber } from '@/lib/couriers/booking'
 import { isPhoneVerified, otpCookieName, otpCookieOptions } from '@/lib/otp/service'
 import { getCurrentStore } from '@/lib/store'
+import { isPreviewFor } from '@/lib/preview/server'
+import { PREVIEW_NO_ORDERS } from '@/lib/preview/rules'
 import { getCheckoutConfig } from '@/lib/data/checkout'
 import { validateOrderRequest } from '@/lib/orders/validate'
 import { createOrder, OrderError } from '@/lib/orders/create-order'
@@ -37,6 +39,8 @@ export async function POST(request: Request) {
   try {
     const store = await getCurrentStore()
     if (!store) return NextResponse.json({ error: 'This store is not available.' }, { status: 404 })
+    // A preview is for LOOKING: it never creates a real order (it may show drafts, or a shop that is not open yet).
+    if (await isPreviewFor(store.id)) return NextResponse.json({ error: PREVIEW_NO_ORDERS }, { status: 403 })
 
     const config = await getCheckoutConfig(store)
     const parsed = validateOrderRequest(body, config.fields)

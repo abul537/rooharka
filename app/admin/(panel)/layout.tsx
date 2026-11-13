@@ -4,6 +4,7 @@ import { getStoreName } from '@/lib/store'
 import { logoutAction } from '../login/actions'
 import AdminNav from '@/components/admin/AdminNav'
 import Link from 'next/link'
+import { Eye } from 'lucide-react'
 import { db } from '@/lib/db'
 import { getBanners } from '@/lib/banners/store'
 import BannerBar from '@/components/BannerBar'
@@ -42,6 +43,11 @@ export default async function PanelLayout({ children }: { children: React.ReactN
             <button className="text-sm text-slate-600 underline">Sign out</button>
           </form>
         </div>
+        {/* Opens the shop in a new tab as the owner sees it: draft products included, and even before the shop is approved. */}
+        <a href="/admin/preview" target="_blank" rel="noopener" title="See your shop with your draft products. Customers cannot see this view."
+          className="mb-3 flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50">
+          <Eye className="h-4 w-4" aria-hidden /> Preview store
+        </a>
         <AdminNav allowed={allowed} unread={unread} />
         <div className="hidden lg:block mt-10 pt-4 border-t border-slate-200 text-sm">
           <p className="font-medium truncate" title={admin.email}>{admin.name}</p>

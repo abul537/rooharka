@@ -3,7 +3,9 @@ import Link from 'next/link'
 import ShopHeader from '@/components/shop/ShopHeader'
 import ShopFooter from '@/components/shop/ShopFooter'
 import { db } from '@/lib/db'
-import { getCurrentStore, getShopClosure } from '@/lib/store'
+import { getCurrentStore, getShopClosure, getStoreForHost } from '@/lib/store'
+import { isPreviewFor } from '@/lib/preview/server'
+import PreviewBanner from '@/components/shop/PreviewBanner'
 import { getShopContext } from '@/lib/storefront/data'
 import { safeUrl } from '@/lib/storefront/rules'
 import { themeStyle } from '@/lib/storefront/theme'
@@ -14,6 +16,8 @@ export async function generateMetadata(): Promise<Metadata> {
   if (!store) return { title: 'Store' }
   const s = await db.storeSettings.findUnique({ where: { storeId: store.id }, select: { seoTitle: true, seoDescription: true, faviconUrl: true } }).catch(() => null)
   return {
+    // A preview is private to the owner: tell search engines to keep out, in case a preview address is ever shared.
+    ...((await isPreviewFor(store.id)) ? { robots: { index: false, follow: false } } : {}),
     title: { default: s?.seoTitle || store.name, template: `%s | ${store.name}` },
     description: s?.seoDescription ?? undefined,
     icons: s?.faviconUrl && safeUrl(s.faviconUrl, false) ? { icon: s.faviconUrl } : undefined,
@@ -35,7 +39,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       </main>
     )
   }
-  const ctx = await getShopContext(store)
+  const [ctx, preview, raw] = await Promise.all([getShopContext(store), isPreviewFor(store.id), getStoreForHost()])
   const { announcement, color, font } = ctx.content
   return (
     <div style={themeStyle(color, font)} className="flex min-h-screen flex-col bg-white text-gray-900">
@@ -48,6 +52,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       <ShopHeader name={store.name} ctx={ctx} />
       <main className="flex-1">{children}</main>
       <ShopFooter name={store.name} ctx={ctx} />
+      {preview && <PreviewBanner closed={raw?.approval !== 'APPROVED'} />}
     </div>
   )
 }

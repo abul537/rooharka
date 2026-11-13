@@ -1,4 +1,6 @@
 import { descriptionHtml, htmlToText } from '@/lib/admin/product-mvp'
+import { isPreviewFor } from '@/lib/preview/server'
+import { visibleStatuses } from '@/lib/preview/rules'
 import { readOptionGroups, readOptionValues } from '@/lib/variants/rules'
 import { cache } from 'react'
 import { db } from '@/lib/db'
@@ -91,6 +93,8 @@ export interface ProductPageData {
   store: { id: string; name: string; slug: string; currency: string }
   product: {
     id: string
+    /** Only ever true in the owner's preview: customers cannot see this product yet. */
+    isDraft: boolean
     slug: string
     name: string
     subtitle: string | null
@@ -172,10 +176,12 @@ export const getProductPageData = cache(async (slug: string): Promise<ProductPag
   if (!store) return null
 
   // One round of parallel queries (reviews and settings do not need the product's id first).
-  const reviewWhere = { isApproved: true, product: { storeId: store.id, slug, status: 'ACTIVE' as const } }
+  // Customers see live products only. The owner in preview also sees drafts (never archived ones).
+  const status = { in: visibleStatuses(await isPreviewFor(store.id)) }
+  const reviewWhere = { isApproved: true, product: { storeId: store.id, slug, status } }
   const [product, stats, reviews, settingsBlock] = await Promise.all([
     db.product.findFirst({
-      where: { storeId: store.id, slug, status: 'ACTIVE' },
+      where: { storeId: store.id, slug, status },
       include: {
         variants: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
         media: { include: { media: true }, orderBy: { sortOrder: 'asc' } },
@@ -195,6 +201,7 @@ export const getProductPageData = cache(async (slug: string): Promise<ProductPag
     store,
     product: {
       id: product.id,
+      isDraft: product.status === 'DRAFT',
       slug: product.slug,
       name: product.name,
       subtitle: product.subtitle,
@@ -260,7 +267,7 @@ export async function getFirstProductSlug(): Promise<string | null> {
   const store = await getCurrentStore()
   if (!store) return null
   const p = await db.product.findFirst({
-    where: { storeId: store.id, status: 'ACTIVE', variants: { some: { isActive: true } } },
+    where: { storeId: store.id, status: { in: visibleStatuses(await isPreviewFor(store.id)) }, variants: { some: { isActive: true } } },
     orderBy: [{ isFeatured: 'desc' }, { createdAt: 'asc' }],
     select: { slug: true },
   })

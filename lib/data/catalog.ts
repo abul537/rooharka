@@ -1,4 +1,7 @@
+import { cache } from 'react'
 import { db } from '@/lib/db'
+import { isPreviewFor } from '@/lib/preview/server'
+import { visibleStatuses } from '@/lib/preview/rules'
 import { memoKeyed } from '@/lib/memo'
 import type { CatalogItem } from '@/lib/catalog'
 import { perUnit } from '@/lib/units/registry'
@@ -10,12 +13,12 @@ export interface CatalogCategory { slug: string; name: string; count: number }
  * paging then happen in memory (instant, no database trip per click). New products and price changes show within
  * 15 seconds; the product page itself is always live.
  */
-const loadCatalog = memoKeyed(15_000, async (storeId: string) => {
+async function buildCatalog(storeId: string, preview: boolean) {
   const [products, ratings, cats] = await Promise.all([
     db.product.findMany({
-      where: { storeId, status: 'ACTIVE', variants: { some: { isActive: true } } },
+      where: { storeId, status: { in: visibleStatuses(preview) }, variants: { some: { isActive: true } } },
       select: {
-        id: true, slug: true, name: true, subtitle: true, shortDescription: true, isFeatured: true, createdAt: true, unitCode: true,
+        id: true, slug: true, name: true, status: true, subtitle: true, shortDescription: true, isFeatured: true, createdAt: true, unitCode: true,
         category: { select: { slug: true, isActive: true } },
         media: { where: { media: { kind: 'IMAGE' } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], take: 1, select: { media: { select: { url: true, alt: true } } } },
         variants: { where: { isActive: true }, select: { price: true, compareAtPrice: true, stock: true, trackStock: true, allowBackorder: true } },
@@ -32,7 +35,7 @@ const loadCatalog = memoKeyed(15_000, async (storeId: string) => {
     const r = rating.get(p.id)
     const img = p.media[0]?.media
     return {
-      id: p.id, slug: p.slug, name: p.name, subtitle: p.subtitle,
+      id: p.id, slug: p.slug, name: p.name, subtitle: p.subtitle, ...(p.status === 'DRAFT' ? { isDraft: true } : {}),
       categorySlug: p.category?.isActive ? p.category.slug : null,
       isFeatured: p.isFeatured, createdAt: p.createdAt.getTime(),
       imageUrl: img?.url ?? null, imageAlt: img?.alt ?? null,
@@ -48,6 +51,14 @@ const loadCatalog = memoKeyed(15_000, async (storeId: string) => {
     .map((c) => ({ ...c, count: items.filter((i) => i.categorySlug === c.slug).length }))
     .filter((c) => c.count > 0)
   return { items, categories }
-})
+}
 
-export const getCatalog = (storeId: string) => loadCatalog(storeId)
+// The PUBLIC catalogue (live products only) is remembered for 15 seconds and shared by all visitors.
+const loadCatalog = memoKeyed(15_000, (storeId: string) => buildCatalog(storeId, false))
+// A PREVIEW catalogue (live + draft) is built fresh for the owner's own request and is never put in the shared memory,
+// so a draft can never leak to a customer through a cache.
+const loadPreviewCatalog = cache((storeId: string) => buildCatalog(storeId, true))
+
+export async function getCatalog(storeId: string) {
+  return (await isPreviewFor(storeId)) ? loadPreviewCatalog(storeId) : loadCatalog(storeId)
+}

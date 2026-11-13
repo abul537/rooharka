@@ -66,10 +66,11 @@ export async function deleteCollection(admin: StoreAdmin, id: string): Promise<s
 
 // ------------------------------------------------------------------ storefront
 /** A live collection of this store with the ids of its products in the owner's order, or null. */
-export async function getPublicCollection(storeId: string, handle: string) {
+export async function getPublicCollection(storeId: string, handle: string, preview = false) {
   if (!/^[a-z0-9-]{1,60}$/.test(handle)) return null
   return db.collection.findFirst({
-    where: { storeId, handle, isActive: true },
+    // In the owner's preview a hidden collection can be looked at too.
+    where: { storeId, handle, ...(preview ? {} : { isActive: true }) },
     select: { title: true, handle: true, description: true, products: { orderBy: { position: 'asc' }, select: { productId: true } } },
   })
 }

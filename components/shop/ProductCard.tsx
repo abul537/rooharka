@@ -24,6 +24,7 @@ export default function ProductCard({ item, currency, priority = false }: { item
           <div className="flex h-full items-center justify-center text-brand-600/50" aria-hidden><Package className="h-14 w-14" /></div>
         )}
         <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">
+          {item.isDraft && <span className="rounded-full bg-amber-500 px-2.5 py-1 text-xs font-semibold text-white">Draft: only you see this</span>}
           {item.soldOut && <span className="rounded-full bg-gray-900 px-2.5 py-1 text-xs font-semibold text-white">Sold out</span>}
           {!item.soldOut && off && <span className="rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white">{off}% off</span>}
           {item.isFeatured && !item.soldOut && <span className="rounded-full bg-brand-700 px-2.5 py-1 text-xs font-semibold text-white">Featured</span>}

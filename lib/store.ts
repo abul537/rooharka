@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { memoKeyed } from '@/lib/memo'
 import { hostCandidates, isValidDomain, normalizeHost } from '@/lib/domains'
 import { subdomainOf } from '@/lib/platform-host'
+import { isPreviewFor } from '@/lib/preview/server'
 
 /**
  * Which store (tenant) is this request for?
@@ -61,13 +62,18 @@ const resolveStore = cache(async () => {
  */
 export const getCurrentStore = cache(async () => {
   const store = await resolveStore()
-  return store && store.approval === 'APPROVED' ? store : null
+  if (!store) return null
+  // The owner previewing their own shop may see it before it is approved; nobody else can (see lib/preview).
+  return store.approval === 'APPROVED' || (await isPreviewFor(store.id)) ? store : null
 })
+
+/** The store at this address whatever its approval state. Only for the preview route, which then checks the visitor's pass. */
+export const getStoreForHost = resolveStore
 
 /** For the shop shell only: why the shop is closed (waiting for approval, or not approved with the owner's reason). */
 export const getShopClosure = cache(async () => {
   const store = await resolveStore()
-  return store && store.approval !== 'APPROVED' ? { name: store.name, approval: store.approval, note: store.note } : null
+  return store && store.approval !== 'APPROVED' && !(await isPreviewFor(store.id)) ? { name: store.name, approval: store.approval, note: store.note } : null
 })
 
 /** Store name for the dashboard header: remembered for 30 seconds. */
