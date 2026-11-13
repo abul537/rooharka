@@ -50,12 +50,6 @@ export const SERVICES: ServiceDef[] = [
     ],
   },
   {
-    key: 'postex', name: 'PostEx', type: 'COURIER',
-    description: 'Book parcels with PostEx directly from the order page. Get your API token in the PostEx merchant portal.',
-    credentials: [{ name: 'apiToken', label: 'API token', secret: true, required: true }],
-    config: [{ name: 'pickupAddressCode', label: 'Pickup address code', required: true, placeholder: '001', pattern: /^[A-Za-z0-9-]{1,20}$/, patternHint: 'The code shown for your pickup address in PostEx' }],
-  },
-  {
     key: 'leopards', name: 'Leopards Courier', type: 'COURIER',
     description: 'Book parcels with Leopards directly from the order page. Ask Leopards for your API key and password.',
     credentials: [

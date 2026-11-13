@@ -215,3 +215,15 @@ Every word and colour on a store's public site is controlled by its owner in the
 - Orders keep a snapshot of the unit (`OrderItem.unitCode`), so receipts, tracking, the admin order page and courier summaries read "1.5 kg" or "3 boxes". POS lite supports all three types.
 - Code: `lib/units/` (registry, quantity rules), `lib/variants/rules.ts`, `lib/admin/product-rules.ts`; tests in `tests/units.test.ts` and `tests/product-types.test.ts`.
 - After pulling run `pnpm db:push` (adds `Product.type/optionGroups/unitCode/qtyMin/qtyStep`, `ProductVariant.optionValues`, `OrderItem.unitCode`) and `pnpm exec prisma generate`.
+
+## Courier layer (PostEx)
+
+One contract for every courier: `lib/couriers/contract.ts` (the `CourierAdapter` interface, the one status vocabulary), `factory.ts` (name -> adapter), `vault.ts` (encrypted tokens), `webhook.ts` (the router), `idempotent.ts` (book at most once).
+
+- **Only `lib/couriers/postex.ts` knows PostEx** (endpoints, fields, status words). Order code never imports it.
+- **Add a courier:** one adapter file + one `case` in `factory.ts` + one 3-line route in `app/api/webhooks/<courier>/[tenantId]/route.ts`. No order code or database change.
+- **Vault:** table `tenant_courier_credentials`. Token is AES-256-GCM encrypted (key = `APP_SECRET` env var), bound to its store and courier, decrypted only inside `withCredentials` for one call; never logged, never returned.
+- **Connect:** Settings > PostEx. Paste token > Connect. A harmless read-only call proves it, only then is it saved.
+- **Automatic booking:** every new online order (and every confirmed advance payment) is booked after checkout answers the customer. The order number is the idempotency key. A claim row is written under an order row lock BEFORE the courier is called; a timeout leaves the claim, so a retry never books twice (the owner is told to check PostEx and use "Add shipment"). The daily job retries orders that were missed.
+- **Webhook:** `/api/webhooks/postex/<storeId>?key=<store key>` (the owner sees the link in Settings). Key is derived per store+courier; only that store's parcels are looked up. Statuses are saved as `label_created, picked_up, in_transit, out_for_delivery, delivered, exception` (stored as the existing `ShipmentStatus` values); PostEx wording is never stored.
+- **Before launch:** confirm the PostEx field names (cancel call, webhook body, webhook authentication) against PostEx's official docs/sandbox, then test with one real merchant token, real orders and real webhooks. This cannot be done without a PostEx merchant account.

@@ -48,9 +48,9 @@ import { encryptJson, decryptJson, signToken, verifyToken, maskSecret } from '@/
 
 const view = (key: string, o: Partial<ServiceView> = {}): ServiceView => ({ key, enabled: true, isDefault: false, values: {}, masked: {}, configured: true, lastError: null, lastCheckedAt: null, switchedOn: true, approval: 'APPROVED', decisionNote: null, ...o })
 test('pickService: default wins; a single enabled service is used; unconfigured/disabled are skipped', () => {
-  assert.equal(pickService([view('postex'), view('leopards', { isDefault: true })], 'COURIER'), 'leopards')
-  assert.equal(pickService([view('postex'), view('leopards', { enabled: false })], 'COURIER'), 'postex')
-  assert.equal(pickService([view('postex'), view('leopards')], 'COURIER'), null, 'two enabled, no default: ambiguous')
+  assert.equal(pickService([view('leopards', { isDefault: true })], 'COURIER'), 'leopards')
+  assert.equal(pickService([view('leopards')], 'COURIER'), 'leopards', 'a single enabled service is used')
+  assert.equal(pickService([view('leopards', { enabled: false })], 'COURIER'), null)
   assert.equal(pickService([view('twilio', { configured: false })], 'MESSAGING'), null)
   assert.equal(pickService([view('twilio')], 'COURIER'), null, 'wrong type')
 })

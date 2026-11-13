@@ -106,7 +106,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               return (
                 <div key={s.id} className="text-sm mb-2">
                   <p>
-                    {courierName(courierConfig, s.courier)} · <span className="font-mono">{s.courierTrackingNo}</span>
+                    {courierName(courierConfig, s.courier)} · {s.courierTrackingNo ? <span className="font-mono">{s.courierTrackingNo}</span> : <span className="text-amber-700">booking not confirmed. Check your {courierName(courierConfig, s.courier)} portal; if the parcel is there, add its tracking number below. {s.syncError}</span>}
                     {link && <a href={link} target="_blank" rel="noopener noreferrer" className="ml-2 underline text-slate-600">Track on courier site</a>}
                   </p>
                   {(s.syncedAt || s.syncError) && (

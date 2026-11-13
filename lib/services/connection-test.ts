@@ -26,7 +26,6 @@ export async function testConnection(key: string, c: SavedFields, config: SavedF
       if (r.ok) return { ok: true, message: 'Connected to Twilio.' }
       return { ok: false, error: r.status === 401 ? 'Twilio rejected the Account SID or Auth token.' : `Twilio answered with an error (${r.status}).` }
     }
-    case 'postex':
     case 'leopards':
       return ADAPTERS[key].check(c, config, f) // read-only: nothing is booked
     default:

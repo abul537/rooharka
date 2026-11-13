@@ -6,17 +6,17 @@ import { assertPublicHttpsUrl, isPrivateAddress } from '@/lib/net/safe-fetch'
 const G = (o: Record<string, string>) => ({ get: (k: string) => (k in o ? o[k] : null) })
 
 test('service forms: required, patterns, secrets keep old value when blank', () => {
-  const pe = serviceDef('postex')!
-  assert.ok(!parseServiceForm(pe, G({ 'postex.pickupAddressCode': '001' })).ok, 'token required')
-  const ok = parseServiceForm(pe, G({ 'postex.apiToken': 'tok123', 'postex.pickupAddressCode': '001' }))
-  assert.ok(ok.ok && ok.value.credentials.apiToken === 'tok123' && ok.value.config.pickupAddressCode === '001')
-  const keep = parseServiceForm(pe, G({ 'postex.pickupAddressCode': '002' }), { apiToken: 'saved-token' })
-  assert.ok(keep.ok && keep.value.credentials.apiToken === 'saved-token' && keep.value.config.pickupAddressCode === '002')
-  assert.ok(!parseServiceForm(pe, G({ 'postex.apiToken': 'x', 'postex.pickupAddressCode': 'bad code!' })).ok)
+  const lp = serviceDef('leopards')!
+  assert.ok(!parseServiceForm(lp, G({ 'leopards.originCity': 'Lahore' })).ok, 'key required')
+  const ok = parseServiceForm(lp, G({ 'leopards.apiKey': 'k1', 'leopards.apiPassword': 'pw', 'leopards.originCity': 'Lahore' }))
+  assert.ok(ok.ok && ok.value.credentials.apiKey === 'k1' && ok.value.config.originCity === 'Lahore')
+  const keep = parseServiceForm(lp, G({ 'leopards.apiKey': 'k1', 'leopards.originCity': 'Karachi' }), { apiPassword: 'saved-pw' })
+  assert.ok(keep.ok && keep.value.credentials.apiPassword === 'saved-pw' && keep.value.config.originCity === 'Karachi')
+  assert.ok(!parseServiceForm(lp, G({ 'leopards.apiKey': 'k', 'leopards.apiPassword': 'p', 'leopards.originCity': 'bad city 123' })).ok)
   const cl = serviceDef('cloudinary')!
   assert.ok(!parseServiceForm(cl, G({ 'cloudinary.cloudName': 'my cloud', 'cloudinary.apiKey': '123456', 'cloudinary.apiSecret': 's' })).ok)
   assert.ok(parseServiceForm(cl, G({ 'cloudinary.cloudName': 'my-cloud', 'cloudinary.apiKey': '123456', 'cloudinary.apiSecret': 's' })).ok)
-  assert.ok(!parseServiceForm(pe, G({ 'postex.apiToken': 'x'.repeat(601), 'postex.pickupAddressCode': '1' })).ok)
+  assert.ok(!parseServiceForm(lp, G({ 'leopards.apiKey': 'x'.repeat(601), 'leopards.apiPassword': 'p', 'leopards.originCity': 'Lahore' })).ok)
   assert.ok(SERVICES.every((s) => s.key && s.credentials.length + s.config.length > 0))
 })
 test('SSRF guard: private/internal addresses refused', async () => {

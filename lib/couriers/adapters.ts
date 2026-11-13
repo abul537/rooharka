@@ -1,4 +1,5 @@
 /**
+ * LEGACY courier adapters (Leopards). New couriers use the contract in contract.ts + factory.ts (see postex.ts).
  * Courier adapters: ONE interface, one small file per courier. The order page only talks to this
  * interface, so supporting another company later means adding one adapter + one registry entry.
  *
@@ -64,19 +65,6 @@ const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 const makeEvent = (text: string, at: unknown, location: string | null = null): TrackEvent => ({ status: mapCourierStatus(text), text: shorten(text, 160), location: location || null, at: parseCourierDate(at) })
 
 /**
- * PostEx tracking reply -> our shape. Defensive: anything missing gives an empty result, never a crash.
- * Expected: { statusCode: "200", dist: { transactionStatus, transactionStatusHistory: [{ transactionStatusMessage, updatedAt }] } }
- */
-export function parsePostexTrack(json: unknown): { statusText: string; events: TrackEvent[] } | null {
-  const body = obj(json)
-  if (str(body.statusCode) !== '200') return null
-  const dist = obj(body.dist)
-  const statusText = str(dist.transactionStatus)
-  const events = arr(dist.transactionStatusHistory).map(obj).map((h) => makeEvent(str(h.transactionStatusMessage), str(h.updatedAt))).filter((e) => e.text)
-  return statusText || events.length ? { statusText, events } : null
-}
-
-/**
  * Leopards tracking reply -> our shape.
  * Expected: { status: 1, packet_list: [{ booked_packet_status, "Tracking Detail": [{ Status, Reason, Activity_Date, Activity_Time, Location }] }] }
  */
@@ -94,58 +82,6 @@ export function parseLeopardsTrack(json: unknown): { statusText: string; events:
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const str = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '')
 const shorten = (s: string, n = 200) => (s.length > n ? `${s.slice(0, n)}…` : s)
-
-// ============================================================================ PostEx
-const POSTEX = 'https://api.postex.pk/services/integration/api/order'
-
-export const postexAdapter: CourierAdapter = {
-  key: 'postex',
-
-  async book(i, c, cfg, f = fetch) {
-    const r = await request(f, `${POSTEX}/v3/create-order`, {
-      method: 'POST',
-      headers: { token: c.apiToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cityName: i.city,
-        customerName: i.customerName,
-        customerPhone: i.phone,
-        deliveryAddress: i.address,
-        invoiceDivision: 1,
-        invoicePayment: String(Math.round(i.codAmount)),
-        items: i.itemCount,
-        orderDetail: shorten(i.itemsSummary, 250),
-        // The order number doubles as PostEx's own reference, which helps them reject duplicates.
-        orderRefNumber: i.orderNumber,
-        orderType: 'Normal',
-        transactionNotes: shorten(i.notes ?? '', 200),
-        pickupAddressCode: cfg.pickupAddressCode,
-      }),
-    })
-    if ('error' in r) return { ok: false, error: r.error }
-    const body = obj(r.json)
-    const tn = str(obj(body.dist).trackingNumber)
-    if (str(body.statusCode) === '200' && isValidTrackingNo(tn)) return { ok: true, trackingNo: tn, raw: r.json }
-    if (r.status === 401 || r.status === 403) return { ok: false, error: 'PostEx rejected your API token. Check it in Settings > Couriers.' }
-    return { ok: false, error: `PostEx did not accept this parcel: ${shorten(str(body.statusMessage) || `status ${r.status}`)}` }
-  },
-
-  async check(c, _cfg, f = fetch) {
-    const r = await request(f, `${POSTEX}/v1/get-operational-city`, { headers: { token: c.apiToken } })
-    if ('error' in r) return { ok: false, error: r.error }
-    if (r.status === 401 || r.status === 403) return { ok: false, error: 'PostEx rejected your API token.' }
-    if (r.status >= 200 && r.status < 300 && str(obj(r.json).statusCode) === '200') return { ok: true, message: 'Connected to PostEx.' }
-    return { ok: false, error: `PostEx answered with an unexpected reply (status ${r.status}).` }
-  },
-
-  async track(tn, c, _cfg, f = fetch) {
-    const r = await request(f, `${POSTEX}/v1/track-order/${encodeURIComponent(tn)}`, { headers: { token: c.apiToken } }, true)
-    if ('error' in r) return { ok: false, error: r.error }
-    if (r.status === 401 || r.status === 403) return { ok: false, error: 'PostEx rejected your API token. Check it in Settings > Couriers.' }
-    const parsed = parsePostexTrack(r.json)
-    if (!parsed) return { ok: false, error: shorten(`PostEx has no tracking news for ${tn} yet${str(obj(r.json).statusMessage) ? `: ${str(obj(r.json).statusMessage)}` : ''}.`) }
-    return { ok: true, ...parsed }
-  },
-}
 
 // ========================================================================== Leopards
 const LEOPARDS = 'https://merchantapi.leopardscourier.com/api'
@@ -225,4 +161,4 @@ export const leopardsAdapter: CourierAdapter = {
   },
 }
 
-export const ADAPTERS: Record<string, CourierAdapter> = { postex: postexAdapter, leopards: leopardsAdapter }
+export const ADAPTERS: Record<string, CourierAdapter> = { leopards: leopardsAdapter }

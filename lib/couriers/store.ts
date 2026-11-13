@@ -3,6 +3,7 @@ import type { Prisma } from '@/lib/generated/prisma/client'
 import { loadServiceViews } from '@/lib/services/store-services'
 import { ADAPTERS } from '@/lib/couriers/adapters'
 import { readCourierConfig, type CourierConfig } from '@/lib/couriers/config'
+import { connectedProviders } from '@/lib/couriers/vault'
 
 export async function loadCourierConfig(storeId: string): Promise<CourierConfig> {
   const s = await db.storeSettings.findUnique({ where: { storeId }, select: { extra: true } })
@@ -11,8 +12,8 @@ export async function loadCourierConfig(storeId: string): Promise<CourierConfig>
 
 /** The config plus which couriers have the owner's own account connected (those can be booked automatically). */
 export async function loadCourierSetup(storeId: string) {
-  const [config, views] = await Promise.all([loadCourierConfig(storeId), loadServiceViews(storeId)])
-  const connected = new Set(Object.keys(ADAPTERS).filter((k) => { const v = views.get(k); return !!v?.enabled && v.configured }))
+  const [config, views, vault] = await Promise.all([loadCourierConfig(storeId), loadServiceViews(storeId), connectedProviders(storeId)])
+  const connected = new Set([...Object.keys(ADAPTERS).filter((k) => { const v = views.get(k); return !!v?.enabled && v.configured }), ...vault])
   return { config, connected, views }
 }
 

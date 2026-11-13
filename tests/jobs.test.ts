@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { checkCronAuth, MIN_CRON_SECRET } from '@/lib/cron-auth'
 import { jobHealth } from '@/lib/job-rules'
 import { currentStatus, eventKey, isFinished, mapCourierStatus, orderTargetFor, parseCourierDate, shouldAdvance } from '@/lib/couriers/status'
-import { parseLeopardsTrack, parsePostexTrack, postexAdapter, leopardsAdapter } from '@/lib/couriers/adapters'
+import { parseLeopardsTrack, leopardsAdapter } from '@/lib/couriers/adapters'
 import { parseCourierForm, readCourierConfig } from '@/lib/couriers/config'
 
 // ------------------------------------------------------------- cron secret
@@ -92,16 +92,6 @@ test('courier dates: ISO, Pakistani day-first, and refusal of nonsense', () => {
 })
 
 // -------------------------------------------------- tracking reply parsing
-test('PostEx tracking reply is read; broken replies give null', () => {
-  const ok = parsePostexTrack({ statusCode: '200', dist: { transactionStatus: 'Out For Delivery', transactionStatusHistory: [
-    { transactionStatusMessage: 'Booked', updatedAt: '2026-10-20 10:00:00' }, { transactionStatusMessage: 'Out For Delivery', updatedAt: '2026-10-22 09:30:00' }] } })
-  assert.equal(ok?.statusText, 'Out For Delivery')
-  assert.equal(ok?.events.length, 2)
-  assert.equal(ok?.events[1].status, 'OUT_FOR_DELIVERY')
-  assert.equal(ok?.events[1].at?.toISOString(), '2026-10-22T04:30:00.000Z')
-  for (const bad of [null, 'text', {}, { statusCode: '500' }, { statusCode: '200' }, { statusCode: '200', dist: {} }, { statusCode: '200', dist: { transactionStatusHistory: 'x' } }]) assert.equal(parsePostexTrack(bad), null, JSON.stringify(bad))
-})
-
 test('Leopards tracking reply is read; broken replies give null', () => {
   const ok = parseLeopardsTrack({ status: 1, packet_list: [{ booked_packet_status: 'Delivered', 'Tracking Detail': [
     { Status: 'Pending', Activity_Date: '2026-10-20', Activity_Time: '10:00:00' }, { Status: 'Delivered', Reason: 'Received by owner', Activity_Date: '2026-10-23', Activity_Time: '16:00:00', Location: 'Lahore' }] }] })
@@ -114,20 +104,6 @@ test('Leopards tracking reply is read; broken replies give null', () => {
 
 // ------------------------------------------- adapters (network is injected)
 const reply = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch
-
-test('PostEx track: success, bad token, no news, network failure', async () => {
-  const good = await postexAdapter.track('TN12345', { apiToken: 't' }, {}, reply({ statusCode: '200', dist: { transactionStatus: 'Delivered', transactionStatusHistory: [] } }))
-  assert.deepEqual(good.ok && good.statusText, 'Delivered')
-  const calls: string[] = []
-  await postexAdapter.track('TN 12/3', { apiToken: 't' }, {}, (async (url: string) => { calls.push(String(url)); return new Response('{}') }) as unknown as typeof fetch)
-  assert.ok(calls[0].endsWith('/v1/track-order/TN%2012%2F3')) // the tracking number is URL-encoded
-  const denied = await postexAdapter.track('TN12345', { apiToken: 'bad' }, {}, reply({}, 401))
-  assert.equal(!denied.ok && /rejected your API token/.test(denied.error), true)
-  const none = await postexAdapter.track('TN12345', { apiToken: 't' }, {}, reply({ statusCode: '404', statusMessage: 'Not found' }))
-  assert.equal(!none.ok && /no tracking news/.test(none.error), true)
-  const down = await postexAdapter.track('TN12345', { apiToken: 't' }, {}, (async () => { throw new Error('boom') }) as unknown as typeof fetch)
-  assert.equal(!down.ok && /We will ask again/.test(down.error), true)
-})
 
 test('Leopards track: success and rejected key; secrets never appear in errors', async () => {
   const good = await leopardsAdapter.track('LH123456', { apiKey: 'K', apiPassword: 'P' }, {}, reply({ status: 1, packet_list: [{ booked_packet_status: 'Pending', 'Tracking Detail': [] }] }))

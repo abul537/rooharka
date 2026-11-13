@@ -1,6 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
+import { autoBookOrder } from '@/lib/couriers/booking'
 import { adminOrError } from '@/lib/auth/guard'
 import { audit } from '@/lib/audit'
 import { AdminError, addShipment, bookShipment, cancelOrder, changeOrderStatus, confirmPayment, rejectPayment } from '@/lib/admin/orders'
@@ -51,6 +53,8 @@ export async function paymentAction(_: ActionState, fd: FormData): Promise<Actio
   try {
     const r = decision === 'confirm' ? await confirmPayment(g.admin, orderId, paymentId) : await rejectPayment(g.admin, orderId, paymentId)
     await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: `payment.${decision}`, entity: 'Payment', entityId: paymentId, after: { orderId, reference: r.reference } })
+    // The advance is in: now the parcel can be booked with the courier (safe if it was already booked).
+    if (decision === 'confirm') after(() => autoBookOrder(g.admin.storeId, orderId).catch((e) => console.error('[auto booking] after payment failed', e instanceof Error ? e.message : e)))
     return done(orderId, decision === 'confirm' ? 'Payment confirmed.' : 'Payment rejected.')
   } catch (e) { return fail(e) }
 }

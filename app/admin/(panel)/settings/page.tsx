@@ -6,6 +6,9 @@ import ServiceCard from '@/components/admin/ServiceCard'
 import { loadServiceViews } from '@/lib/services/store-services'
 import { loadCourierConfig } from '@/lib/couriers/store'
 import CourierSettings from '@/components/admin/CourierSettings'
+import PostexConnect from '@/components/admin/PostexConnect'
+import { connectionStatus, webhookKey } from '@/lib/couriers/vault'
+import { headers } from 'next/headers'
 import OtpSettings from '@/components/admin/OtpSettings'
 import { loadOtpSettings } from '@/lib/otp/service'
 import { DEFAULT_OTP_SETTINGS } from '@/lib/otp/rules'
@@ -29,6 +32,8 @@ const POLICY_TEXT: Record<string, string> = {
 export default async function SettingsPage() {
   const admin = await requireAdmin('settings.edit')
   const [{ settings: s, wallets, fields, productPage: pp }, services, courierConfig, otp] = await Promise.all([loadSettings(admin.storeId), loadServiceViews(admin.storeId), loadCourierConfig(admin.storeId), loadOtpSettings(admin.storeId)])
+  const [postex, host] = await Promise.all([connectionStatus(admin.storeId, 'postex'), headers().then((h) => h.get('host') ?? '')])
+  const webhookUrl = `https://${host}/api/webhooks/postex/${admin.storeId}?key=${webhookKey(admin.storeId, 'postex')}`
   if (!s) return <p>Store settings are missing. Run the seed again.</p>
 
   return (
@@ -102,6 +107,7 @@ export default async function SettingsPage() {
 
       <OtpSettings otp={otp ?? DEFAULT_OTP_SETTINGS} views={services} />
 
+      <PostexConnect connected={postex.connected} lastError={postex.lastError} webhookUrl={webhookUrl} />
       <CourierSettings config={courierConfig} views={services} />
 
       <Card title="Order tracking" hint="Customers track orders at /track with their tracking code.">

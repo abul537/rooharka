@@ -220,6 +220,7 @@ model Store {
   domains       StoreDomain[]
   users         User[]
   services      StoreService[]
+  courierCredentials TenantCourierCredential[]
   subscription  Subscription?
   invoices      Invoice[]
   tickets       SupportTicket[]
@@ -1105,6 +1106,24 @@ model JobRun {
   error      String?
 
   @@index([name, startedAt])
+}
+
+/// The courier credential vault: one row per store and courier. The token is AES-256-GCM encrypted with a key that
+/// lives only in the environment (APP_SECRET), never in this table. Never selected into a page or API response.
+model TenantCourierCredential {
+  id             String   @id @default(cuid())
+  storeId        String   @map("tenant_id")
+  provider       String   // postex
+  encryptedToken String   @map("encrypted_token")
+  isActive       Boolean  @default(true) @map("is_active")
+  lastError      String?  @map("last_error") // why the last automatic booking failed, shown to the owner
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, provider])
+  @@map("tenant_courier_credentials")
 }
 
 model Shipment {

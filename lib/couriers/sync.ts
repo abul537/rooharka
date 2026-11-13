@@ -1,12 +1,15 @@
 import { db } from '@/lib/db'
-import { audit } from '@/lib/audit'
-import { AdminError, changeOrderStatus } from '@/lib/admin/orders'
+import { AdminError } from '@/lib/admin/orders'
 import type { OrderStatus } from '@/lib/admin/order-rules'
 import { ADAPTERS } from '@/lib/couriers/adapters'
 import { courierName, readCourierConfig, type CourierConfig } from '@/lib/couriers/config'
-import { currentStatus, eventKey, isFinished, orderTargetFor, shouldAdvance, type ShipmentStatus } from '@/lib/couriers/status'
+import { currentStatus, isFinished, type ShipmentStatus, type TrackEvent } from '@/lib/couriers/status'
 import { serviceDef } from '@/lib/services/registry'
 import { getServiceSecrets, recordServiceResult, type ServiceSecrets } from '@/lib/services/store-services'
+import { STORED_STATUS, isCourierError } from '@/lib/couriers/contract'
+import { CONTRACT_COURIERS, getCourierAdapter, isContractCourier } from '@/lib/couriers/factory'
+import { isConnected, recordCourierResult, withCredentials } from '@/lib/couriers/vault'
+import { advanceShipment, followOrder, saveEvents, type ShipmentRef } from '@/lib/couriers/news'
 
 /**
  * Asks each courier (with the STORE'S OWN account) where its parcels are, saves the news on the shipment, and,
@@ -18,7 +21,6 @@ import { getServiceSecrets, recordServiceResult, type ServiceSecrets } from '@/l
 const WINDOW_DAYS = 45
 const CONCURRENCY = 4
 const MAX_PER_RUN = 200
-const MAX_EVENTS_SAVED = 40
 
 export interface SyncOutcome {
   orderNumber: string
@@ -34,7 +36,7 @@ export interface SyncSummary { checked: number; shipmentsUpdated: number; orders
 
 type Row = Awaited<ReturnType<typeof loadRows>>[number]
 const loadRows = (where: object, take: number) => db.shipment.findMany({
-  where: { courierTrackingNo: { not: null }, courier: { in: Object.keys(ADAPTERS) }, order: { status: { in: ['SHIPPED', 'OUT_FOR_DELIVERY'] } }, bookedAt: { gte: new Date(Date.now() - WINDOW_DAYS * 86_400_000) }, ...where },
+  where: { courierTrackingNo: { not: null }, courier: { in: [...CONTRACT_COURIERS, ...Object.keys(ADAPTERS)] }, order: { status: { in: ['SHIPPED', 'OUT_FOR_DELIVERY'] } }, bookedAt: { gte: new Date(Date.now() - WINDOW_DAYS * 86_400_000) }, ...where },
   orderBy: [{ syncedAt: { sort: 'asc', nulls: 'first' } }, { bookedAt: 'asc' }],
   take,
   select: { id: true, courier: true, courierTrackingNo: true, status: true, order: { select: { id: true, number: true, status: true, storeId: true } } },
@@ -45,54 +47,57 @@ const complete = (courier: string, s: ServiceSecrets | null) => {
   return !!s?.enabled && !!def && def.credentials.filter((f) => f.required).every((f) => s.credentials[f.name]) && def.config.filter((f) => f.required).every((f) => s.config[f.name])
 }
 
+/** Asks the courier about one parcel. `current` is the parcel's status when the courier already speaks our vocabulary. */
+type Tracker = (tn: string) => Promise<{ ok: true; statusText: string; events: TrackEvent[]; current?: ShipmentStatus | null } | { ok: false; error: string }>
+
+/** How to ask THIS store's courier, or null when it is not connected (nothing to ask). Contract couriers use the vault; older ones the service settings. */
+async function trackerFor(storeId: string, courier: string, legacy: ServiceSecrets | null): Promise<Tracker | null> {
+  if (isContractCourier(courier)) {
+    if (!(await isConnected(storeId, courier))) return null
+    const adapter = getCourierAdapter(courier)
+    return async (tn) => {
+      try {
+        const events = await withCredentials(storeId, courier, (c) => adapter.track(tn, c))
+        const mapped: TrackEvent[] = events.map((e) => ({ status: STORED_STATUS[e.status], text: e.description, location: e.location, at: e.occurredAt }))
+        const last = events[events.length - 1]
+        return { ok: true, statusText: last?.description ?? '', events: mapped, current: last ? STORED_STATUS[last.status] : null }
+      } catch (e) { return { ok: false, error: isCourierError(e) ? e.message : 'Could not ask the courier.' } }
+    }
+  }
+  if (!legacy || !complete(courier, legacy) || !ADAPTERS[courier]) return null
+  return (tn) => ADAPTERS[courier].track(tn, legacy.credentials, legacy.config)
+}
+
+const recordResult = (storeId: string, courier: string, error: string | null) =>
+  (isContractCourier(courier) ? recordCourierResult(storeId, courier, error) : recordServiceResult(storeId, courier, error)).catch(() => {})
+
 /** One parcel: ask, save the news, maybe move the order. Never throws for a courier problem. */
-async function syncOne(row: Row, secrets: ServiceSecrets, config: CourierConfig): Promise<SyncOutcome> {
+async function syncOne(row: Row, track: Tracker, config: CourierConfig): Promise<SyncOutcome> {
   const base = { orderNumber: row.order.number, courierSays: null as string | null, status: null as ShipmentStatus | null, shipmentChanged: false, orderMovedTo: null as OrderStatus | null, error: null as string | null }
   const now = new Date()
   const tn = row.courierTrackingNo!
-  let status = row.status as ShipmentStatus
+  const ref: ShipmentRef = { id: row.id, courier: row.courier, trackingNo: tn, status: row.status as ShipmentStatus, orderId: row.order.id, orderStatus: row.order.status as OrderStatus, storeId: row.order.storeId }
+  let status = ref.status
   let courierSays: string | null = null
 
   if (!isFinished(status)) {
-    const r = await ADAPTERS[row.courier].track(tn, secrets.credentials, secrets.config)
+    const r = await track(tn)
     if (!r.ok) {
       await db.shipment.update({ where: { id: row.id }, data: { syncedAt: now, syncError: r.error.slice(0, 200) } })
-      await recordServiceResult(row.order.storeId, row.courier, r.error.slice(0, 200)).catch(() => {})
+      await recordResult(row.order.storeId, row.courier, r.error.slice(0, 200))
       return { ...base, error: r.error }
     }
     courierSays = r.statusText || r.events[0]?.text || null
-    const seen = currentStatus(r.statusText, r.events)
-
-    const existing = await db.shipmentEvent.findMany({ where: { shipmentId: row.id }, select: { status: true, description: true, occurredAt: true } })
-    const known = new Set(existing.map((e) => eventKey({ status: e.status, text: e.description ?? '', at: e.occurredAt })))
-    const fresh = r.events.filter((e) => e.status && e.at && !known.has(eventKey(e))).slice(0, MAX_EVENTS_SAVED)
-    if (fresh.length) await db.shipmentEvent.createMany({ data: fresh.map((e) => ({ shipmentId: row.id, status: e.status!, description: e.text, location: e.location, occurredAt: e.at! })) })
-
-    const advance = !!seen && shouldAdvance(status, seen)
-    await db.shipment.update({
-      where: { id: row.id },
-      data: { syncedAt: now, syncError: null, ...(advance ? { status: seen!, ...(seen === 'DELIVERED' ? { deliveredAt: now } : {}) } : {}) },
-    })
-    await recordServiceResult(row.order.storeId, row.courier, null).catch(() => {})
-    if (advance) { status = seen!; base.shipmentChanged = true }
+    const seen = r.current ?? currentStatus(r.statusText, r.events)
+    await saveEvents(row.id, r.events)
+    const moved = await advanceShipment(ref, seen, now)
+    await db.shipment.update({ where: { id: row.id }, data: { syncedAt: now, syncError: null } })
+    await recordResult(row.order.storeId, row.courier, null)
+    if (moved) { status = moved; base.shipmentChanged = true }
   }
   base.courierSays = courierSays
   base.status = status
-
-  // The order follows the parcel only when the owner asked for that.
-  if (config.autoUpdate) {
-    const target = orderTargetFor(status, row.order.status as OrderStatus)
-    if (target) {
-      try {
-        const done = await changeOrderStatus({ storeId: row.order.storeId, id: null }, row.order.id, target)
-        await audit({ storeId: row.order.storeId, userId: null, action: 'order.status_auto', entity: 'Order', entityId: row.order.id, before: { status: done.before }, after: { status: done.after, courier: row.courier, trackingNo: tn } })
-        base.orderMovedTo = target
-      } catch (e) {
-        // A rule said no (e.g. the owner changed the order a moment ago): leave it for the owner.
-        if (!(e instanceof AdminError)) throw e
-      }
-    }
-  }
+  base.orderMovedTo = await followOrder({ ...ref, status }, status, config)
   return base
 }
 
@@ -126,10 +131,11 @@ export async function syncAllCouriers(budgetMs = 45_000): Promise<SyncSummary> {
   sum.timeLeft = await mapLimit(rows, CONCURRENCY, Date.now() + budgetMs, async (row) => {
     try {
       const config = configs.get(row.order.storeId) ?? readCourierConfig(null)
-      const secrets = await secretsFor(row.order.storeId, row.courier)
+      const secrets = isContractCourier(row.courier) ? null : await secretsFor(row.order.storeId, row.courier)
+      const track = await trackerFor(row.order.storeId, row.courier, secrets)
       // Not connected (or switched off): nothing to ask. Finished parcels only matter if orders follow automatically.
-      if (!secrets || !complete(row.courier, secrets) || (isFinished(row.status as ShipmentStatus) && !config.autoUpdate)) { sum.skipped++; return }
-      const o = await syncOne(row, secrets, config)
+      if (!track || (isFinished(row.status as ShipmentStatus) && !config.autoUpdate)) { sum.skipped++; return }
+      const o = await syncOne(row, track, config)
       sum.checked++
       if (o.error) sum.errors++
       if (o.shipmentChanged) sum.shipmentsUpdated++
@@ -153,9 +159,10 @@ export async function syncOrder(admin: { storeId: string }, orderId: string): Pr
   const lines: string[] = []
   for (const row of rows) {
     const name = courierName(config, row.courier)
-    const secrets = await getServiceSecrets(admin.storeId, row.courier).catch(() => null)
-    if (!secrets || !complete(row.courier, secrets)) { lines.push(`${name}: connect and switch on your ${name} account in Settings > Couriers to refresh.`); continue }
-    const o = await syncOne(row, secrets, config)
+    const secrets = isContractCourier(row.courier) ? null : await getServiceSecrets(admin.storeId, row.courier).catch(() => null)
+    const track = await trackerFor(admin.storeId, row.courier, secrets)
+    if (!track) { lines.push(`${name}: connect and switch on your ${name} account in Settings > Couriers to refresh.`); continue }
+    const o = await syncOne(row, track, config)
     lines.push(o.error ? `${name}: ${o.error}` : `${name} says: “${o.courierSays ?? 'no news yet'}”.${o.orderMovedTo ? ` The order is now ${o.orderMovedTo.toLowerCase().replace(/_/g, ' ')}.` : config.autoUpdate ? '' : ' Orders are not set to update automatically; change the order status yourself if this is right.'}`)
   }
   return { lines, config }

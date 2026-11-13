@@ -4,6 +4,8 @@ import type { StoreAdmin } from '@/lib/auth/guard'
 import { afterPaymentReceived, checkTransition, isValidTrackingNo, label, type OrderStatus } from './order-rules'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { ADAPTERS, type BookingInput } from '@/lib/couriers/adapters'
+import { isContractCourier } from '@/lib/couriers/factory'
+import { bookOrderWithCourier } from '@/lib/couriers/booking'
 import { courierName, isKnownCourier, readCourierConfig } from '@/lib/couriers/config'
 import { serviceDef } from '@/lib/services/registry'
 import { getServiceSecrets, recordServiceResult } from '@/lib/services/store-services'
@@ -156,6 +158,8 @@ export async function addShipment(admin: StoreAdmin, orderId: string, courier: s
     if (order.status !== 'PACKED' && order.status !== 'SHIPPED') throw new AdminError('Mark the order as Packed before adding a shipment.')
     if (order.payments.some((p) => p.method !== 'COD' && p.status === 'PENDING')) throw new AdminError('Confirm or reject the advance payment first.')
 
+    // An unfinished automatic booking (no tracking number yet) is replaced by the number the owner found at the courier.
+    await tx.shipment.deleteMany({ where: { orderId: order.id, courier, courierTrackingNo: null } })
     await tx.shipment.create({
       data: {
         orderId: order.id, courier, courierTrackingNo: tn, status: 'CREATED',
@@ -179,6 +183,7 @@ const booking = new Set<string>()
 
 /** Books the parcel through the courier's API with the STORE'S OWN account, then records it like a manual shipment. */
 export async function bookShipment(admin: StoreAdmin, orderId: string, courier: string) {
+  if (isContractCourier(courier)) return bookViaContract(admin, orderId, courier)
   const adapter = ADAPTERS[courier]
   if (!adapter) throw new AdminError('Automatic booking is not available for this courier. Book on their website and add the tracking number instead.')
   if (booking.has(orderId)) throw new AdminError('This order is already being booked. Please wait a moment.')
@@ -228,4 +233,23 @@ export async function bookShipment(admin: StoreAdmin, orderId: string, courier: 
   } finally {
     booking.delete(orderId)
   }
+}
+
+/** The "Book" button for couriers on the contract: same once-only booking as the automatic path, then the order is marked shipped. */
+async function bookViaContract(admin: StoreAdmin, orderId: string, courier: string) {
+  const [order, settings] = await Promise.all([
+    db.order.findFirst({ where: { id: orderId, storeId: admin.storeId }, select: { status: true, number: true } }),
+    db.storeSettings.findUnique({ where: { storeId: admin.storeId }, select: { extra: true } }),
+  ])
+  if (!order) throw new AdminError('Order not found.')
+  const name = courierName(readCourierConfig(settings?.extra), courier)
+  if (order.status !== 'PACKED' && order.status !== 'PLACED' && order.status !== 'CONFIRMED') throw new AdminError(order.status === 'SHIPPED' ? 'This order is already shipped.' : 'This order can no longer be booked.')
+  const out = await bookOrderWithCourier(admin.storeId, orderId, courier)
+  if (out.status === 'failed') throw new AdminError(out.message)
+  if (out.status === 'pending') throw new AdminError(`A booking with ${name} was started earlier and its result is not confirmed. Check your ${name} portal: if the parcel is there, use “Add shipment” with its tracking number. Nothing was booked again.`)
+  if (out.status === 'skipped') throw new AdminError(out.reason)
+  if (order.status === 'PACKED') {
+    await changeOrderStatus(admin, orderId, 'SHIPPED', `Handed to ${name} (tracking no. ${out.trackingNumber})`)
+  }
+  return { number: order.number, courier, trackingNo: out.trackingNumber, name }
 }

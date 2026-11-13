@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   courierName, courierOptions, DEFAULT_COURIER_CONFIG, parseCourierForm, readCourierConfig, trackingLink, validateTrackingTemplate,
 } from '@/lib/couriers/config'
-import { findLeopardsCity, leopardsAdapter, postexAdapter, type BookingInput } from '@/lib/couriers/adapters'
+import { findLeopardsCity, leopardsAdapter, type BookingInput } from '@/lib/couriers/adapters'
 
 const form = (o: Record<string, string>) => ({ get: (k: string) => o[k] ?? null })
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
@@ -102,53 +102,6 @@ const input: BookingInput = {
   codAmount: 2500, itemCount: 2, itemsSummary: 'Oil 50ml x2', shipper: { name: 'MPPMHK', phone: '03111111111', email: '' },
 }
 
-test('PostEx books: sends token and COD, returns the tracking number', async () => {
-  let seen: { url: string; init: RequestInit } | null = null
-  const f = (async (url: string, init: RequestInit) => { seen = { url, init }; return json({ statusCode: '200', statusMessage: 'ok', dist: { trackingNumber: '24500012345' } }) }) as unknown as typeof fetch
-  const r = await postexAdapter.book(input, { apiToken: 'tok' }, { pickupAddressCode: '001' }, f)
-  assert.deepEqual(r.ok && r.trackingNo, '24500012345')
-  const body = JSON.parse(String(seen!.init.body))
-  assert.equal(seen!.url.startsWith('https://'), true)
-  assert.equal((seen!.init.headers as Record<string, string>).token, 'tok')
-  assert.equal(body.invoicePayment, '2500')
-  assert.equal(body.orderRefNumber, '1001')
-  assert.equal(body.pickupAddressCode, '001')
-})
-
-test('PostEx: courier errors become readable messages and book nothing', async () => {
-  const bad = (async () => json({ statusCode: '400', statusMessage: 'Invalid city' })) as unknown as typeof fetch
-  const r = await postexAdapter.book(input, { apiToken: 't' }, { pickupAddressCode: '1' }, bad)
-  assert.equal(r.ok, false)
-  assert.match(!r.ok ? r.error : '', /Invalid city/)
-
-  const unauthorised = (async () => json({}, 401)) as unknown as typeof fetch
-  const u = await postexAdapter.book(input, { apiToken: 't' }, { pickupAddressCode: '1' }, unauthorised)
-  assert.match(!u.ok ? u.error : '', /token/i)
-})
-
-test('PostEx: a "success" without a usable tracking number is NOT treated as booked', async () => {
-  for (const dist of [{}, { trackingNumber: '' }, { trackingNumber: 'x' }, { trackingNumber: '<script>' }]) {
-    const f = (async () => json({ statusCode: '200', dist })) as unknown as typeof fetch
-    const r = await postexAdapter.book(input, { apiToken: 't' }, { pickupAddressCode: '1' }, f)
-    assert.equal(r.ok, false, JSON.stringify(dist))
-  }
-})
-
-test('network failure and unreadable replies are handled', async () => {
-  const down = (async () => { throw new Error('ECONNRESET') }) as unknown as typeof fetch
-  const a = await postexAdapter.book(input, { apiToken: 't' }, { pickupAddressCode: '1' }, down)
-  assert.match(!a.ok ? a.error : '', /Nothing was booked/)
-  const html = (async () => new Response('<html>502</html>', { status: 502 })) as unknown as typeof fetch
-  const b = await postexAdapter.check({ apiToken: 't' }, {}, html)
-  assert.equal(b.ok, false)
-})
-
-test('PostEx check: ok / rejected', async () => {
-  const ok = (async () => json({ statusCode: '200', dist: [] })) as unknown as typeof fetch
-  assert.equal((await postexAdapter.check({ apiToken: 't' }, {}, ok)).ok, true)
-  const no = (async () => json({}, 403)) as unknown as typeof fetch
-  assert.equal((await postexAdapter.check({ apiToken: 't' }, {}, no)).ok, false)
-})
 
 test('Leopards: city names are matched to Leopards ids, case-insensitively', () => {
   const list = [{ id: '1', name: 'Lahore' }, { id: '2', name: 'Karachi' }]
