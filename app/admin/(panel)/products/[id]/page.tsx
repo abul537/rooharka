@@ -2,12 +2,17 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth/guard'
 import { can } from '@/lib/auth/permissions'
-import { getProductForEdit, listMedia, loadSections } from '@/lib/admin/products'
+import { headers } from 'next/headers'
+import { getProductForEdit, listMedia, listOrganisation, loadSections } from '@/lib/admin/products'
+import { margin } from '@/lib/admin/product-extras'
+import { formatPrice } from '@/lib/format'
+import SeoFields from '@/components/admin/SeoFields'
+import { duplicateProductAction } from '../actions'
 import { listCategories } from '@/lib/admin/categories'
 import { loadServiceViews } from '@/lib/services/store-services'
 import { COUNT_UNITS, fromBase, getUnit } from '@/lib/units/registry'
 import { optionGroupsToText, readOptionGroups, readOptionValues } from '@/lib/variants/rules'
-import { PAIR_TYPES, PRODUCT_STATUSES, SECTION_TYPES, SECTION_TYPE_LABEL, sectionItemsToText, type SectionType } from '@/lib/admin/product-rules'
+import { PAIR_TYPES, SECTION_TYPES, SECTION_TYPE_LABEL, sectionItemsToText, type SectionType } from '@/lib/admin/product-rules'
 import ActionForm from '@/components/admin/ActionForm'
 import MediaManager from '@/components/admin/MediaManager'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
@@ -18,12 +23,12 @@ const TYPE_LABEL = { SIMPLE: 'Simple product', VARIANTS: 'Product with variants'
 export const dynamic = 'force-dynamic'
 const BLANK_SECTION_SLOTS = 3
 
-export default async function EditProduct({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string }> }) {
+export default async function EditProduct({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string; copied?: string }> }) {
   const admin = await requireAdmin('products.view')
-  const [{ id }, { created }] = await Promise.all([params, searchParams])
-  const [p, cats, media, sections, services] = await Promise.all([
+  const [{ id }, { created, copied }] = await Promise.all([params, searchParams])
+  const [p, cats, media, sections, services, org, host] = await Promise.all([
     getProductForEdit(admin.storeId, id), // every query below is scoped to this store
-    listCategories(admin.storeId), listMedia(admin.storeId, id), loadSections(admin.storeId, id), loadServiceViews(admin.storeId),
+    listCategories(admin.storeId), listMedia(admin.storeId, id), loadSections(admin.storeId, id), loadServiceViews(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => h.get('host') ?? ''),
   ])
   if (!p) notFound()
   const editable = can(admin.role, 'products.edit')
@@ -36,7 +41,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
   const slots = [...sections, ...Array.from({ length: BLANK_SECTION_SLOTS }, () => null)]
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-6xl space-y-6">
       <div>
         <Link href="/admin/products" className="text-sm text-slate-600 underline">← All products</Link>
         <h1 className="text-2xl font-bold mt-2">{p.name}</h1>
@@ -44,71 +49,123 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
           {p.status === 'ACTIVE' ? <>Live at <Link className="underline" href={`/product/${p.slug}`} target="_blank">/product/{p.slug}</Link></> : <>Not visible to customers yet (status: {p.status.toLowerCase()}).</>}
           {!editable && ' · You can view but not edit.'}
         </p>
-        <p className="text-sm text-slate-500">Type: <strong>{TYPE_LABEL[p.type]}</strong>{unit && ` · sold by ${measured ? unit.code : unit.label.toLowerCase()}`}. The type is chosen when a product is created.</p>
       </div>
+      {copied && <p role="status" className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900">This is the copy. It is a draft: check the title, prices and stock, then set the status to Active.</p>}
       {created && <p role="status" className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900">Product created. Now add photos and, when ready, set the status to Active.</p>}
 
-      <ActionForm action={saveProductAction} className="space-y-6">
+      <Card title="Photos and videos" hint="The first photo is the main picture. Use the arrows to change the order customers see.">
+        {editable
+          ? <MediaManager productId={p.id} items={media} cloudReady={!!cloud?.enabled && cloud.configured} maxItems={12} />
+          : <p className="text-sm text-slate-500">{media.length} file(s).</p>}
+      </Card>
+
+      <ActionForm action={saveProductAction}>
         <input type="hidden" name="productId" value={p.id} />
         <fieldset disabled={!editable} className="contents">
-          <Card title="Details">
-            <div className="grid gap-4">
-              <Field label="Name"><input name="name" defaultValue={p.name} required maxLength={120} className={inputCls} /></Field>
-              <Field label="Subtitle"><input name="subtitle" defaultValue={p.subtitle ?? ''} maxLength={160} className={inputCls} /></Field>
-              <Field label="Short description"><textarea name="shortDescription" defaultValue={p.shortDescription ?? ''} rows={3} maxLength={500} className={inputCls} /></Field>
-              <Field label="Full description"><textarea name="description" defaultValue={p.description ?? ''} rows={8} maxLength={10000} className={inputCls} /></Field>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Category">
-                  <select name="categoryId" className={inputCls} defaultValue={p.categoryId ?? ''}><option value="">No category</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-                </Field>
-                <Field label="Status" hint="Only “active” products are visible and can be bought. Archive a product to hide it but keep its order history.">
-                  <select name="status" defaultValue={p.status} className={inputCls}>{PRODUCT_STATUSES.map((s) => <option key={s} value={s}>{s.toLowerCase()}</option>)}</select>
-                </Field>
-              </div>
-              <Check name="isFeatured" label="Feature this product (shown first on the shop page)" defaultChecked={p.isFeatured} />
-              {measured ? (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <Field label={`Smallest order (${unit!.code})`} hint="The least a customer can buy, e.g. 0.5"><input name="qtyMin" inputMode="decimal" defaultValue={fromBase(p.qtyMin ?? p.qtyStep ?? unit!.factor * unit!.defaultStep, unit!.code)} className={inputCls} /></Field>
-                  <Field label={`Order step (${unit!.code})`} hint="Customers add or remove this much at a time, e.g. 0.25"><input name="qtyStep" inputMode="decimal" defaultValue={fromBase(p.qtyStep ?? unit!.factor * unit!.defaultStep, unit!.code)} className={inputCls} /></Field>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start">
+            <div className="space-y-6 min-w-0">
+              <Card title="Details">
+                <div className="grid gap-4">
+                  <Field label="Title"><input name="name" defaultValue={p.name} required maxLength={120} className={inputCls} /></Field>
+                  <Field label="Subtitle"><input name="subtitle" defaultValue={p.subtitle ?? ''} maxLength={160} className={inputCls} /></Field>
+                  <Field label="Short description" hint="One or two lines shown near the price."><textarea name="shortDescription" defaultValue={p.shortDescription ?? ''} rows={3} maxLength={500} className={inputCls} /></Field>
+                  <Field label="Description"><textarea name="description" defaultValue={p.description ?? ''} rows={8} maxLength={10000} className={inputCls} /></Field>
                 </div>
-              ) : (
-                <Field label="Counted in" hint="Stock and orders are whole numbers of this unit."><select name="unitCode" defaultValue={p.unitCode ?? 'piece'} className={inputCls}>{COUNT_UNITS.map((u) => <option key={u.code} value={u.code}>{u.label}</option>)}</select></Field>
-              )}
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Search engine title (optional)" hint="Up to 70 characters"><input name="seoTitle" defaultValue={p.seoTitle ?? ''} maxLength={70} className={inputCls} /></Field>
-                <Field label="Search engine description (optional)" hint="Up to 160 characters"><input name="seoDescription" defaultValue={p.seoDescription ?? ''} maxLength={160} className={inputCls} /></Field>
-              </div>
-            </div>
-          </Card>
+              </Card>
 
-          <Card title={simple ? 'Price and stock' : measured ? `Price per ${unit!.code} and stock` : 'Variants, prices and stock'}
-            hint={measured ? `Price is for one ${unit!.code} (paisa allowed). Stock is typed in ${unit!.code}, for example 25 or 12.5. It goes down automatically when orders arrive and back up when an order is cancelled.` : 'Prices are in whole rupees. Stock goes down automatically when orders arrive and back up when an order is cancelled.'}>
-            <div className="space-y-4">
-              {p.variants.map((v) => (
-                <div key={v.id} className="rounded-lg border border-slate-200 p-4">
-                  <input type="hidden" name={`v_${v.id}_stockWas`} value={v.stock} />
-                  <input type="hidden" name={`v_${v.id}_stockShown`} value={shownStock(v.stock)} />
-                  {simple && <><input type="hidden" name={`v_${v.id}_label`} value={v.label} /><input type="hidden" name="defaultVariant" value={v.id} /><input type="hidden" name={`v_${v.id}_active`} value="on" /></>}
-                  <div className={`grid gap-3 ${simple ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
-                    {!simple && <Field label="Variant name"><input name={`v_${v.id}_label`} defaultValue={v.label} maxLength={40} className={inputCls} /></Field>}
-                    <Field label={measured ? `Price (Rs. per ${unit!.code})` : 'Price (Rs.)'}><input name={`v_${v.id}_price`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={v.price.toNumber()} className={inputCls} /></Field>
-                    <Field label="Crossed-out price"><input name={`v_${v.id}_compareAt`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={v.compareAtPrice?.toNumber() ?? ''} className={inputCls} /></Field>
-                    <Field label={measured ? `In stock (${unit!.code})` : `In stock${unit && unit.code !== 'piece' ? ` (${unit.plural})` : ''}`}><input name={`v_${v.id}_stock`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={shownStock(v.stock)} className={inputCls} /></Field>
-                  </div>
-                  {!simple && (
-                    <div className="grid sm:grid-cols-[1fr_auto_auto_auto] gap-3 mt-3 items-end">
-                      <Field label="Badge (optional)"><input name={`v_${v.id}_badge`} defaultValue={v.badge ?? ''} maxLength={30} placeholder="Most Popular" className={inputCls} /></Field>
-                      <Check name={`v_${v.id}_active`} label="On sale" defaultChecked={v.isActive} />
-                      <label className="flex items-center gap-2 text-sm"><input type="radio" name="defaultVariant" value={v.id} defaultChecked={v.isDefault} /> Shown first</label>
-                      {editable && p.variants.length > 1 && <button type="submit" form={`rm-${v.id}`} className="text-sm text-red-700 underline">Delete variant</button>}
-                    </div>
-                  )}
-                  <p className="text-xs text-slate-500 mt-2">SKU: {v.sku}{readOptionValues(v.optionValues) && ' · made from your options'}</p>
+              <Card title={simple ? 'Pricing and inventory' : measured ? `Price per ${unit!.code} and inventory` : 'Variants: pricing and inventory'}
+                hint={`${measured ? `Price is for one ${unit!.code} (paisa allowed); stock is typed in ${unit!.code}.` : 'Prices are in whole rupees.'} Cost is what you pay for the item: customers never see it, it only shows your profit. Stock goes down automatically with orders and back up when an order is cancelled.`}>
+                <div className="overflow-x-auto -mx-2 px-2">
+                  <table className="w-full text-sm border-separate border-spacing-y-2" style={{ minWidth: simple ? 720 : 1080 }}>
+                    <thead className="text-left text-xs text-slate-500">
+                      <tr>
+                        {!simple && <th className="font-medium pr-2">Variant</th>}
+                        <th className="font-medium pr-2">Price</th><th className="font-medium pr-2">Crossed-out</th><th className="font-medium pr-2">Cost</th>
+                        <th className="font-medium pr-2">In stock{measured ? ` (${unit!.code})` : ''}</th><th className="font-medium pr-2">SKU</th><th className="font-medium pr-2">Barcode</th><th className="font-medium pr-2">Weight (g)</th>
+                        <th className="font-medium pr-2">Track stock</th>{!simple && <><th className="font-medium pr-2">On sale</th><th className="font-medium pr-2">First</th><th /></>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {p.variants.map((v) => {
+                        const m = margin(v.price.toNumber(), v.costPrice?.toNumber())
+                        return (
+                          <tr key={v.id} className="align-top">
+                            {!simple && (
+                              <td className="pr-2">
+                                <input name={`v_${v.id}_label`} defaultValue={v.label} maxLength={40} className={inputCls} aria-label="Variant name" />
+                                <input name={`v_${v.id}_badge`} defaultValue={v.badge ?? ''} maxLength={30} placeholder="Badge, e.g. Most Popular" className={`${inputCls} mt-1 text-xs`} aria-label={`Badge for ${v.label}`} />
+                              </td>
+                            )}
+                            <td className="pr-2">
+                              <input type="hidden" name={`v_${v.id}_stockWas`} value={v.stock} /><input type="hidden" name={`v_${v.id}_stockShown`} value={shownStock(v.stock)} /><input type="hidden" name={`v_${v.id}_trackSent`} value="1" />
+                              {simple && <><input type="hidden" name={`v_${v.id}_label`} value={v.label} /><input type="hidden" name="defaultVariant" value={v.id} /><input type="hidden" name={`v_${v.id}_active`} value="on" /></>}
+                              <input name={`v_${v.id}_price`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={v.price.toNumber()} className={inputCls} aria-label={`Price of ${v.label}`} />
+                            </td>
+                            <td className="pr-2"><input name={`v_${v.id}_compareAt`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={v.compareAtPrice?.toNumber() ?? ''} className={inputCls} aria-label={`Crossed-out price of ${v.label}`} /></td>
+                            <td className="pr-2">
+                              <input name={`v_${v.id}_cost`} inputMode="decimal" defaultValue={v.costPrice?.toNumber() ?? ''} className={inputCls} aria-label={`Cost of ${v.label}`} />
+                              {m && <span className={`block text-xs mt-1 ${m.profit < 0 ? 'text-red-700' : 'text-slate-500'}`}>Profit {formatPrice(m.profit)} · {m.marginPct}%</span>}
+                            </td>
+                            <td className="pr-2"><input name={`v_${v.id}_stock`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={shownStock(v.stock)} className={inputCls} aria-label={`Stock of ${v.label}`} /></td>
+                            <td className="pr-2"><input name={`v_${v.id}_sku`} defaultValue={v.sku} maxLength={30} className={`${inputCls} font-mono uppercase`} aria-label={`SKU of ${v.label}`} /></td>
+                            <td className="pr-2"><input name={`v_${v.id}_barcode`} defaultValue={v.barcode ?? ''} maxLength={32} className={`${inputCls} font-mono`} aria-label={`Barcode of ${v.label}`} /></td>
+                            <td className="pr-2"><input name={`v_${v.id}_weight`} inputMode="numeric" defaultValue={v.weightGrams ?? ''} className={inputCls} aria-label={`Weight of ${v.label} in grams`} /></td>
+                            <td className="pr-2 pt-2 text-center"><input type="checkbox" name={`v_${v.id}_track`} defaultChecked={v.trackStock} className="h-4 w-4" aria-label={`Track stock of ${v.label}`} /></td>
+                            {!simple && (
+                              <>
+                                <td className="pr-2 pt-2 text-center"><input type="checkbox" name={`v_${v.id}_active`} defaultChecked={v.isActive} className="h-4 w-4" aria-label={`${v.label} on sale`} /></td>
+                                <td className="pr-2 pt-2 text-center"><input type="radio" name="defaultVariant" value={v.id} defaultChecked={v.isDefault} aria-label={`Show ${v.label} first`} /></td>
+                                <td className="pt-2">{editable && p.variants.length > 1 && <button type="submit" form={`rm-${v.id}`} className="text-xs text-red-700 underline">Delete</button>}</td>
+                              </>
+                            )}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
+                <p className="text-xs text-slate-500 mt-2">Untick “Track stock” for items you never run out of (made to order, services): they can always be bought and their stock number is ignored.</p>
+              </Card>
+
+              <Card title="Search engine listing" hint="How this product may appear on Google, and its page address.">
+                <SeoFields name={p.name} shortDescription={p.shortDescription ?? ''} seoTitle={p.seoTitle ?? ''} seoDescription={p.seoDescription ?? ''} slug={p.slug} host={host} editableSlug />
+              </Card>
+              {editable && <button className={primaryBtn}>Save product</button>}
             </div>
-          </Card>
-          {editable && <button className={primaryBtn}>Save product</button>}
+
+            <div className="space-y-6 lg:sticky lg:top-4">
+              <Card title="Status">
+                <div className="grid gap-3">
+                  <select name="status" defaultValue={p.status} className={inputCls} aria-label="Status">
+                    <option value="ACTIVE">Active (live in the shop)</option><option value="DRAFT">Draft (hidden)</option><option value="ARCHIVED">Archived (hidden, history kept)</option>
+                  </select>
+                  <Check name="isFeatured" label="Feature this product" hint="Shown first on the shop page." defaultChecked={p.isFeatured} />
+                  {editable && <button className={primaryBtn}>Save product</button>}
+                </div>
+              </Card>
+              <Card title="Organisation">
+                <div className="grid gap-4">
+                  <Field label="Category">
+                    <select name="categoryId" className={inputCls} defaultValue={p.categoryId ?? ''}><option value="">No category</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                  </Field>
+                  <Field label="Vendor" hint="The brand or supplier."><input name="vendor" defaultValue={p.vendor ?? ''} maxLength={80} list="vendors" className={inputCls} /></Field>
+                  <datalist id="vendors">{org.vendors.map((v) => <option key={v} value={v} />)}</datalist>
+                  <Field label="Tags" hint={`Separate with commas, e.g. summer, gift. Used to search and group products.${org.tags.length ? ` Already used: ${org.tags.slice(0, 12).join(', ')}` : ''}`}><input name="tags" defaultValue={p.tags.join(', ')} maxLength={700} className={inputCls} /></Field>
+                </div>
+              </Card>
+              <Card title="How it is sold">
+                <p className="text-sm text-slate-600 mb-3"><strong>{TYPE_LABEL[p.type]}</strong>. The type is chosen when a product is created.</p>
+                {measured ? (
+                  <div className="grid gap-4">
+                    <Field label={`Smallest order (${unit!.code})`} hint="The least a customer can buy, e.g. 0.5"><input name="qtyMin" inputMode="decimal" defaultValue={fromBase(p.qtyMin ?? p.qtyStep ?? unit!.factor * unit!.defaultStep, unit!.code)} className={inputCls} /></Field>
+                    <Field label={`Order step (${unit!.code})`} hint="Customers add or remove this much at a time, e.g. 0.25"><input name="qtyStep" inputMode="decimal" defaultValue={fromBase(p.qtyStep ?? unit!.factor * unit!.defaultStep, unit!.code)} className={inputCls} /></Field>
+                  </div>
+                ) : (
+                  <Field label="Counted in" hint="Stock and orders are whole numbers of this unit."><select name="unitCode" defaultValue={p.unitCode ?? 'piece'} className={inputCls}>{COUNT_UNITS.map((u) => <option key={u.code} value={u.code}>{u.label}</option>)}</select></Field>
+                )}
+              </Card>
+            </div>
+          </div>
         </fieldset>
       </ActionForm>
 
@@ -150,12 +207,6 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
         </Card>
       )}
 
-      <Card title="Photos and videos" hint="The first photo is the main picture. Use the arrows to change the order customers see.">
-        {editable
-          ? <MediaManager productId={p.id} items={media} cloudReady={!!cloud?.enabled && cloud.configured} maxItems={12} />
-          : <p className="text-sm text-slate-500">{media.length} file(s).</p>}
-      </Card>
-
       <Card title="Product page sections" hint="Extra information blocks shown on the product page, such as benefits, how to use, and questions. Sections with the same tab name share a tab. Pair types take one “title | text” per line; other types take one item per line.">
         {editable ? (
           <ActionForm action={saveSectionsAction} className="space-y-4">
@@ -181,6 +232,16 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
           </ActionForm>
         ) : <p className="text-sm text-slate-500">{sections.length} section(s).</p>}
       </Card>
+
+      {editable && (
+        <Card title="Duplicate this product" hint="Makes a full copy as a draft: variants (with new SKUs), photos and videos, page sections, category, vendor, tags, options and search text. Reviews, orders and barcodes stay with the original.">
+          <ActionForm action={duplicateProductAction} className="space-y-3">
+            <input type="hidden" name="productId" value={p.id} />
+            <Check name="copyStock" label="Copy the stock numbers too" hint="Leave unticked to start the copy with zero stock." />
+            <button className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium">Duplicate</button>
+          </ActionForm>
+        </Card>
+      )}
 
       {editable && (
         <section className="rounded-xl bg-white border border-red-200 p-5 sm:p-6">

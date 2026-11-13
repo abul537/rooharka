@@ -2,6 +2,7 @@ import type { Getter, Parsed } from './settings-rules'
 import { COUNT_UNITS, MEASURE_UNITS, getUnit, parseAmount, toBase } from '@/lib/units/registry'
 import { PRODUCT_KINDS, type ProductKind } from '@/lib/units/quantity'
 import { parseOptionGroups, type OptionGroup } from '@/lib/variants/rules'
+import { parseBarcode, parseCost, parseSku, parseSlug, parseTags, parseVendor, parseWeightGrams } from '@/lib/admin/product-extras'
 
 const text = (g: Getter, k: string) => String(g.get(k) ?? '').trim()
 const whole = (s: string) => (/^\d{1,9}$/.test(s) ? Number(s) : null)
@@ -33,6 +34,8 @@ export interface ProductEdit {
   name: string; subtitle: string | null; shortDescription: string | null; description: string | null
   categoryId: string | null; seoTitle: string | null; seoDescription: string | null; isFeatured: boolean
   status: (typeof PRODUCT_STATUSES)[number]
+  /** Present only when the form has the field (older / smaller forms leave these untouched). */
+  vendor?: string | null; tags?: string[]
 }
 
 type R<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -51,9 +54,13 @@ function parseCommon(g: Getter): R<Omit<ProductEdit, 'status'> & { status: Produ
   if (categoryId && !/^[A-Za-z0-9_-]{1,40}$/.test(categoryId)) return { ok: false, error: 'Invalid category.' }
   const status = PRODUCT_STATUSES.find((x) => x === text(g, 'status'))
   if (!status) return { ok: false, error: 'Choose a status.' }
+  const extra: { vendor?: string | null; tags?: string[] } = {}
+  if (g.get('vendor') != null) { const v = parseVendor(text(g, 'vendor')); if (!v.ok) return v; extra.vendor = v.value }
+  if (g.get('tags') != null) { const t = parseTags(text(g, 'tags')); if (!t.ok) return t; extra.tags = t.value }
   return {
     ok: true,
     value: {
+      ...extra,
       name, subtitle: subtitle || null, shortDescription: shortDescription || null, description: description || null,
       categoryId: categoryId || null, seoTitle: seoTitle || null, seoDescription: seoDescription || null,
       isFeatured: g.get('isFeatured') === 'on', status,
@@ -90,13 +97,15 @@ export interface VariantEdit {
   id: string; label: string; badge: string | null; price: number; compareAtPrice: number | null
   /** Stock the admin saw when the form opened, and the stock they typed: the DIFFERENCE is applied, so orders placed meanwhile are never lost. */
   stockWas: number; stock: number; isActive: boolean
+  /** Present only when the form has the field. */
+  sku?: string; barcode?: string | null; costPrice?: number | null; weightGrams?: number | null; trackStock?: boolean
 }
 
 /**
  * Parses the product form. `variantIds` are the variants that belong to this product (from the database),
  * so a tampered form cannot touch anyone else's variants.
  */
-export interface ProductEditResult { product: ProductEdit; variants: VariantEdit[]; defaultId: string; unitCode: string | null; qtyMin: number | null; qtyStep: number | null }
+export interface ProductEditResult { product: ProductEdit; variants: VariantEdit[]; defaultId: string; unitCode: string | null; qtyMin: number | null; qtyStep: number | null; /** New page address, when the form asked to change it. */ slug?: string }
 
 export function parseProductEdit(g: Getter, variantIds: string[], meta: SellMeta = LEGACY, current: { qtyMin: number | null; qtyStep: number | null } = { qtyMin: null, qtyStep: null }): Parsed<ProductEditResult> {
   const common = parseCommon(g)
@@ -120,15 +129,26 @@ export function parseProductEdit(g: Getter, variantIds: string[], meta: SellMeta
     if (stock === null) return { ok: false, error: `${label}: stock must be ${stockHint(meta)}.` }
     const badge = text(g, `v_${id}_badge`)
     if (badge.length > 30) return { ok: false, error: `${label}: badge must be 30 characters or fewer.` }
-    variants.push({ id, label, badge: badge || null, price, compareAtPrice, stock, stockWas: stockWas ?? stock, isActive: g.get(`v_${id}_active`) === 'on' })
+    const more: Pick<VariantEdit, 'sku' | 'barcode' | 'costPrice' | 'weightGrams' | 'trackStock'> = {}
+    if (g.get(`v_${id}_sku`) != null) { const r = parseSku(text(g, `v_${id}_sku`)); if (!r.ok) return { ok: false, error: `${label}: ${r.error}` }; more.sku = r.value }
+    if (g.get(`v_${id}_barcode`) != null) { const r = parseBarcode(text(g, `v_${id}_barcode`)); if (!r.ok) return { ok: false, error: `${label}: ${r.error}` }; more.barcode = r.value }
+    if (g.get(`v_${id}_cost`) != null) { const r = parseCost(text(g, `v_${id}_cost`)); if (!r.ok) return { ok: false, error: `${label}: ${r.error}` }; more.costPrice = r.value }
+    if (g.get(`v_${id}_weight`) != null) { const r = parseWeightGrams(text(g, `v_${id}_weight`)); if (!r.ok) return { ok: false, error: `${label}: ${r.error}` }; more.weightGrams = r.value }
+    // A checkbox that is not ticked sends nothing, so a hidden marker says "this form has the tick box".
+    if (g.get(`v_${id}_trackSent`) != null) more.trackStock = g.get(`v_${id}_track`) === 'on'
+    variants.push({ id, label, badge: badge || null, price, compareAtPrice, stock, stockWas: stockWas ?? stock, isActive: g.get(`v_${id}_active`) === 'on', ...more })
   }
+  const skus = variants.map((v) => v.sku).filter(Boolean)
+  if (new Set(skus).size !== skus.length) return { ok: false, error: 'Two variants have the same SKU. Every SKU must be different.' }
+  let slug: string | undefined
+  if (g.get('slug') != null) { const r = parseSlug(text(g, 'slug')); if (!r.ok) return r; slug = r.value }
 
   const defaultId = text(g, 'defaultVariant')
   const def = variants.find((v) => v.id === defaultId)
   if (!def) return { ok: false, error: 'Choose which variant is shown first.' }
   if (!def.isActive) return { ok: false, error: 'The variant shown first must be switched on.' }
   if (status === 'ACTIVE' && !variants.some((v) => v.isActive)) return { ok: false, error: 'A live product needs at least one variant switched on.' }
-  return { ok: true, value: { product: common.value, variants, defaultId, ...measure.value } }
+  return { ok: true, value: { product: common.value, variants, defaultId, ...measure.value, ...(slug ? { slug } : {}) } }
 }
 
 
@@ -145,7 +165,7 @@ export function uniqueSlug(base: string, taken: ReadonlySet<string>): string {
   return `${base}-${Date.now()}`
 }
 
-export interface NewVariant { label: string; badge: string | null; sku: string; price: number; compareAtPrice: number | null; stock: number }
+export interface NewVariant { label: string; badge: string | null; sku: string; price: number; compareAtPrice: number | null; stock: number; barcode?: string | null; costPrice?: number | null; weightGrams?: number | null; trackStock?: boolean }
 
 /** Reads one variant from a form; `prefix` lets the same code read "first variant" and "add variant" forms. */
 export function parseVariantFields(g: Getter, prefix = '', meta: SellMeta = LEGACY, defaultLabel?: string): R<NewVariant> {
@@ -162,7 +182,10 @@ export function parseVariantFields(g: Getter, prefix = '', meta: SellMeta = LEGA
   if (badge.length > 30) return { ok: false, error: 'Badge must be 30 characters or fewer.' }
   const sku = text(g, `${prefix}sku`).toUpperCase()
   if (sku && !/^[A-Z0-9_-]{1,30}$/.test(sku)) return { ok: false, error: 'SKU may contain letters, digits, - and _ only.' }
-  return { ok: true, value: { label, badge: badge || null, sku, price, compareAtPrice, stock } }
+  const barcode = parseBarcode(text(g, `${prefix}barcode`)); if (!barcode.ok) return barcode
+  const cost = parseCost(text(g, `${prefix}cost`)); if (!cost.ok) return cost
+  const weight = parseWeightGrams(text(g, `${prefix}weight`)); if (!weight.ok) return weight
+  return { ok: true, value: { label, badge: badge || null, sku, price, compareAtPrice, stock, barcode: barcode.value, costPrice: cost.value, weightGrams: weight.value, ...(g.get(`${prefix}trackSent`) != null ? { trackStock: g.get(`${prefix}track`) === 'on' } : {}) } }
 }
 
 export interface NewProduct {

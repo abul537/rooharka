@@ -60,7 +60,18 @@ export default function ProductTypeFields() {
         <Field label="Crossed-out price"><input name="v_compareAt" inputMode={measured ? 'decimal' : 'numeric'} className={inputCls} /></Field>
         <Field label={measured ? `In stock (${u.code})` : type === 'VARIANTS' ? 'Stock for each variant' : 'In stock'} hint={measured ? 'e.g. 25 or 12.5' : undefined}><input name="v_stock" inputMode={measured ? 'decimal' : 'numeric'} defaultValue="0" className={inputCls} /></Field>
       </div>
-      {type === 'VARIANTS' && <p className="text-xs text-slate-500">You can change the price and stock of each variant separately after creating the product.</p>}
+      <div className="grid sm:grid-cols-4 gap-3">
+        <Field label={measured ? `Cost (Rs. per ${u.code})` : 'Cost per item (Rs.)'} hint="What you pay. Customers never see it."><input name="v_cost" inputMode="decimal" className={inputCls} /></Field>
+        {type !== 'VARIANTS' && <Field label="SKU (stock code)" hint="Made for you if empty."><input name="v_sku" maxLength={30} className={`${inputCls} font-mono uppercase`} /></Field>}
+        {type !== 'VARIANTS' && <Field label="Barcode" hint="The number under the bars."><input name="v_barcode" maxLength={32} className={`${inputCls} font-mono`} /></Field>}
+        <Field label="Weight (grams)" hint="For the courier. 1 kg = 1000."><input name="v_weight" inputMode="numeric" className={inputCls} /></Field>
+      </div>
+      <label className="flex items-start gap-2 text-sm">
+        <input type="hidden" name="v_trackSent" value="1" />
+        <input type="checkbox" name="v_track" defaultChecked className="mt-0.5 h-4 w-4" />
+        <span>Track stock<span className="block text-xs text-slate-500">Untick for items you never run out of (made to order, services).</span></span>
+      </label>
+      {type === 'VARIANTS' && <p className="text-xs text-slate-500">You can change the price, stock, SKU and barcode of each variant separately after creating the product.</p>}
     </div>
   )
 }

@@ -702,6 +702,10 @@ model Product {
   /// MEASURABLE: smallest order and order step, in BASE units (grams, millilitres, millimetres).
   qtyMin           Int?
   qtyStep          Int?
+  /// Who makes it (brand / supplier). Shown to the owner and searchable; optional.
+  vendor           String?
+  /// Free labels for searching and grouping in the dashboard, e.g. ["summer", "gift"].
+  tags             String[]      @default([])
   seoTitle         String?
   seoDescription   String?
   createdAt        DateTime      @default(now())
@@ -729,6 +733,8 @@ model ProductVariant {
   badge          String?  // "Most Popular"
   price          Decimal  @db.Decimal(12, 2)
   compareAtPrice Decimal? @db.Decimal(12, 2) // the crossed-out price
+  costPrice      Decimal? @db.Decimal(12, 2) // what the owner pays for it; never shown to customers
+  barcode        String?  // the number under the barcode on the packet (EAN / UPC), for scanning at the counter
   stock          Int      @default(0) // counted products: units. MEASURABLE: BASE units (grams, millilitres, millimetres)
   trackStock     Boolean  @default(true)
   weightGrams    Int?

@@ -5,43 +5,92 @@ import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import type { ProductEdit, VariantEdit } from './product-rules'
 import { AdminError } from './orders'
+import { LIST_PAGE_SIZE, LOW_STOCK_AT, cloneName, cloneSku, mergeTags, type BulkRequest, type ListQuery } from '@/lib/admin/product-extras'
 
-export async function listProducts(storeId: string) {
-  return db.product.findMany({
-    where: { storeId }, orderBy: { createdAt: 'asc' },
-    select: { id: true, name: true, status: true, type: true, unitCode: true, media: { where: { isPrimary: true }, take: 1, select: { media: { select: { url: true } } } }, variants: { select: { price: true, stock: true, isActive: true, trackStock: true } } },
-  })
+/** The database filter for the product list. Always starts from the store, so no filter can reach another store. */
+function listWhere(storeId: string, q: ListQuery) {
+  const and: object[] = []
+  if (q.q) and.push({ OR: [
+    { name: { contains: q.q, mode: 'insensitive' } }, { vendor: { contains: q.q, mode: 'insensitive' } }, { tags: { has: q.q } },
+    { variants: { some: { OR: [{ sku: { contains: q.q.toUpperCase() } }, { barcode: q.q }] } } },
+  ] })
+  if (q.status) and.push({ status: q.status })
+  if (q.type) and.push({ type: q.type })
+  if (q.categoryId) and.push({ categoryId: q.categoryId === 'none' ? null : q.categoryId })
+  if (q.tag) and.push({ tags: { has: q.tag } })
+  // Sold out: nothing on sale that can still be bought. Low: a counted item on sale with 1..LOW_STOCK_AT left.
+  if (q.stock === 'out') and.push({ variants: { none: { isActive: true, OR: [{ trackStock: false }, { stock: { gt: 0 } }] } } })
+  if (q.stock === 'low') and.push({ type: { not: 'MEASURABLE' }, variants: { some: { isActive: true, trackStock: true, stock: { gt: 0, lte: LOW_STOCK_AT } } } })
+  return { storeId, ...(and.length ? { AND: and } : {}) }
+}
+const LIST_ORDER = { newest: { createdAt: 'desc' }, oldest: { createdAt: 'asc' }, name: { name: 'asc' }, 'name-desc': { name: 'desc' }, updated: { updatedAt: 'desc' } } as const
+
+export async function listProducts(storeId: string, q: ListQuery) {
+  const where = listWhere(storeId, q)
+  const [rows, total, byStatus] = await Promise.all([
+    db.product.findMany({
+      where, orderBy: [LIST_ORDER[q.sort], { id: 'asc' }], skip: (q.page - 1) * LIST_PAGE_SIZE, take: LIST_PAGE_SIZE,
+      select: { id: true, name: true, status: true, type: true, unitCode: true, vendor: true, isFeatured: true, category: { select: { name: true } }, media: { where: { isPrimary: true }, take: 1, select: { media: { select: { url: true } } } }, variants: { select: { price: true, stock: true, isActive: true, trackStock: true } } },
+    }),
+    db.product.count({ where }),
+    db.product.groupBy({ by: ['status'], where: { storeId }, _count: { _all: true } }),
+  ])
+  const counts: Record<string, number> = { ACTIVE: 0, DRAFT: 0, ARCHIVED: 0 }
+  for (const r of byStatus as { status: string; _count: { _all: number } }[]) counts[r.status] = r._count._all
+  return { rows, total, counts }
+}
+
+/** Every tag and vendor the store already uses, for the suggestions under the fields. */
+export async function listOrganisation(storeId: string): Promise<{ tags: string[]; vendors: string[] }> {
+  const rows = await db.product.findMany({ where: { storeId }, select: { tags: true, vendor: true }, take: 2000 })
+  const tags = new Set<string>(), vendors = new Set<string>()
+  for (const r of rows as { tags: string[]; vendor: string | null }[]) { r.tags.forEach((t) => tags.add(t)); if (r.vendor) vendors.add(r.vendor) }
+  return { tags: [...tags].sort((a, b) => a.localeCompare(b)).slice(0, 200), vendors: [...vendors].sort((a, b) => a.localeCompare(b)).slice(0, 200) }
 }
 
 export async function getProductForEdit(storeId: string, id: string) {
   return db.product.findFirst({
     where: { id, storeId },
     select: {
-      id: true, name: true, subtitle: true, shortDescription: true, description: true, status: true, slug: true, categoryId: true, seoTitle: true, seoDescription: true, isFeatured: true, type: true, optionGroups: true, unitCode: true, qtyMin: true, qtyStep: true,
-      variants: { orderBy: { sortOrder: 'asc' }, select: { id: true, sku: true, optionValues: true, label: true, badge: true, price: true, compareAtPrice: true, stock: true, trackStock: true, isDefault: true, isActive: true } },
+      id: true, name: true, subtitle: true, shortDescription: true, description: true, status: true, slug: true, categoryId: true, seoTitle: true, seoDescription: true, isFeatured: true, type: true, optionGroups: true, unitCode: true, qtyMin: true, qtyStep: true, vendor: true, tags: true, createdAt: true, updatedAt: true,
+      variants: { orderBy: { sortOrder: 'asc' }, select: { id: true, sku: true, barcode: true, costPrice: true, weightGrams: true, optionValues: true, label: true, badge: true, price: true, compareAtPrice: true, stock: true, trackStock: true, isDefault: true, isActive: true } },
     },
   })
 }
 
 /** Saves the product and its sizes together. Returns what changed (for the audit log). */
-export async function saveProduct(admin: StoreAdmin, productId: string, p: ProductEdit, variants: VariantEdit[], defaultId: string, measure: Pick<ProductEditResult, 'unitCode' | 'qtyMin' | 'qtyStep'>) {
+export async function saveProduct(admin: StoreAdmin, productId: string, p: ProductEdit, variants: VariantEdit[], defaultId: string, measure: Pick<ProductEditResult, 'unitCode' | 'qtyMin' | 'qtyStep' | 'slug'>) {
+  return saveProductTx(admin, productId, p, variants, defaultId, measure).catch((e) => {
+    // The database refuses a second product with the same page address, or a second variant with the same SKU.
+    if (isUnique(e)) throw new AdminError(String((e as { meta?: { target?: unknown } }).meta?.target ?? '').includes('slug') ? 'That page address is already used by another product.' : 'That SKU or page address is already in use. Every SKU must be different.')
+    throw e
+  })
+}
+
+function saveProductTx(admin: StoreAdmin, productId: string, p: ProductEdit, variants: VariantEdit[], defaultId: string, measure: Pick<ProductEditResult, 'unitCode' | 'qtyMin' | 'qtyStep' | 'slug'>) {
   return db.$transaction(async (tx) => {
-    const product = await tx.product.findFirst({ where: { id: productId, storeId: admin.storeId }, select: { id: true, name: true, status: true, variants: { select: { id: true, price: true, compareAtPrice: true, isActive: true } } } })
+    const product = await tx.product.findFirst({ where: { id: productId, storeId: admin.storeId }, select: { id: true, name: true, status: true, slug: true, variants: { select: { id: true, price: true, compareAtPrice: true, isActive: true, sku: true } } } })
     if (!product) throw new AdminError('Product not found.')
     if (product.variants.length !== variants.length || !variants.every((v) => product.variants.some((x) => x.id === v.id))) {
       throw new AdminError('The variants changed while you were editing. Please reload the page.')
     }
     if (p.categoryId && !(await tx.category.count({ where: { id: p.categoryId, storeId: admin.storeId } }))) throw new AdminError('That category does not exist.')
-    await tx.product.update({ where: { id: product.id }, data: { ...p, unitCode: measure.unitCode, qtyMin: measure.qtyMin, qtyStep: measure.qtyStep } })
+    await tx.product.update({ where: { id: product.id }, data: { ...p, unitCode: measure.unitCode, qtyMin: measure.qtyMin, qtyStep: measure.qtyStep, ...(measure.slug ? { slug: measure.slug } : {}) } })
 
     const changes: Record<string, unknown> = {}
+    if (measure.slug && measure.slug !== product.slug) changes.slug = [product.slug, measure.slug]
+    // SKUs may be swapped between variants in one save: park the changing ones on temporary codes first.
+    const reSku = variants.filter((v) => v.sku && v.sku !== product.variants.find((x) => x.id === v.id)!.sku)
+    for (const v of reSku) await tx.productVariant.update({ where: { id: v.id }, data: { sku: `TMP-${v.id}`.slice(0, 40) } })
     for (const v of variants) {
       const old = product.variants.find((x) => x.id === v.id)!
       if (old.price.toNumber() !== v.price) changes[`${v.label}.price`] = [old.price.toNumber(), v.price]
       if (old.isActive !== v.isActive) changes[`${v.label}.active`] = [old.isActive, v.isActive]
+      if (v.sku && old.sku !== v.sku) changes[`${v.label}.sku`] = [old.sku, v.sku]
       await tx.productVariant.update({
         where: { id: v.id },
-        data: { label: v.label, badge: v.badge, price: v.price, compareAtPrice: v.compareAtPrice, isActive: v.isActive, isDefault: v.id === defaultId },
+        // sku / barcode / cost / weight / trackStock are undefined when the form did not carry them: then they stay as they are.
+        data: { label: v.label, badge: v.badge, price: v.price, compareAtPrice: v.compareAtPrice, isActive: v.isActive, isDefault: v.id === defaultId, sku: v.sku, barcode: v.barcode, costPrice: v.costPrice, weightGrams: v.weightGrams, trackStock: v.trackStock },
       })
       const delta = v.stock - v.stockWas
       if (delta !== 0) {
@@ -101,12 +150,12 @@ function initialVariants(input: NewProduct, slug: string) {
   return combinations(input.optionGroups).map((values, i) => {
     const sku = skuFor(slug, values, input.optionGroups, taken)
     taken.add(sku)
-    return { ...variantData({ ...input.variant, label: variantLabel(values, input.optionGroups), sku }), optionValues: values as never, isDefault: i === 0, sortOrder: i }
+    return { ...variantData({ ...input.variant, label: variantLabel(values, input.optionGroups), sku, barcode: null }), optionValues: values as never, isDefault: i === 0, sortOrder: i }
   })
 }
 
 function variantData(v: NewVariant) {
-  return { label: v.label, badge: v.badge, sku: v.sku || autoSku(v.label), price: v.price, compareAtPrice: v.compareAtPrice, stock: v.stock, isActive: true }
+  return { label: v.label, badge: v.badge, sku: v.sku || autoSku(v.label), price: v.price, compareAtPrice: v.compareAtPrice, stock: v.stock, isActive: true, barcode: v.barcode ?? null, costPrice: v.costPrice ?? null, weightGrams: v.weightGrams ?? null, ...(v.trackStock === undefined ? {} : { trackStock: v.trackStock }) }
 }
 
 async function ownedProduct(tx: Pick<typeof db, 'product'>, admin: StoreAdmin, productId: string) {
@@ -181,6 +230,91 @@ export async function generateVariants(admin: StoreAdmin, productId: string, gro
       await tx.productVariant.update({ where: { id: next.id }, data: { isDefault: true } })
     }
     return { created: plan.create.length, switchedOff: plan.deactivate.length, switchedOn: plan.reactivate.length, kept: plan.keep }
+  })
+}
+
+// ============================================================================ duplicate
+/**
+ * A full copy of a product, following every connection it has in the database:
+ *   variants (new SKUs, options kept), photos and videos (the same files, linked again, same order and main picture),
+ *   page sections, category, vendor, tags, options, selling unit and search-engine text.
+ * NOT copied, on purpose: reviews and orders (they belong to the original), barcodes (a barcode names one physical
+ * item) and, unless asked, stock (so the shop never shows stock that does not exist). The copy starts as a DRAFT.
+ */
+export async function duplicateProduct(admin: StoreAdmin, productId: string, opts: { copyStock: boolean }): Promise<{ id: string; name: string }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await db.$transaction(async (tx) => {
+        const src = await tx.product.findFirst({
+          where: { id: productId, storeId: admin.storeId },
+          include: { variants: { orderBy: { sortOrder: 'asc' } }, media: { orderBy: { sortOrder: 'asc' } }, sections: { orderBy: { sortOrder: 'asc' } } },
+        })
+        if (!src) throw new AdminError('Product not found.')
+        const base = `${src.slug}-copy`.slice(0, 56)
+        const taken = new Set((await tx.product.findMany({ where: { storeId: admin.storeId, slug: { startsWith: base } }, select: { slug: true } })).map((p: { slug: string }) => p.slug))
+        const skus = new Set<string>(src.variants.map((v: { sku: string }) => v.sku))
+        const name = cloneName(src.name)
+        const created = await tx.product.create({
+          data: {
+            storeId: admin.storeId, categoryId: src.categoryId, name, slug: uniqueSlug(base, taken), subtitle: src.subtitle, shortDescription: src.shortDescription, description: src.description,
+            status: 'DRAFT', isFeatured: false, type: src.type, optionGroups: (src.optionGroups ?? undefined) as never, unitCode: src.unitCode, qtyMin: src.qtyMin, qtyStep: src.qtyStep,
+            vendor: src.vendor, tags: src.tags, seoTitle: src.seoTitle, seoDescription: src.seoDescription,
+            variants: { create: src.variants.map((v: typeof src.variants[number]) => {
+              const sku = cloneSku(v.sku, skus); skus.add(sku)
+              return { sku, label: v.label, badge: v.badge, price: v.price, compareAtPrice: v.compareAtPrice, costPrice: v.costPrice, barcode: null, stock: opts.copyStock ? v.stock : 0, trackStock: v.trackStock, weightGrams: v.weightGrams, optionValues: (v.optionValues ?? undefined) as never, isDefault: v.isDefault, isActive: v.isActive, sortOrder: v.sortOrder }
+            }) },
+            media: { create: src.media.map((m: typeof src.media[number]) => ({ mediaId: m.mediaId, isPrimary: m.isPrimary, sortOrder: m.sortOrder })) },
+            sections: { create: src.sections.map((x: typeof src.sections[number]) => ({ type: x.type, tab: x.tab, tabLabel: x.tabLabel, title: x.title, items: x.items as never, sortOrder: x.sortOrder, isVisible: x.isVisible })) },
+          },
+          select: { id: true },
+        })
+        return { id: created.id, name }
+      })
+    } catch (e) {
+      if (!isUnique(e)) throw e // someone took the page address in the same instant: look again
+    }
+  }
+  throw new AdminError('Could not make the copy. Please try again.')
+}
+
+// ============================================================================ bulk actions
+/** One action on many products. Every statement is limited to the admin's own store. Returns how many changed and how many were skipped (with why). */
+export async function bulkProducts(admin: StoreAdmin, r: BulkRequest): Promise<{ changed: number; skipped: number; why: string | null; cloud: CloudRef[]; slugs: string[] }> {
+  const mine = { id: { in: r.ids }, storeId: admin.storeId }
+  const slugs = (await db.product.findMany({ where: mine, select: { slug: true } })).map((p: { slug: string }) => p.slug)
+  const out = (changed: number, why: string | null = null, cloud: CloudRef[] = []) => ({ changed, skipped: slugs.length - changed, why: changed < slugs.length ? why : null, cloud, slugs })
+  switch (r.action) {
+    case 'activate': // a live product must have something to sell
+      return out((await db.product.updateMany({ where: { ...mine, variants: { some: { isActive: true } } }, data: { status: 'ACTIVE' } })).count, 'products with no variant switched on stay as they are')
+    case 'draft': return out((await db.product.updateMany({ where: mine, data: { status: 'DRAFT' } })).count)
+    case 'archive': return out((await db.product.updateMany({ where: mine, data: { status: 'ARCHIVED' } })).count)
+    case 'feature': return out((await db.product.updateMany({ where: mine, data: { isFeatured: true } })).count)
+    case 'unfeature': return out((await db.product.updateMany({ where: mine, data: { isFeatured: false } })).count)
+    case 'category':
+      await assertCategory(admin.storeId, r.categoryId)
+      return out((await db.product.updateMany({ where: mine, data: { categoryId: r.categoryId } })).count)
+    case 'add-tags': case 'remove-tags': {
+      const rows = await db.product.findMany({ where: mine, select: { id: true, tags: true } })
+      for (const p of rows as { id: string; tags: string[] }[]) await db.product.update({ where: { id: p.id }, data: { tags: mergeTags(p.tags, r.tags, r.action === 'add-tags' ? 'add' : 'remove') } })
+      return out(rows.length)
+    }
+    case 'delete': {
+      let changed = 0
+      const cloud: CloudRef[] = []
+      for (const id of r.ids) {
+        try { cloud.push(...(await deleteProduct(admin, id)).cloud); changed++ } catch (e) { if (!(e instanceof AdminError)) throw e } // ordered products are kept
+      }
+      return out(changed, 'products that have been ordered cannot be deleted; archive them instead', cloud)
+    }
+  }
+}
+
+// ============================================================================ export
+/** Every product and variant of the store, one row per variant, for the spreadsheet download. */
+export async function exportRows(storeId: string) {
+  return db.product.findMany({
+    where: { storeId }, orderBy: [{ name: 'asc' }, { id: 'asc' }], take: 5000,
+    select: { name: true, slug: true, status: true, type: true, unitCode: true, vendor: true, tags: true, category: { select: { name: true } }, variants: { orderBy: { sortOrder: 'asc' }, select: { label: true, sku: true, barcode: true, price: true, compareAtPrice: true, costPrice: true, stock: true, trackStock: true, isActive: true, weightGrams: true } } },
   })
 }
 

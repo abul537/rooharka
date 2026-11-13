@@ -9,7 +9,7 @@ import { formatPrice } from '@/lib/format'
 import { inputCls, primaryBtn } from '@/components/admin/ui'
 
 /** stock is in base units for measured products (grams, millilitres ...), null when stock is not tracked. */
-export interface PosVariant { id: string; name: string; label: string; sku: string; price: number; stock: number | null; type: string; unitCode: string | null; qtyMin: number | null; qtyStep: number | null }
+export interface PosVariant { id: string; name: string; label: string; sku: string; barcode?: string | null; price: number; stock: number | null; type: string; unitCode: string | null; qtyMin: number | null; qtyStep: number | null }
 const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `k${Date.now()}${Math.random().toString(36).slice(2)}`)
 const num = (s: string) => (s.trim() === '' ? null : Number(s.replace(/,/g, '')))
 
@@ -31,7 +31,7 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return (t ? items.filter((i) => `${i.name} ${i.label} ${i.sku}`.toLowerCase().includes(t)) : items).slice(0, 40)
+    return (t ? items.filter((i) => `${i.name} ${i.label} ${i.sku} ${i.barcode ?? ''}`.toLowerCase().includes(t)) : items).slice(0, 40)
   }, [items, q])
   const ruleOf = (v: PosVariant) => posRule(v, v.stock)
   const lines = Object.entries(cart).map(([id, quantity]) => ({ ...byId.get(id)!, quantity, unitPrice: byId.get(id)!.price }))

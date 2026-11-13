@@ -29,14 +29,14 @@ export default async function PosPage() {
     db.productVariant.findMany({
       where: { isActive: true, product: { storeId: admin.storeId, status: 'ACTIVE' } },
       orderBy: [{ product: { name: 'asc' } }, { sortOrder: 'asc' }], take: MAX_ITEMS,
-      select: { id: true, label: true, sku: true, price: true, stock: true, trackStock: true, product: { select: { name: true, type: true, unitCode: true, qtyMin: true, qtyStep: true } } },
+      select: { id: true, label: true, sku: true, barcode: true, price: true, stock: true, trackStock: true, product: { select: { name: true, type: true, unitCode: true, qtyMin: true, qtyStep: true } } },
     }),
     db.order.findMany({
       where: { storeId: admin.storeId, source: 'POS', placedAt: { gte: today } }, orderBy: { placedAt: 'desc' }, take: 100,
       select: { id: true, number: true, total: true, status: true, placedAt: true, customerName: true, payments: { select: { method: true }, take: 1 } },
     }),
   ])
-  const items: PosVariant[] = variants.map((v) => ({ id: v.id, name: v.product.name, label: v.label, sku: v.sku, price: v.price.toNumber(), stock: v.trackStock ? v.stock : null, type: v.product.type, unitCode: v.product.unitCode, qtyMin: v.product.qtyMin, qtyStep: v.product.qtyStep }))
+  const items: PosVariant[] = variants.map((v) => ({ id: v.id, name: v.product.name, label: v.label, sku: v.sku, barcode: v.barcode, price: v.price.toNumber(), stock: v.trackStock ? v.stock : null, type: v.product.type, unitCode: v.product.unitCode, qtyMin: v.product.qtyMin, qtyStep: v.product.qtyStep }))
   const till = tillSummary(sales.map((s) => ({ method: s.payments[0]?.method ?? 'CASH', total: s.total.toNumber(), cancelled: s.status === 'CANCELLED' })))
   const canVoid = can(admin.role, 'orders.cancel')
 
