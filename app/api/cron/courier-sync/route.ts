@@ -3,6 +3,7 @@ import { cronRefusal } from '@/lib/cron-route'
 import { runJob } from '@/lib/jobs'
 import { syncAllCouriers } from '@/lib/couriers/sync'
 import { retryUnbookedOrders } from '@/lib/couriers/booking'
+import { pruneVisits } from '@/lib/visits'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -10,7 +11,7 @@ export const maxDuration = 60
 /** Called by the scheduler (see vercel.json). Asks couriers about parcels on their way; read-only towards the couriers. */
 async function handle(req: Request) {
   const refused = cronRefusal(req); if (refused) return refused
-  const r = await runJob('courier-sync', 'cron', async () => ({ ...(await syncAllCouriers()), retried: await retryUnbookedOrders() }))
+  const r = await runJob('courier-sync', 'cron', async () => ({ ...(await syncAllCouriers()), retried: await retryUnbookedOrders(), visitsPruned: await pruneVisits().catch(() => 0) }))
   const headers = { 'Cache-Control': 'no-store' }
   if (r.status === 'busy') return NextResponse.json({ skipped: 'A courier update is already running.' }, { status: 202, headers })
   if (r.status === 'failed') return NextResponse.json({ error: r.error }, { status: 500, headers })

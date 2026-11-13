@@ -6,6 +6,7 @@ import { db } from '@/lib/db'
 import { getCurrentStore, getShopClosure, getStoreForHost } from '@/lib/store'
 import { isPreviewFor } from '@/lib/preview/server'
 import PreviewBanner from '@/components/shop/PreviewBanner'
+import VisitBeacon from '@/components/shop/VisitBeacon'
 import { getShopContext } from '@/lib/storefront/data'
 import { safeUrl } from '@/lib/storefront/rules'
 import { themeStyle } from '@/lib/storefront/theme'
@@ -52,7 +53,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       <ShopHeader name={store.name} ctx={ctx} />
       <main className="flex-1">{children}</main>
       <ShopFooter name={store.name} ctx={ctx} />
-      {preview && <PreviewBanner closed={raw?.approval !== 'APPROVED'} />}
+      {preview ? <PreviewBanner closed={raw?.approval !== 'APPROVED'} /> : <VisitBeacon />}
     </div>
   )
 }

@@ -223,6 +223,7 @@ model Store {
   courierCredentials TenantCourierCredential[]
   collections   Collection[]
   aiUsage       AiUsage[]
+  visitorDays   VisitorDay[]
   subscription  Subscription?
   invoices      Invoice[]
   tickets       SupportTicket[]
@@ -821,6 +822,24 @@ model CollectionProduct {
 
   @@id([collectionId, productId])
   @@index([productId])
+}
+
+/// Visitor counting for the Overview page, kept in our own database (no outside analytics service, no cookies).
+/// One row per visitor per store per day. `visitorKey` is a keyed hash that changes every day and cannot be turned
+/// back into an IP address; nothing personal is stored. Rows older than 120 days are deleted by the daily job.
+model VisitorDay {
+  id         String   @id @default(cuid())
+  storeId    String
+  day        String   // YYYY-MM-DD in Pakistan time
+  visitorKey String
+  views      Int      @default(1)
+  firstAt    DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, day, visitorKey])
+  @@index([storeId, lastSeenAt])
 }
 
 /// One row per AI request (e.g. "write a description"). Used for the hourly limit per store and for future billing.
