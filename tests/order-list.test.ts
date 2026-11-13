@@ -58,3 +58,49 @@ test('bulk summary and packing-slip selection', () => {
   assert.equal(parseSlipIds(Array.from({ length: 80 }, (_, i) => `o${i}`).join(',')).length, MAX_SLIPS)
   assert.deepEqual(parseSlipIds(undefined), [])
 })
+
+import { parseSale, scanMatch, splitPayments, tillFromPayments } from '@/lib/pos/rules'
+
+const sale = (o: Record<string, unknown>) => ({ items: [{ variantId: 'v1', quantity: 1 }], discount: '', paymentMethod: 'CASH', tendered: '', customerName: '', customerPhone: '', idempotencyKey: 'key-12345678', ...o })
+
+test('POS split payment: parts come off first, the rest goes to the main method, and it always adds up', () => {
+  assert.deepEqual(splitPayments(5000, 'CASH', []), { ok: true, value: [{ method: 'CASH', amount: 5000 }], rest: 5000 })
+  const s = splitPayments(5000, 'CASH', [{ method: 'CARD', amount: 2000 }, { method: 'JAZZCASH', amount: 500.5 }])
+  assert.ok(s.ok)
+  if (s.ok) { assert.deepEqual(s.value, [{ method: 'CASH', amount: 2499.5 }, { method: 'CARD', amount: 2000 }, { method: 'JAZZCASH', amount: 500.5 }]); assert.equal(s.value.reduce((n, p) => n + p.amount, 0), 5000) }
+  assert.equal(splitPayments(5000, 'CASH', [{ method: 'CARD', amount: 5000 }]).ok, false, 'nothing left for the main method')
+  assert.equal(splitPayments(5000, 'CASH', [{ method: 'CARD', amount: 6000 }]).ok, false)
+})
+
+test('POS sale request: split parts are checked (different methods, amounts above zero, at most two)', () => {
+  const ok = parseSale(sale({ split: [{ method: 'CARD', amount: '2,000' }] }))
+  assert.ok(ok.ok && ok.value.split.length === 1 && ok.value.split[0].amount === 2000)
+  const none = parseSale(sale({}))
+  assert.ok(none.ok && none.value.split.length === 0, 'old screens that send no split still work')
+  for (const bad of [[{ method: 'CASH', amount: 100 }], [{ method: 'CARD', amount: 0 }], [{ method: 'CARD', amount: -5 }], [{ method: 'BITCOIN', amount: 5 }], [{ method: 'CARD', amount: 'abc' }],
+    [{ method: 'CARD', amount: 1 }, { method: 'CARD', amount: 2 }], [{ method: 'CARD', amount: 1 }, { method: 'JAZZCASH', amount: 1 }, { method: 'EASYPAISA', amount: 1 }]]) {
+    assert.equal(parseSale(sale({ split: bad })).ok, false, JSON.stringify(bad))
+  }
+})
+
+test('POS takings: a split sale adds to each method what was really paid that way; cancelled sales are left out', () => {
+  const t = tillFromPayments([
+    { cancelled: false, payments: [{ method: 'CASH', amount: 3000 }, { method: 'CARD', amount: 2000 }] },
+    { cancelled: false, payments: [{ method: 'CASH', amount: 1000 }] },
+    { cancelled: true, payments: [{ method: 'CARD', amount: 9999 }] },
+  ])
+  assert.equal(t.count, 2); assert.equal(t.total, 6000)
+  assert.deepEqual(t.byMethod, [{ method: 'CASH', count: 2, total: 4000 }, { method: 'CARD', count: 1, total: 2000 }])
+  assert.deepEqual(tillFromPayments([]), { count: 0, total: 0, byMethod: [] })
+})
+
+test('POS barcode scan: an exact code wins; otherwise only a single remaining match; never a guess', () => {
+  const items = [{ id: 'a', sku: 'TEE-M', barcode: '8964000123456' }, { id: 'b', sku: 'TEE-L', barcode: null }, { id: 'c', sku: 'CAP', barcode: '8964000999999' }]
+  assert.equal(scanMatch(items, items, '8964000123456')?.id, 'a')
+  assert.equal(scanMatch(items, items, ' tee-l ')?.id, 'b', 'a SKU typed in any case')
+  assert.equal(scanMatch(items, [items[2]], 'cap')?.id, 'c')
+  assert.equal(scanMatch(items, [items[0], items[1]], 'tee'), null, 'two candidates: add nothing')
+  assert.equal(scanMatch(items, [], '0000'), null); assert.equal(scanMatch(items, items, ''), null)
+  const twins = [{ id: 'x', sku: 'A', barcode: '1111' }, { id: 'y', sku: 'B', barcode: '1111' }]
+  assert.equal(scanMatch(twins, twins, '1111'), null, 'the same barcode on two items: the cashier must choose')
+})

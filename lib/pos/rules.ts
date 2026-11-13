@@ -28,7 +28,13 @@ export interface SaleRequest {
   customerName: string | null
   customerPhone: string | null
   idempotencyKey: string
+  /** Split payment: parts paid another way (e.g. Rs. 2,000 by card). The rest of the total is paid by `paymentMethod`. */
+  split: PaymentPart[]
 }
+
+export interface PaymentPart { method: PosPaymentMethod; amount: number }
+/** Besides the main way of paying, at most this many other ways in one sale. */
+export const MAX_SPLIT_PARTS = 2
 
 export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 
@@ -71,6 +77,19 @@ export function parseSale(body: unknown): { ok: true; value: SaleRequest } | { o
     tendered = t
   }
 
+  // Split payment (optional): each part has its own method (different from the main one) and an amount above zero.
+  const rawSplit = Array.isArray(b.split) ? b.split : []
+  if (rawSplit.length > MAX_SPLIT_PARTS) return { ok: false, error: `A sale can be split over at most ${MAX_SPLIT_PARTS + 1} ways of paying.` }
+  const split: PaymentPart[] = []
+  for (const r of rawSplit) {
+    const part = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>
+    const m = POS_PAYMENT_METHODS.find((x) => x === part.method)
+    const a = money(part.amount)
+    if (!m || a === undefined || a === null || a <= 0) return { ok: false, error: 'Each part of a split payment needs a way of paying and an amount above zero.' }
+    if (m === paymentMethod || split.some((x) => x.method === m)) return { ok: false, error: 'Each part of a split payment must use a different way of paying.' }
+    split.push({ method: m, amount: a })
+  }
+
   const name = str(b.customerName).replace(/\s+/g, ' ')
   if (name.length > 80) return { ok: false, error: 'The customer name must be 80 characters or fewer.' }
   const phoneRaw = str(b.customerPhone)
@@ -83,7 +102,7 @@ export function parseSale(body: unknown): { ok: true; value: SaleRequest } | { o
   const key = str(b.idempotencyKey)
   if (key.length < 8 || key.length > 80) return { ok: false, error: 'Your screen is out of date. Please refresh the page and try again.' }
 
-  return { ok: true, value: { items: [...merged].map(([variantId, quantity]) => ({ variantId, quantity })), discount: discount ?? 0, paymentMethod, tendered, customerName: name || null, customerPhone: phone, idempotencyKey: key } }
+  return { ok: true, value: { items: [...merged].map(([variantId, quantity]) => ({ variantId, quantity })), discount: discount ?? 0, paymentMethod, tendered, customerName: name || null, customerPhone: phone, idempotencyKey: key, split } }
 }
 
 export interface SaleTotals { subtotal: number; discount: number; total: number }
@@ -100,6 +119,46 @@ export function cashChange(total: number, tendered: number | null): { ok: true; 
   if (tendered === null) return { ok: true, change: 0 }
   if (tendered < total) return { ok: false, error: 'The cash received is less than the total.' }
   return { ok: true, change: round2(tendered - total) }
+}
+
+/**
+ * Who paid what in a (possibly split) sale: the parts first, then the rest on the main method.
+ * The parts must leave something for the main method; otherwise the cashier should simply pick that method.
+ */
+export function splitPayments(total: number, main: PosPaymentMethod, parts: PaymentPart[]): { ok: true; value: PaymentPart[]; rest: number } | { ok: false; error: string } {
+  const other = round2(parts.reduce((s, p) => s + p.amount, 0))
+  if (parts.length === 0) return { ok: true, value: [{ method: main, amount: total }], rest: total }
+  if (other >= total) return { ok: false, error: 'The split amounts add up to the whole total or more. Lower them, or remove the split and choose that way of paying.' }
+  const rest = round2(total - other)
+  return { ok: true, value: [{ method: main, amount: rest }, ...parts.map((p) => ({ method: p.method, amount: round2(p.amount) }))], rest }
+}
+
+/** Today's takings from the payments themselves, so a split sale adds to each method what was really paid that way. */
+export function tillFromPayments(sales: { cancelled: boolean; payments: { method: string; amount: number }[] }[]) {
+  const by = new Map<string, { count: number; total: number }>()
+  let count = 0, total = 0
+  for (const s of sales) {
+    if (s.cancelled) continue
+    count += 1
+    for (const p of s.payments) {
+      const cur = by.get(p.method) ?? { count: 0, total: 0 }
+      cur.count += 1; cur.total = round2(cur.total + p.amount)
+      by.set(p.method, cur); total = round2(total + p.amount)
+    }
+  }
+  return { count, total, byMethod: POS_PAYMENT_METHODS.filter((m) => by.has(m)).map((m) => ({ method: m, ...by.get(m)! })) }
+}
+
+/**
+ * A barcode scanner types the code and presses Enter. Which item did it mean? An exact barcode or SKU match wins;
+ * otherwise, if the search has narrowed to a single item, that one. Anything else: nothing is added (no guessing).
+ */
+export function scanMatch<T extends { sku: string; barcode?: string | null }>(items: T[], shown: T[], typed: string): T | null {
+  const t = typed.trim().toLowerCase()
+  if (!t) return null
+  const exact = items.filter((i) => (i.barcode ?? '').toLowerCase() === t || i.sku.toLowerCase() === t)
+  if (exact.length === 1) return exact[0]
+  return exact.length === 0 && shown.length === 1 ? shown[0] : null
 }
 
 /** Today's takings per payment method, ignoring sales that were cancelled (voided). */

@@ -14,12 +14,13 @@ export default async function Receipt({ params }: { params: Promise<{ id: string
   const admin = await requireAdmin('pos.sell')
   const { id } = await params
   const [order, store, settings] = await Promise.all([
-    db.order.findFirst({ where: { id, storeId: admin.storeId, source: 'POS' }, include: { items: true, payments: { take: 1 } } }),
+    db.order.findFirst({ where: { id, storeId: admin.storeId, source: 'POS' }, include: { items: true, payments: { orderBy: { createdAt: 'asc' } } } }),
     db.store.findUnique({ where: { id: admin.storeId }, select: { name: true } }),
     db.storeSettings.findUnique({ where: { storeId: admin.storeId }, select: { supportPhone: true } }),
   ])
   if (!order || !store) notFound()
-  const pay = order.payments[0]
+  // The main payment carries the cash details; a split sale has one more row per other way of paying.
+  const pay = order.payments.find((p) => p.idempotencyKey) ?? order.payments[0]
   const raw = (pay?.rawResponse ?? {}) as { tendered?: number | null; change?: number }
   return (
     <div className="mx-auto max-w-[320px] bg-white p-4 text-sm print:p-0 font-mono">
@@ -39,7 +40,9 @@ export default async function Receipt({ params }: { params: Promise<{ id: string
       <p className="flex justify-between"><span>Items</span><span>{formatPrice(order.subtotal.toNumber())}</span></p>
       {order.discount.toNumber() > 0 && <p className="flex justify-between"><span>Discount</span><span>− {formatPrice(order.discount.toNumber())}</span></p>}
       <p className="flex justify-between font-bold text-base"><span>Total</span><span>{formatPrice(order.total.toNumber())}</span></p>
-      {pay && <p className="flex justify-between"><span>Paid by</span><span>{POS_METHOD_LABEL[pay.method as PosPaymentMethod] ?? pay.method}</span></p>}
+      {order.payments.length > 1
+        ? order.payments.map((p) => <p key={p.id} className="flex justify-between"><span>Paid by {POS_METHOD_LABEL[p.method as PosPaymentMethod] ?? p.method}</span><span>{formatPrice(p.amount.toNumber())}</span></p>)
+        : pay && <p className="flex justify-between"><span>Paid by</span><span>{POS_METHOD_LABEL[pay.method as PosPaymentMethod] ?? pay.method}</span></p>}
       {pay?.method === 'CASH' && raw.tendered ? <><p className="flex justify-between"><span>Cash received</span><span>{formatPrice(raw.tendered)}</span></p><p className="flex justify-between"><span>Change</span><span>{formatPrice(raw.change ?? 0)}</span></p></> : null}
       {order.customerName !== 'Walk-in customer' && <p className="mt-2">Customer: {order.customerName}</p>}
       <p className="text-center mt-3">Thank you for shopping with us</p>

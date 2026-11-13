@@ -5,7 +5,7 @@ import { can } from '@/lib/auth/permissions'
 import { loadPosAccess } from '@/lib/entitlements/service'
 import { startOfPktDay, formatPkt } from '@/lib/admin/dates'
 import { formatPrice } from '@/lib/format'
-import { POS_METHOD_LABEL, tillSummary, type PosPaymentMethod } from '@/lib/pos/rules'
+import { POS_METHOD_LABEL, tillFromPayments, type PosPaymentMethod } from '@/lib/pos/rules'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card } from '@/components/admin/ui'
 import PosSale, { type PosVariant } from '@/components/admin/PosSale'
@@ -33,11 +33,11 @@ export default async function PosPage() {
     }),
     db.order.findMany({
       where: { storeId: admin.storeId, source: 'POS', placedAt: { gte: today } }, orderBy: { placedAt: 'desc' }, take: 100,
-      select: { id: true, number: true, total: true, status: true, placedAt: true, customerName: true, payments: { select: { method: true }, take: 1 } },
+      select: { id: true, number: true, total: true, status: true, placedAt: true, customerName: true, payments: { select: { method: true, amount: true }, orderBy: { createdAt: 'asc' } } },
     }),
   ])
   const items: PosVariant[] = variants.map((v) => ({ id: v.id, name: v.product.name, label: v.label, sku: v.sku, barcode: v.barcode, price: v.price.toNumber(), stock: v.trackStock && !v.allowBackorder ? v.stock : null, type: v.product.type, unitCode: v.product.unitCode, qtyMin: v.product.qtyMin, qtyStep: v.product.qtyStep }))
-  const till = tillSummary(sales.map((s) => ({ method: s.payments[0]?.method ?? 'CASH', total: s.total.toNumber(), cancelled: s.status === 'CANCELLED' })))
+  const till = tillFromPayments(sales.map((s) => ({ cancelled: s.status === 'CANCELLED', payments: s.payments.map((p) => ({ method: p.method, amount: p.amount.toNumber() })) })))
   const canVoid = can(admin.role, 'orders.cancel')
 
   return (

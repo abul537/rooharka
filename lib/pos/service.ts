@@ -4,7 +4,7 @@ import { loadPosAccess } from '@/lib/entitlements/service'
 import { generateTrackingCode } from '@/lib/tracking-code'
 import { formatQuantity } from '@/lib/units/registry'
 import { lineTotal, quantityProblem, stockLimited } from '@/lib/units/quantity'
-import { WALK_IN_NAME, WALK_IN_PHONE, cashChange, posRule, saleTotals, type SaleRequest } from './rules'
+import { WALK_IN_NAME, WALK_IN_PHONE, cashChange, posRule, saleTotals, splitPayments, type SaleRequest } from './rules'
 
 /** An error whose message is safe to show to the person at the counter. */
 export class PosError extends Error {}
@@ -55,7 +55,10 @@ export async function ringUpSale(admin: StoreAdmin, req: SaleRequest): Promise<S
   const t = saleTotals(lines, req.discount)
   if (!t.ok) throw new PosError(t.error)
   const { subtotal, discount, total } = t.value
-  const cash = req.paymentMethod === 'CASH' ? cashChange(total, req.tendered) : ({ ok: true, change: 0 } as const)
+  // A split sale: the parts paid another way are taken off first; cash and change apply to what is left.
+  const paid = splitPayments(total, req.paymentMethod, req.split ?? [])
+  if (!paid.ok) throw new PosError(paid.error)
+  const cash = req.paymentMethod === 'CASH' ? cashChange(paid.rest, req.tendered) : ({ ok: true, change: 0 } as const)
   if (!cash.ok) throw new PosError(cash.error)
 
   for (let attempt = 1; attempt <= 4; attempt++) {
@@ -89,7 +92,8 @@ export async function ringUpSale(admin: StoreAdmin, req: SaleRequest): Promise<S
             subtotal, deliveryCharge: 0, discount, total, amountPaid: total, amountDue: 0,
             items: { create: lines.map((l) => ({ productId: l.v.product.id, variantId: l.v.id, name: l.v.product.name, variantLabel: l.v.label, sku: l.v.sku, imageUrl: l.v.product.media[0]?.media.url ?? null, unitPrice: l.unitPrice, quantity: l.quantity, unitCode: l.unitCode, lineTotal: l.lineTotal })) },
             history: { create: { status: 'DELIVERED', note: `Counter sale rung up by ${admin.name}`, isPublic: false, createdById: admin.id } },
-            payments: { create: { method: req.paymentMethod, purpose: 'FULL_PAYMENT', status: 'SUCCEEDED', amount: total, paidAt: now, idempotencyKey: `pos:${storeId}:${req.idempotencyKey}`, rawResponse: { tendered: req.tendered, change: cash.change } } },
+            // One payment row per way of paying. The first (the main method) carries the key that stops a double save.
+            payments: { create: paid.value.map((p, i) => ({ method: p.method, purpose: 'FULL_PAYMENT' as const, status: 'SUCCEEDED' as const, amount: p.amount, paidAt: now, ...(i === 0 ? { idempotencyKey: `pos:${storeId}:${req.idempotencyKey}`, rawResponse: { tendered: req.tendered, change: cash.change } } : {}) })) },
           },
           select: { id: true },
         })

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { ringUpSaleAction, type SaleOutcome } from '@/app/admin/(panel)/pos/actions'
-import { POS_METHOD_LABEL, POS_PAYMENT_METHODS, cashChange, posRule, saleTotals, type PosPaymentMethod } from '@/lib/pos/rules'
+import { MAX_SPLIT_PARTS, POS_METHOD_LABEL, POS_PAYMENT_METHODS, cashChange, posRule, saleTotals, scanMatch, splitPayments, type PosPaymentMethod } from '@/lib/pos/rules'
 import { isBuyable, lineTotal, snapQuantity, stepQuantity } from '@/lib/units/quantity'
 import { formatQuantity, fromBase, parseAmount, perUnit, toBase } from '@/lib/units/registry'
 import { formatPrice } from '@/lib/format'
@@ -20,6 +20,9 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
   const [discount, setDiscount] = useState('')
   const [method, setMethod] = useState<PosPaymentMethod>('CASH')
   const [tendered, setTendered] = useState('')
+  // Split payment: other ways of paying part of the total. The main method above pays the rest.
+  const [parts, setParts] = useState<{ method: PosPaymentMethod; amount: string }[]>([])
+  const [scanNote, setScanNote] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [typed, setTyped] = useState<Record<string, string>>({})
@@ -39,7 +42,20 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
   const totals = saleTotals(lines, d !== null && Number.isFinite(d) && d >= 0 ? d : 0)
   const total = totals.ok ? totals.value.total : 0
   const tend = num(tendered)
-  const change = method === 'CASH' && tend !== null && Number.isFinite(tend) ? cashChange(total, tend) : null
+  const cleanParts = parts.map((p) => ({ method: p.method, amount: num(p.amount) ?? 0 })).filter((p) => Number.isFinite(p.amount) && p.amount > 0)
+  const paid = splitPayments(total, method, cleanParts)
+  const rest = paid.ok ? paid.rest : total
+  const partsProblem = parts.length > 0 && (cleanParts.length !== parts.length || new Set([method, ...parts.map((p) => p.method)]).size !== parts.length + 1)
+    ? 'Each part needs an amount above zero and a different way of paying.' : !paid.ok ? paid.error : null
+  const change = method === 'CASH' && tend !== null && Number.isFinite(tend) ? cashChange(rest, tend) : null
+  const freeMethod = () => POS_PAYMENT_METHODS.find((m) => m !== method && !parts.some((p) => p.method === m)) ?? 'CARD'
+  // A barcode scanner types the code and presses Enter: add the matching item and get ready for the next scan.
+  const onScan = () => {
+    const hit = scanMatch(items, shown, q)
+    if (!hit) { setScanNote(q.trim() ? `No single item matches “${q.trim()}”.` : null); return }
+    if (!isBuyable(ruleOf(hit))) { setScanNote(`“${hit.name}” is out of stock.`); return }
+    add(hit); setQ(''); setScanNote(`Added: ${hit.name} ${hit.label}`)
+  }
 
   // Quantities always go through the product's rule: whole units, or steps of a kg / litre / metre.
   const setQty = (id: string, qty: number) => setCart((c) => {
@@ -51,14 +67,14 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
   const less = (v: PosVariant) => { const r = ruleOf(v), q = cart[v.id]; if (q <= r.min) setQty(v.id, 0); else setQty(v.id, stepQuantity(r, q, -1)) }
   const add = (v: PosVariant) => { const r = ruleOf(v); if (!isBuyable(r)) return; setQty(v.id, cart[v.id] ? stepQuantity(r, cart[v.id], 1) : r.min); setError(null) }
 
-  const reset = () => { setCart({}); setDiscount(''); setTendered(''); setName(''); setPhone(''); setMethod('CASH'); setError(null); setDone(null); setKey(newKey()) }
+  const reset = () => { setCart({}); setDiscount(''); setTendered(''); setName(''); setPhone(''); setMethod('CASH'); setParts([]); setScanNote(null); setError(null); setDone(null); setKey(newKey()) }
 
   const submit = () => {
     setError(null)
     start(async () => {
       const r = await ringUpSaleAction({
         items: lines.map((l) => ({ variantId: l.id, quantity: l.quantity })), discount, paymentMethod: method,
-        tendered: method === 'CASH' ? tendered : '', customerName: name, customerPhone: phone, idempotencyKey: key,
+        tendered: method === 'CASH' ? tendered : '', customerName: name, customerPhone: phone, idempotencyKey: key, split: cleanParts,
       })
       if (r.ok) setDone(r); else setError(r.error)
     })
@@ -80,8 +96,9 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
   return (
     <div className="grid lg:grid-cols-[1.2fr_1fr] gap-6">
       <section className="rounded-xl bg-white border border-slate-200 p-4">
-        <label className="block text-xs text-slate-500 mb-1" htmlFor="pos-q">Find an item (name, size or code)</label>
-        <input id="pos-q" value={q} onChange={(e) => setQ(e.target.value)} autoFocus placeholder="Type to search" className={inputCls} />
+        <label className="block text-xs text-slate-500 mb-1" htmlFor="pos-q">Scan a barcode, or find an item (name, size or code)</label>
+        <input id="pos-q" value={q} onChange={(e) => { setQ(e.target.value); setScanNote(null) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onScan() } }} autoFocus autoComplete="off" placeholder="Scan or type, then Enter" className={inputCls} />
+        {scanNote && <p role="status" className="mt-1 text-xs text-slate-600">{scanNote}</p>}
         {items.length === 0 && <p className="mt-3 text-sm text-slate-600">No active products yet. Add products first.</p>}
         <ul className="mt-3 grid sm:grid-cols-2 gap-2">
           {shown.map((v) => {
@@ -131,6 +148,20 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
           <label className="text-xs text-slate-500">Paid by
             <select value={method} onChange={(e) => setMethod(e.target.value as PosPaymentMethod)} className={`${inputCls} mt-1`}>{POS_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{POS_METHOD_LABEL[m]}</option>)}</select>
           </label>
+          <div className="col-span-2 space-y-2">
+            {parts.map((p, i) => (
+              <div key={i} className="flex items-end gap-2">
+                <label className="text-xs text-slate-500 flex-1">Part paid by
+                  <select value={p.method} onChange={(e) => setParts((all) => all.map((x, k) => (k === i ? { ...x, method: e.target.value as PosPaymentMethod } : x)))} className={`${inputCls} mt-1`}>{POS_PAYMENT_METHODS.filter((m) => m !== method).map((m) => <option key={m} value={m}>{POS_METHOD_LABEL[m]}</option>)}</select>
+                </label>
+                <label className="text-xs text-slate-500 flex-1">Amount (Rs.)<input value={p.amount} onChange={(e) => setParts((all) => all.map((x, k) => (k === i ? { ...x, amount: e.target.value } : x)))} inputMode="decimal" className={`${inputCls} mt-1`} /></label>
+                <button type="button" onClick={() => setParts((all) => all.filter((_, k) => k !== i))} className="mb-2 text-xs underline text-red-700" aria-label="Remove this part">Remove</button>
+              </div>
+            ))}
+            {parts.length < MAX_SPLIT_PARTS && lines.length > 0 && <button type="button" onClick={() => setParts((all) => [...all, { method: freeMethod(), amount: '' }])} className="text-xs underline text-slate-700">{parts.length ? 'Add another way of paying' : 'Split the payment (e.g. part card, part cash)'}</button>}
+            {parts.length > 0 && !partsProblem && <p className="text-xs text-slate-600">Rest by {POS_METHOD_LABEL[method]}: <strong>{formatPrice(rest)}</strong></p>}
+            {partsProblem && <p className="text-xs text-red-700">{partsProblem}</p>}
+          </div>
           {method === 'CASH' && <label className="text-xs text-slate-500 col-span-2">Cash received (Rs.), empty if exact<input value={tendered} onChange={(e) => setTendered(e.target.value)} inputMode="decimal" className={`${inputCls} mt-1`} /></label>}
           <label className="text-xs text-slate-500">Customer name (optional)<input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} className={`${inputCls} mt-1`} /></label>
           <label className="text-xs text-slate-500">Mobile (optional, keeps their history)<input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={`${inputCls} mt-1`} /></label>
@@ -145,7 +176,7 @@ export default function PosSale({ items, truncated }: { items: PosVariant[]; tru
         </div>
 
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-        <button type="button" onClick={submit} disabled={pending || lines.length === 0 || !totals.ok || (change !== null && !change.ok)} className={`${primaryBtn} w-full py-3 text-base`}>{pending ? 'Saving…' : `Complete sale ${totals.ok && lines.length ? formatPrice(total) : ''}`}</button>
+        <button type="button" onClick={submit} disabled={pending || lines.length === 0 || !totals.ok || !!partsProblem || (change !== null && !change.ok)} className={`${primaryBtn} w-full py-3 text-base`}>{pending ? 'Saving…' : `Complete sale ${totals.ok && lines.length ? formatPrice(total) : ''}`}</button>
         {lines.length > 0 && <button type="button" onClick={reset} className="w-full text-sm underline text-slate-600">Clear basket</button>}
       </section>
     </div>

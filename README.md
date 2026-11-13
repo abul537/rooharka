@@ -265,3 +265,15 @@ The eye button in the dashboard ("Preview store", and "Preview it in your shop" 
 Why not draft mode alone: its cookie has the same value for every store on the platform, so it cannot tell one store's owner from another's. Drafts show only with draft mode AND a valid pass for the store being viewed. Orders and phone codes are refused in preview. Rules and tests: `lib/preview/rules.ts`, `tests/preview.test.ts`. No database change.
 
 Note: pages still send `X-Frame-Options: DENY` (anti-clickjacking), so the preview opens in a new tab, not inside a frame.
+
+## Dashboard: Overview, Orders hub, POS (Nov 2026)
+
+All three read and write the same tables (`Order`, `OrderItem`, `Payment`, `ProductVariant`, `Customer`), so a sale made anywhere shows everywhere.
+
+- **Overview** (`/admin`, `lib/admin/stats.ts`, rules in `lib/admin/insights.ts`): period tabs (today, 7, 30, 90 days); sales, orders, average order value and conversion rate, each with the change against the equally long period before; sales-by-day chart (plain SVG, with a table alternative); visitors on the shop in the last 5 minutes; a to-do list; best sellers; low stock. The numbers are remembered for 20 seconds per store.
+- **Visitors** (`VisitorDay`, `lib/visits.ts`, `/api/visit`, `components/shop/VisitBeacon.tsx`): counted in our own database. No cookie, nothing personal: a visitor is a keyed hash of store + day + IP + browser. Crawlers and the owner's preview are not counted. Rows older than 120 days are deleted by the daily job. Conversion = online orders per 100 visitors.
+- **Orders** (`/admin/orders`, rules in `lib/admin/order-list.ts`): filters for status (with counts), payment, online/counter, date shortcut or exact dates; bulk actions (confirm, packed, shipped, delivered and paid) sent in groups of 5 with a progress bar and a per-order reason for anything refused; each order goes through the same `changeOrderStatus` as its own page. **Packing slips**: `/admin/orders/slips?ids=...`, one per printed page.
+- **POS**: scan a barcode (the scanner's Enter adds the item), split payment (up to two other ways of paying plus the main one; one `Payment` row each), takings per method from the payments.
+- **Staying current**: `components/admin/AutoRefresh.tsx` re-reads the page every 30 seconds while the tab is in front (paused during a bulk run).
+
+Run `pnpm db:push` and `pnpm exec prisma generate` (new table `VisitorDay`).
