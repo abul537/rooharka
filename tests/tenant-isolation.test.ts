@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const FILES = ['lib/admin/stats.ts', 'lib/admin/products.ts', 'lib/admin/collections.ts', 'lib/couriers/booking.ts', 'lib/couriers/webhook.ts', 'lib/couriers/vault.ts', 'lib/ai/describe.ts', 'app/admin/(panel)/products/export/route.ts']
+const FILES = ['app/admin/(panel)/orders/page.tsx', 'app/admin/(panel)/orders/slips/page.tsx', 'lib/admin/stats.ts', 'lib/admin/products.ts', 'lib/admin/collections.ts', 'lib/couriers/booking.ts', 'lib/couriers/webhook.ts', 'lib/couriers/vault.ts', 'lib/ai/describe.ts', 'app/admin/(panel)/products/export/route.ts']
 /** Tables whose rows belong to exactly one store. */
 const OWNED = ['visitorDay', 'contactMessage', 'product', 'collection', 'category', 'order', 'tenantCourierCredential', 'aiUsage', 'storeSettings']
 /** Reads and many-row writes: the filter itself must name the store. */
