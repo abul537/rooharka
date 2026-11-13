@@ -26,7 +26,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const canBill = can(admin.role, 'settings.edit')
 
   const allowed = ['/admin', '/admin/orders', '/admin/messages', '/admin/customers', '/admin/security']
-  if (can(admin.role, 'products.view')) allowed.push('/admin/products', '/admin/collections', '/admin/categories')
+  if (can(admin.role, 'products.view')) allowed.push('/admin/products', '/admin/collections')
   if (can(admin.role, 'settings.edit')) allowed.push('/admin/storefront', '/admin/settings', '/admin/billing')
   if (can(admin.role, 'staff.manage')) allowed.push('/admin/team')
   if (pos.enabled && can(admin.role, 'pos.sell')) allowed.push('/admin/pos')

@@ -81,7 +81,7 @@ Run it again with the same email to reset a password (all of that person's sessi
 | `STORE_OWNER`, `STORE_MANAGER` | everything: orders, payments, customers, products, settings |
 | `STORE_STAFF` | view and update orders, view customers and products |
 
-**Pages:** Overview (sales, new orders, pending payments, low stock), Orders (search, status, confirm advance payments, shipments, cancel with restock), Customers (history, notes, block a phone number), Products (add, edit, archive/delete, sizes, photos and videos, page sections, categories), Settings (store details, payment policy and JazzCash/EasyPaisa wallets, checkout fields, phone verification, couriers, photo storage, tracking, product-page switches).
+**Pages:** Overview (sales, new orders, pending payments, low stock), Orders (search, status, confirm advance payments, shipments, cancel with restock), Customers (history, notes, block a phone number), Products (add, edit, archive/delete, sizes, photos and videos, page sections, collections), Settings (store details, payment policy and JazzCash/EasyPaisa wallets, checkout fields, phone verification, couriers, photo storage, tracking, product-page switches).
 
 **Security design:** passwords hashed with scrypt; random session token in an httpOnly cookie (only its hash is stored); 5 wrong passwords lock the account 15 minutes; every page and action checks the signed-in user's role and filters data by their own store; every change is written to the audit log; admin pages are `noindex` and never cached.
 
@@ -91,7 +91,7 @@ Run it again with the same email to reset a password (all of that person's sessi
 
 ## Products, photos and the catalog
 
-- **Admin > Products**: add unlimited products, edit every text, price and stock, add or remove sizes, reorder sections, archive or delete (a product that has orders can only be archived, so order history never breaks). **Admin > Categories** manages the catalog categories.
+- **Admin > Products**: add unlimited products, edit every text, price and stock, add or remove sizes, reorder sections, archive or delete (a product that has orders can only be archived, so order history never breaks). Products are grouped with **Admin > Collections** (the old Categories page was removed in Nov 2026; category data already saved is kept and still filters `/shop`).
 - **Photos and videos** go straight from the browser to the store owner's OWN Cloudinary account (Settings > Photos and videos). The server signs each upload, then checks Cloudinary's reply before saving it, so a customer-facing link can never be forged. A pasted https link also works.
 - **Catalog**: `/shop` (search, categories, sorting, pages). Each product opens at `/product/[slug]`.
 
@@ -230,7 +230,7 @@ One contract for every courier: `lib/couriers/contract.ts` (the `CourierAdapter`
 
 ## Product admin (Shopify-style)
 
-- **List** (`/admin/products`): search (name, SKU, barcode, vendor, tag), status tabs with counts, low-stock / sold-out filters, category and type filters, sorting, 25 per page, bulk actions (activate, draft, archive, feature, move to category, add/remove tags, delete) and **Export (CSV)**. Filters live in the address, so a filtered list can be bookmarked.
+- **List** (`/admin/products`): search (name, SKU, barcode, vendor, tag), status tabs with counts, low-stock / sold-out filters, type filter, sorting, 25 per page, bulk actions (activate, draft, archive, feature, add/remove tags, delete) and **Export (CSV)**. Filters live in the address, so a filtered list can be bookmarked.
 - **Editor** (`/admin/products/[id]`): two columns. Left: media, details, one **variants grid** (price, crossed-out price, cost with profit and margin, stock, SKU, barcode, weight, track stock, on sale), search-engine preview with editable page address. Right: status, organisation (category, vendor, tags), how it is sold.
 - **Duplicate**: `duplicateProduct` copies the product with every connection: variants (new SKUs), media links (same files), page sections, category, vendor, tags, options, unit, SEO. Not copied: reviews, orders, barcodes; stock only if ticked. The copy is a draft.
 - New columns: `Product.vendor`, `Product.tags`, `ProductVariant.costPrice`, `ProductVariant.barcode` (run `pnpm db:push`). Cost is never selected by storefront queries.
