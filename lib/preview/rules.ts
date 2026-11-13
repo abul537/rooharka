@@ -46,6 +46,17 @@ export function safePreviewPath(raw: string | null | undefined): string {
   return p
 }
 
+/**
+ * May a preview of the token's store be opened at this web address?
+ *  - An address that belongs to ONE store (its domain, or <store>.<platform>) only ever previews that store:
+ *    a token for store A opens nothing on store B's address.
+ *  - An address that names no store (localhost, a deployment's test address) is shared by every store, so there the
+ *    signed token itself says which store to show. Only its holder sees it; everyone else still sees the default shop.
+ */
+export function previewAllowedAt(i: { bound: boolean; hostStoreId: string | null; tokenStoreId: string }): boolean {
+  return i.bound ? i.hostStoreId === i.tokenStoreId : true
+}
+
 /** Which product statuses a shop page may show. Archived products are never shown, not even in preview. */
 export const visibleStatuses = (preview: boolean): ('ACTIVE' | 'DRAFT')[] => (preview ? ['ACTIVE', 'DRAFT'] : ['ACTIVE'])
 

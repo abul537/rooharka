@@ -1,7 +1,7 @@
 import { cookies, draftMode } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { getStoreForHost } from '@/lib/store'
+import { previewTarget } from '@/lib/store'
 import { PREVIEW_COOKIE, PREVIEW_SESSION_SECONDS, makeSessionPass, readLinkToken, safePreviewPath } from '@/lib/preview/rules'
 import { clientIp, rateLimit } from '@/lib/rate-limit'
 
@@ -19,17 +19,21 @@ export async function GET(request: Request) {
 
   // 1. The token: signed by this server, made for one store and one person, at most a minute old.
   const pass = readLinkToken(searchParams.get('secret'))
-  // 2. The shop at THIS address must be the store the token was made for (a token for store A opens nothing on store B),
-  //    and the person must still be an active member of it. One answer for every failure: nothing to probe.
-  const store = pass ? await getStoreForHost() : null
-  const member = pass && store?.id === pass.storeId ? await db.user.count({ where: { id: pass.userId, storeId: pass.storeId, isActive: true } }) : 0
-  if (!pass || !store || !member) return refuse(401, 'This preview link is not valid any more. Open the preview again from your dashboard.')
+  // 2. The address: a store's own address only previews that store; a shared address (localhost) lets the token decide.
+  const store = pass ? await previewTarget(pass.storeId) : null
+  // 3. The person must still be an active member of that store.
+  const member = pass && store ? await db.user.count({ where: { id: pass.userId, storeId: pass.storeId, isActive: true } }) : 0
+  if (!pass || !store || !member) {
+    // The browser gets one answer for every failure (nothing to probe); the reason goes to the server log, without the token.
+    console.warn(`[preview] refused: ${!pass ? 'token invalid or older than a minute' : !store ? 'this address belongs to a different store, or the store is not available' : 'the staff member is no longer active'}`)
+    return refuse(401, 'This preview link is not valid any more. Open the preview again from your dashboard.')
+  }
 
-  // 3. Draft mode: Next.js now builds every page fresh for this browser instead of serving the public copy.
+  // 4. Draft mode: Next.js now builds every page fresh for this browser instead of serving the public copy.
   const draft = await draftMode()
   draft.enable()
 
-  // 4. Cookies that also work inside a frame: SameSite=None needs Secure, which needs https (plain http is only local development).
+  // 5. Cookies that also work inside a frame: SameSite=None needs Secure, which needs https (plain http is only local development).
   const https = protocol === 'https:' || request.headers.get('x-forwarded-proto') === 'https'
   const jar = await cookies()
   const bypass = jar.get('__prerender_bypass')
@@ -37,6 +41,6 @@ export async function GET(request: Request) {
   // Our own pass: says WHICH store and WHO. Without it draft mode alone shows nothing extra.
   jar.set({ name: PREVIEW_COOKIE, value: makeSessionPass(pass), httpOnly: true, path: '/', maxAge: PREVIEW_SESSION_SECONDS, sameSite: https ? 'none' : 'lax', secure: https })
 
-  // 5. On to the page (only ever a page of this same shop).
+  // 6. On to the page (only ever a page of this same shop).
   redirect(safePreviewPath(searchParams.get('slug')))
 }

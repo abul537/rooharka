@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  PREVIEW_LINK_SECONDS, PREVIEW_SESSION_SECONDS, makeLinkToken, makeSessionPass, previewLink, readLinkToken, readSessionPass, safePreviewPath, storeOrigin, visibleStatuses,
+  PREVIEW_LINK_SECONDS, PREVIEW_SESSION_SECONDS, makeLinkToken, makeSessionPass, previewAllowedAt, previewLink, readLinkToken, readSessionPass, safePreviewPath, storeOrigin, visibleStatuses,
 } from '@/lib/preview/rules'
 
 const A = { storeId: 'store_AAAAAAAAAA', userId: 'user_1111111111' }
@@ -85,7 +85,28 @@ test('drafts never enter the shared catalogue memory, and a preview needs draft 
   assert.match(server, /isEnabled\) return null/); assert.match(server, /readSessionPass\(/); assert.match(server, /isActive: true/)
   assert.match(server, /\?\.storeId === storeId/, 'scoped to the store being viewed')
   const route = src('app/api/preview/route.ts')
-  assert.match(route, /store\?\.id === pass\.storeId/, 'a token for one store opens nothing on another')
+  assert.match(route, /previewTarget\(pass\.storeId\)/, 'the address is checked against the token')
   assert.match(route, /redirect\(safePreviewPath\(/, 'no open redirect')
   assert.match(route, /sameSite: 'none', secure: true/, 'works inside a frame, as the brief asks')
+})
+
+test('which store a preview may open: a store address only its own store; a shared address (localhost) lets the signed token decide', () => {
+  // On store B's own address, a token for store A opens nothing.
+  assert.equal(previewAllowedAt({ bound: true, hostStoreId: 'store_B', tokenStoreId: 'store_A' }), false)
+  assert.equal(previewAllowedAt({ bound: true, hostStoreId: 'store_A', tokenStoreId: 'store_A' }), true)
+  assert.equal(previewAllowedAt({ bound: true, hostStoreId: null, tokenStoreId: 'store_A' }), false, 'an address of a suspended store')
+  // On localhost (shows the default store to everyone else) the owner of another store can still preview THEIR store.
+  assert.equal(previewAllowedAt({ bound: false, hostStoreId: 'store_default', tokenStoreId: 'store_A' }), true)
+  assert.equal(previewAllowedAt({ bound: false, hostStoreId: null, tokenStoreId: 'store_A' }), true, 'even when there is no default store')
+})
+
+test('the shared-address rule is wired in: only a valid pass changes the store, and only where the address names none', () => {
+  const store = src('lib/store.ts')
+  const fallback = store.slice(store.indexOf('const pass = await getPreview()'))
+  assert.match(fallback, /return \{ store: own \?\? \(await loadStore\(process\.env\.DEFAULT_STORE_SLUG/)
+  assert.match(fallback, /bound: false/)
+  // Both "bound" exits happen BEFORE the pass is even read.
+  const before = store.slice(store.indexOf('const resolveHost'), store.indexOf('const pass = await getPreview()'))
+  assert.equal((before.match(/bound: true/g) ?? []).length, 2)
+  assert.doesNotMatch(before, /getPreview|isPreviewFor/)
 })
