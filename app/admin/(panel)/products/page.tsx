@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth/guard'
 import { can } from '@/lib/auth/permissions'
 import { listProducts } from '@/lib/admin/products'
+import { listCategories } from '@/lib/admin/categories'
 import { LIST_PAGE_SIZE, LIST_SORTS, LIST_SORT_LABEL, LOW_STOCK_AT, listHref, pageCount, parseListQuery } from '@/lib/admin/product-extras'
 import { formatPrice } from '@/lib/format'
 import { imageVariant } from '@/lib/media/urls'
@@ -21,7 +22,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const admin = await requireAdmin('products.view')
   const sp = await searchParams
   const q = parseListQuery(sp)
-  const { rows, total, counts } = await listProducts(admin.storeId, q)
+  const [{ rows, total, counts }, cats] = await Promise.all([listProducts(admin.storeId, q), listCategories(admin.storeId)])
   const editable = can(admin.role, 'products.edit')
   const all = counts.ACTIVE + counts.DRAFT + counts.ARCHIVED
   const pages = pageCount(total)
@@ -51,7 +52,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                   {prices.length ? `${formatPrice(Math.min(...prices))}${Math.max(...prices) > Math.min(...prices) ? ` – ${formatPrice(Math.max(...prices))}` : ''}${p.type === 'MEASURABLE' ? ` ${perUnit(p.unitCode) ?? ''}` : ''}` : 'Nothing on sale'}
                   {' · '}{tracked.length ? `${formatQuantity(stock, p.unitCode)} in stock` : 'stock not tracked'}
                   {' · '}{p.type === 'SIMPLE' ? 'simple' : p.type === 'VARIANTS' ? `${live.length} variant${live.length === 1 ? '' : 's'}` : 'measured'}
-                  {p.vendor && ` · ${p.vendor}`}
+                  {p.category && ` · ${p.category.name}`}{p.vendor && ` · ${p.vendor}`}
                 </span>
               </span>
               {soldOut && <span className="text-xs font-medium rounded-full px-2.5 py-0.5 bg-red-100 text-red-800">sold out</span>}
@@ -82,9 +83,10 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       </nav>
 
       {/* A plain GET form: the filters live in the address, so a filtered list can be bookmarked or shared with staff. */}
-      <form method="get" action="/admin/products" className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_auto] mb-4">
+      <form method="get" action="/admin/products" className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] mb-4">
         {q.status && <input type="hidden" name="status" value={q.status} />}{q.stock && <input type="hidden" name="stock" value={q.stock} />}
         <input name="q" defaultValue={q.q} maxLength={80} placeholder="Search name, SKU, barcode, vendor or tag" className={inputCls} aria-label="Search products" />
+        <select name="category" defaultValue={q.categoryId ?? ''} className={inputCls} aria-label="Category"><option value="">All categories</option><option value="none">No category</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
         <select name="type" defaultValue={q.type ?? ''} className={inputCls} aria-label="Product type"><option value="">All types</option><option value="SIMPLE">Simple</option><option value="VARIANTS">With variants</option><option value="MEASURABLE">Measurable</option></select>
         <select name="sort" defaultValue={q.sort} className={inputCls} aria-label="Sort">{LIST_SORTS.map((s) => <option key={s} value={s}>{LIST_SORT_LABEL[s]}</option>)}</select>
         <button className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium">Apply</button>
@@ -92,7 +94,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       {filtered && <p className="text-sm text-slate-600 mb-3">{total} product{total === 1 ? '' : 's'} found{q.tag && <> with tag “{q.tag}”</>}. <Link href="/admin/products" className="underline">Clear filters</Link></p>}
 
       <div className="rounded-xl bg-white border border-slate-200">
-        {editable ? <ActionForm action={bulkProductsAction}><ProductBulkBar />{list}</ActionForm> : list}
+        {editable ? <ActionForm action={bulkProductsAction}><ProductBulkBar categories={cats.map((c) => ({ id: c.id, name: c.name }))} />{list}</ActionForm> : list}
       </div>
 
       {pages > 1 && (

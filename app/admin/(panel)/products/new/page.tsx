@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { headers } from 'next/headers'
 import { requireAdmin } from '@/lib/auth/guard'
+import { listCategories } from '@/lib/admin/categories'
 import { listOrganisation } from '@/lib/admin/products'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
@@ -16,7 +17,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function NewProduct() {
   const admin = await requireAdmin('products.edit')
-  const [org, host] = await Promise.all([listOrganisation(admin.storeId), headers().then((h) => h.get('host') ?? '')])
+  const [cats, org, host] = await Promise.all([listCategories(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => h.get('host') ?? '')])
   const countries = COUNTRY_CODES.map((code) => ({ code, name: countryName(code) }))
   return (
     <div className="max-w-6xl">
@@ -62,6 +63,9 @@ export default async function NewProduct() {
               <div className="grid gap-4">
                 <TaxonomyPicker id={null} path="" />
                 <Field label="Product type" hint="Your own words, e.g. T-shirt."><input name="productType" maxLength={80} className={inputCls} /></Field>
+                <Field label="Shop category" hint="Your own grouping, shown as a filter in your shop.">
+                  <select name="categoryId" className={inputCls} defaultValue=""><option value="">No category</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                </Field>
                 <Field label="Vendor" hint="The brand or supplier."><input name="vendor" maxLength={80} list="vendors" className={inputCls} /></Field>
                 <datalist id="vendors">{org.vendors.map((v) => <option key={v} value={v} />)}</datalist>
                 <Field label="Tags" hint={`Separate with commas, e.g. summer, gift.${org.tags.length ? ` Already used: ${org.tags.slice(0, 12).join(', ')}` : ''}`}><input name="tags" maxLength={700} className={inputCls} /></Field>

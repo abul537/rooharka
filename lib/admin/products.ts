@@ -150,7 +150,7 @@ async function assertCategory(storeId: string, categoryId: string | null) {
 const autoSku = (seed: string) => `${slugify(seed).toUpperCase().replace(/-/g, '').slice(0, 6) || 'SKU'}-${randomBytes(2).toString('hex').toUpperCase()}`
 
 export async function createProduct(admin: StoreAdmin, input: NewProduct): Promise<string> {
-  await assertCategory(admin.storeId, input.product.categoryId ?? null)
+  await assertCategory(admin.storeId, input.product.categoryId)
   const userChoseSlug = input.slug !== slugify(input.product.name)
   for (let attempt = 0; attempt < 3; attempt++) {
     const taken = new Set((await db.product.findMany({ where: { storeId: admin.storeId, slug: { startsWith: input.slug } }, select: { slug: true } })).map((p) => p.slug))

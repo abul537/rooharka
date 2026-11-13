@@ -11,6 +11,7 @@ import ShippingFields from '@/components/admin/ShippingFields'
 import TaxonomyPicker from '@/components/admin/TaxonomyPicker'
 import { COUNTRY_CODES, countryName, descriptionHtml, htmlToText, isWeightUnit, showWeight } from '@/lib/admin/product-mvp'
 import { duplicateProductAction } from '../actions'
+import { listCategories } from '@/lib/admin/categories'
 import { loadServiceViews } from '@/lib/services/store-services'
 import { COUNT_UNITS, fromBase, getUnit } from '@/lib/units/registry'
 import { optionGroupsToText, readOptionGroups, readOptionValues } from '@/lib/variants/rules'
@@ -28,9 +29,9 @@ const BLANK_SECTION_SLOTS = 3
 export default async function EditProduct({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string; copied?: string }> }) {
   const admin = await requireAdmin('products.view')
   const [{ id }, { created, copied }] = await Promise.all([params, searchParams])
-  const [p, media, sections, services, org, host, videoMax] = await Promise.all([
+  const [p, cats, media, sections, services, org, host, videoMax] = await Promise.all([
     getProductForEdit(admin.storeId, id), // every query below is scoped to this store
-    listMedia(admin.storeId, id), loadSections(admin.storeId, id), loadServiceViews(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => h.get('host') ?? ''), videoLimitBytes(admin.storeId),
+    listCategories(admin.storeId), listMedia(admin.storeId, id), loadSections(admin.storeId, id), loadServiceViews(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => h.get('host') ?? ''), videoLimitBytes(admin.storeId),
   ])
   if (!p) notFound()
   const editable = can(admin.role, 'products.edit')
@@ -116,6 +117,9 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
               </Card>
               <Card title="Organisation">
                 <div className="grid gap-4">
+                  <Field label="Shop category" hint="Your own grouping, shown as a filter in your shop.">
+                    <select name="categoryId" className={inputCls} defaultValue={p.categoryId ?? ''}><option value="">No category</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                  </Field>
                   <TaxonomyPicker id={p.taxonomyId} path={p.taxonomyPath ?? ''} />
                   <Field label="Product type" hint="Your own words, e.g. T-shirt."><input name="productType" defaultValue={p.productType ?? ''} maxLength={80} className={inputCls} /></Field>
                   <Field label="Vendor" hint="The brand or supplier."><input name="vendor" defaultValue={p.vendor ?? ''} maxLength={80} list="vendors" className={inputCls} /></Field>
@@ -207,7 +211,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
       </Card>
 
       {editable && (
-        <Card title="Duplicate this product" hint="Makes a full copy as a draft: variants (with new SKUs), photos and videos, page sections, vendor, tags, options and search text. Reviews, orders and barcodes stay with the original.">
+        <Card title="Duplicate this product" hint="Makes a full copy as a draft: variants (with new SKUs), photos and videos, page sections, category, vendor, tags, options and search text. Reviews, orders and barcodes stay with the original.">
           <ActionForm action={duplicateProductAction} className="space-y-3">
             <input type="hidden" name="productId" value={p.id} />
             <Check name="copyStock" label="Copy the stock numbers too" hint="Leave unticked to start the copy with zero stock." />

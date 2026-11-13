@@ -24,8 +24,7 @@ test('slugs', () => {
 })
 const newBase = { name: 'Rose Water', status: 'DRAFT', v_label: '100ml', v_price: '900', v_stock: '20' }
 test('new product: valid, with defaults, and rejections', () => {
-  const r = parseNewProduct(GG(newBase)); assert.ok(r.ok); if (r.ok) { assert.equal(r.value.slug, 'rose-water'); assert.equal(r.value.variant.stock, 20); assert.equal(r.value.product.categoryId, undefined, 'no category field on the form: the category is left alone') }
-  const withCat = parseNewProduct(GG({ ...newBase, categoryId: '' })); assert.ok(withCat.ok && withCat.value.product.categoryId === null)
+  const r = parseNewProduct(GG(newBase)); assert.ok(r.ok); if (r.ok) { assert.equal(r.value.slug, 'rose-water'); assert.equal(r.value.variant.stock, 20); assert.equal(r.value.product.categoryId, null) }
   for (const bad of [{ name: 'x' }, { status: 'LIVE' }, { v_label: '' }, { v_price: '0' }, { v_price: '9.5' }, { v_compareAt: '1' }, { v_sku: 'bad sku!' }, { slug: 'Bad Slug' }, { description: 'x'.repeat(20_001) }, { categoryId: '../x' }])
     assert.ok(!parseNewProduct(GG({ ...newBase, ...bad })).ok, JSON.stringify(bad))
   assert.equal(parseVariantFields(GG({ label: '5L', price: '100', stock: '' })).ok, true)

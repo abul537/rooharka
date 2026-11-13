@@ -33,8 +33,7 @@ export const PRODUCT_STATUSES = ['DRAFT', 'ACTIVE', 'ARCHIVED'] as const
 
 export interface ProductEdit {
   name: string; subtitle: string | null; shortDescription: string | null; description: string | null
-  /** Present only when the form has the field. The dashboard no longer has it (collections replaced categories), so a save leaves any old category as it is. */
-  categoryId?: string | null; seoTitle: string | null; seoDescription: string | null; isFeatured: boolean
+  categoryId: string | null; seoTitle: string | null; seoDescription: string | null; isFeatured: boolean
   status: (typeof PRODUCT_STATUSES)[number]
   /** Present only when the form has the field (older / smaller forms leave these untouched). */
   vendor?: string | null; tags?: string[]
@@ -86,7 +85,7 @@ function parseCommon(g: Getter): R<Omit<ProductEdit, 'status'> & { status: Produ
     value: {
       ...extra,
       name, subtitle: subtitle || null, shortDescription: shortDescription || null, description: description || null,
-      ...(g.get('categoryId') != null ? { categoryId: categoryId || null } : {}), seoTitle: seoTitle || null, seoDescription: seoDescription || null,
+      categoryId: categoryId || null, seoTitle: seoTitle || null, seoDescription: seoDescription || null,
       isFeatured: g.get('isFeatured') === 'on', status,
     },
   }
