@@ -184,3 +184,20 @@ test('continue selling when out of stock: the stock number stops limiting sales'
   assert.equal(stockLimited({ trackStock: false, allowBackorder: false }), false)
   assert.equal(stockLimited({ trackStock: true }), true)
 })
+
+import { rowWindow } from '@/lib/admin/window'
+
+test('variant table windowing: only rows near the screen are drawn, and the scroll height always adds up', () => {
+  const total = 100, h = 92, view = 560
+  for (const top of [0, 1, 91, 92, 500, 4000, 8640, 99999, -50]) {
+    const w = rowWindow(total, h, top, view)
+    assert.ok(w.start >= 0 && w.end <= total && w.start < w.end, `range at ${top}`)
+    assert.equal(w.padTop + (w.end - w.start) * h + w.padBottom, total * h, `height at ${top}`)
+    assert.ok(w.end - w.start <= Math.ceil(view / h) + 9, `at most a screenful plus spares at ${top}`)
+    const firstVisible = Math.min(total - 1, Math.floor(Math.max(0, top) / h))
+    if (top <= total * h) assert.ok(w.start <= firstVisible && firstVisible < w.end, `the row at the top of the screen is drawn at ${top}`)
+  }
+  assert.deepEqual(rowWindow(100, 92, 0, 560), { start: 0, end: 11, padTop: 0, padBottom: 89 * 92 })
+  assert.deepEqual(rowWindow(0, 92, 0, 560), { start: 0, end: 0, padTop: 0, padBottom: 0 })
+  assert.deepEqual(rowWindow(3, 92, 0, 560), { start: 0, end: 3, padTop: 0, padBottom: 0 })
+})

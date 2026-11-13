@@ -235,3 +235,20 @@ One contract for every courier: `lib/couriers/contract.ts` (the `CourierAdapter`
 - **Duplicate**: `duplicateProduct` copies the product with every connection: variants (new SKUs), media links (same files), page sections, category, vendor, tags, options, unit, SEO. Not copied: reviews, orders, barcodes; stock only if ticked. The copy is a draft.
 - New columns: `Product.vendor`, `Product.tags`, `ProductVariant.costPrice`, `ProductVariant.barcode` (run `pnpm db:push`). Cost is never selected by storefront queries.
 - Rules are pure and tested in `lib/admin/product-extras.ts` (`tests/product-extras.test.ts`). The CSV export defuses cells starting with `= + - @` so a product name can never run as a spreadsheet formula.
+
+## Product module (MVP brief, Nov 2026)
+
+How the brief maps onto this codebase: `title` = `Product.name`, `handle` = `Product.slug`, `tenant_id` = `storeId`. Money stays `Decimal(12,2)` (exact, never a float). Price, SKU, stock and weight live on `ProductVariant` (a simple product has exactly one).
+
+- **Fields:** product type, vendor, tags, Google category (`taxonomyId` + `taxonomyPath`), taxable, physical product, weight unit (kg/g/lb, stored in grams), origin country, HS code; per variant: cost (private), barcode, `allowBackorder`, `imageId`, `storeId`.
+- **Rules** (`lib/admin/product-mvp.ts`, tested): crossed-out price must be higher than the price; page address unique per store with a suggested free one; **SKU unique per store** (`@@unique([storeId, sku])` plus a readable check); 2 options and 100 variants in the UI (schema allows 3).
+- **Rich text:** `components/admin/RichTextEditor.tsx`. The server rebuilds the HTML from an allow-list (`sanitizeHtml`) before saving and again before showing. Old plain-text descriptions still display.
+- **AI description:** `lib/ai/describe.ts`. Uses the store's own Anthropic key (Settings > AI writing assistant) or the platform's `ANTHROPIC_API_KEY`; model from `AI_MODEL`. 10 per store per hour, counted in `AiUsage` under a row lock; every request is logged.
+- **Google taxonomy:** `lib/taxonomy/`. Read-only; fetched from Google and kept in memory for a day; only the id from the form is trusted.
+- **Media:** same Cloudinary pipeline. Drag-and-drop order (`reorderMedia`); the first photo is the main picture. Video size per plan (`Plan.limits.videoMb`, default 20 MB, set in CSMI > Plans), checked on the server.
+- **Variants table:** `components/admin/VariantGrid.tsx`, windowed above 16 rows (`lib/admin/window.ts`), "set for all" boxes, photo per variant (shown in the shop gallery when picked).
+- **Collections:** manual only. `/admin/collections`, shop page `/collections/<handle>`.
+- **Backorder:** `stockLimited()` in `lib/units/quantity.ts` is the one rule used by checkout, POS and the shop.
+- **Tenant isolation:** `tests/tenant-isolation.test.ts` reviews every query in the product, collection and courier code for a store filter.
+
+After pulling: `pnpm db:push`, `pnpm exec prisma generate`, then once `pnpm exec tsx scripts/backfill-variant-store.ts` (gives old variants their store so the store-wide SKU rule covers them).

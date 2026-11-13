@@ -49,7 +49,7 @@ export default function ProductTypeFields() {
       )}
 
       {type === 'VARIANTS' && (
-        <Field label="Options" hint="One per line: “Size: S, M, L” then “Colour: Red, Blue”. Every combination becomes a variant. Leave empty to start with a single variant and add more later.">
+        <Field label="Options" hint="Up to two options, one per line: “Size: S, M, L” then “Colour: Red, Blue”. Every combination becomes a variant (up to 100). Leave empty to start with a single variant and add more later.">
           <textarea name="options" rows={3} placeholder={'Size: S, M, L\nColour: Red, Blue'} className={`${inputCls} font-mono`} />
         </Field>
       )}

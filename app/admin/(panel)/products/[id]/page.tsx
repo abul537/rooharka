@@ -4,9 +4,8 @@ import { requireAdmin } from '@/lib/auth/guard'
 import { can } from '@/lib/auth/permissions'
 import { headers } from 'next/headers'
 import { getProductForEdit, listMedia, listOrganisation, loadSections, videoLimitBytes } from '@/lib/admin/products'
-import { margin } from '@/lib/admin/product-extras'
-import { formatPrice } from '@/lib/format'
 import SeoFields from '@/components/admin/SeoFields'
+import VariantGrid from '@/components/admin/VariantGrid'
 import RichTextEditor from '@/components/admin/RichTextEditor'
 import ShippingFields from '@/components/admin/ShippingFields'
 import TaxonomyPicker from '@/components/admin/TaxonomyPicker'
@@ -82,62 +81,16 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
 
               <Card title={simple ? 'Pricing and inventory' : measured ? `Price per ${unit!.code} and inventory` : 'Variants: pricing and inventory'}
                 hint={`${measured ? `Price is for one ${unit!.code} (paisa allowed); stock is typed in ${unit!.code}.` : 'Prices are in whole rupees.'} Cost is what you pay for the item: customers never see it, it only shows your profit. Stock goes down automatically with orders and back up when an order is cancelled.`}>
-                <div className="overflow-x-auto -mx-2 px-2">
-                  <table className="w-full text-sm border-separate border-spacing-y-2" style={{ minWidth: simple ? 820 : 1240 }}>
-                    <thead className="text-left text-xs text-slate-500">
-                      <tr>
-                        {!simple && <th className="font-medium pr-2">Variant</th>}
-                        <th className="font-medium pr-2">Price</th><th className="font-medium pr-2">Crossed-out</th><th className="font-medium pr-2">Cost</th>
-                        <th className="font-medium pr-2">In stock{measured ? ` (${unit!.code})` : ''}</th><th className="font-medium pr-2">SKU</th><th className="font-medium pr-2">Barcode</th><th className="font-medium pr-2">Weight ({wUnit})</th>{images.length > 0 && <th className="font-medium pr-2">Photo</th>}
-                        <th className="font-medium pr-2">Track stock</th>{!simple && <><th className="font-medium pr-2">On sale</th><th className="font-medium pr-2">First</th><th /></>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {p.variants.map((v) => {
-                        const m = margin(v.price.toNumber(), v.costPrice?.toNumber())
-                        return (
-                          <tr key={v.id} className="align-top">
-                            {!simple && (
-                              <td className="pr-2">
-                                <input name={`v_${v.id}_label`} defaultValue={v.label} maxLength={40} className={inputCls} aria-label="Variant name" />
-                                <input name={`v_${v.id}_badge`} defaultValue={v.badge ?? ''} maxLength={30} placeholder="Badge, e.g. Most Popular" className={`${inputCls} mt-1 text-xs`} aria-label={`Badge for ${v.label}`} />
-                              </td>
-                            )}
-                            <td className="pr-2">
-                              <input type="hidden" name={`v_${v.id}_stockWas`} value={v.stock} /><input type="hidden" name={`v_${v.id}_stockShown`} value={shownStock(v.stock)} /><input type="hidden" name={`v_${v.id}_trackSent`} value="1" />
-                              {simple && <><input type="hidden" name={`v_${v.id}_label`} value={v.label} /><input type="hidden" name="defaultVariant" value={v.id} /><input type="hidden" name={`v_${v.id}_active`} value="on" /></>}
-                              <input name={`v_${v.id}_price`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={v.price.toNumber()} className={inputCls} aria-label={`Price of ${v.label}`} />
-                            </td>
-                            <td className="pr-2"><input name={`v_${v.id}_compareAt`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={v.compareAtPrice?.toNumber() ?? ''} className={inputCls} aria-label={`Crossed-out price of ${v.label}`} /></td>
-                            <td className="pr-2">
-                              <input name={`v_${v.id}_cost`} inputMode="decimal" defaultValue={v.costPrice?.toNumber() ?? ''} className={inputCls} aria-label={`Cost of ${v.label}`} />
-                              {m && <span className={`block text-xs mt-1 ${m.profit < 0 ? 'text-red-700' : 'text-slate-500'}`}>Profit {formatPrice(m.profit)} · {m.marginPct}%</span>}
-                            </td>
-                            <td className="pr-2"><input name={`v_${v.id}_stock`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={shownStock(v.stock)} className={inputCls} aria-label={`Stock of ${v.label}`} /></td>
-                            <td className="pr-2"><input name={`v_${v.id}_sku`} defaultValue={v.sku} maxLength={30} className={`${inputCls} font-mono uppercase`} aria-label={`SKU of ${v.label}`} /></td>
-                            <td className="pr-2"><input name={`v_${v.id}_barcode`} defaultValue={v.barcode ?? ''} maxLength={32} className={`${inputCls} font-mono`} aria-label={`Barcode of ${v.label}`} /></td>
-                            <td className="pr-2"><input name={`v_${v.id}_weight`} inputMode="decimal" defaultValue={showWeight(v.weightGrams, wUnit)} className={inputCls} aria-label={`Weight of ${v.label} in ${wUnit}`} /></td>
-                            {images.length > 0 && (
-                              <td className="pr-2">
-                                <select name={`v_${v.id}_image`} defaultValue={v.imageId ?? ''} className={inputCls} aria-label={`Photo for ${v.label}`}>
-                                  <option value="">Main photo</option>{images.map((m, i) => <option key={m.assetId} value={m.assetId}>Photo {i + 1}{m.alt ? `: ${m.alt.slice(0, 20)}` : ''}</option>)}
-                                </select>
-                              </td>
-                            )}
-                            <td className="pr-2 pt-2 text-center"><input type="checkbox" name={`v_${v.id}_track`} defaultChecked={v.trackStock} className="h-4 w-4" aria-label={`Track stock of ${v.label}`} /></td>
-                            {!simple && (
-                              <>
-                                <td className="pr-2 pt-2 text-center"><input type="checkbox" name={`v_${v.id}_active`} defaultChecked={v.isActive} className="h-4 w-4" aria-label={`${v.label} on sale`} /></td>
-                                <td className="pr-2 pt-2 text-center"><input type="radio" name="defaultVariant" value={v.id} defaultChecked={v.isDefault} aria-label={`Show ${v.label} first`} /></td>
-                                <td className="pt-2">{editable && p.variants.length > 1 && <button type="submit" form={`rm-${v.id}`} className="text-xs text-red-700 underline">Delete</button>}</td>
-                              </>
-                            )}
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                {/* The key changes whenever saved data changes (a save, or an order that moved stock), so the table restarts from fresh numbers. */}
+                <VariantGrid key={`${p.updatedAt.getTime()}:${p.variants.map((v) => `${v.id}.${v.stock}`).join(',')}`}
+                  simple={simple} measured={measured} unit={unit?.code ?? null} weightUnit={wUnit} editable={editable} canDelete={p.variants.length > 1}
+                  defaultId={defaultVariant?.id ?? ''} images={images.map((m, i) => ({ id: m.assetId, label: `Photo ${i + 1}${m.alt ? `: ${m.alt.slice(0, 20)}` : ''}` }))}
+                  rows={p.variants.map((v) => ({
+                    id: v.id, label: v.label, badge: v.badge ?? '', price: String(v.price.toNumber()), compareAt: v.compareAtPrice ? String(v.compareAtPrice.toNumber()) : '', cost: v.costPrice ? String(v.costPrice.toNumber()) : '',
+                    stock: shownStock(v.stock), stockShown: shownStock(v.stock), stockWas: v.stock, sku: v.sku, barcode: v.barcode ?? '', weight: showWeight(v.weightGrams, wUnit), image: v.imageId ?? '',
+                    track: v.trackStock, active: v.isActive, fromOptions: !!readOptionValues(v.optionValues),
+                  }))}
+                />
                 <p className="text-xs text-slate-500 mt-2">Untick “Track stock” for items you never run out of (made to order, services): they can always be bought and their stock number is ignored.{images.length > 0 && ' “Photo” is the picture shown when a customer picks that variant.'}</p>
                 <div className="grid gap-3 mt-4 border-t border-slate-100 pt-4">
                   <input type="hidden" name="optionsSent" value="1" />
@@ -201,7 +154,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
       ))}
 
       {editable && p.type === 'VARIANTS' && (
-        <Card title="Options and automatic variants" hint="List your options, one per line, like “Size: S, M, L” and “Colour: Red, Blue”. The system builds every combination as its own variant with its own SKU, price and stock. Existing variants keep their price and stock; combinations you remove are switched off, never deleted. Save your changes above first.">
+        <Card title="Options and automatic variants" hint="List up to two options, one per line, like “Size: S, M, L” and “Colour: Red, Blue” (up to 100 variants). The system builds every combination as its own variant with its own SKU, price and stock. Existing variants keep their price and stock; combinations you remove are switched off, never deleted. Save your changes above first.">
           <ActionForm action={generateVariantsAction} className="space-y-3">
             <input type="hidden" name="productId" value={p.id} />
             <Field label="Options"><textarea name="options" rows={3} defaultValue={optionGroupsToText(readOptionGroups(p.optionGroups))} placeholder={'Size: S, M, L\nColour: Red, Blue'} className={`${inputCls} font-mono`} /></Field>
