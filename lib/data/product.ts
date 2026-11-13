@@ -1,3 +1,4 @@
+import { descriptionHtml, htmlToText } from '@/lib/admin/product-mvp'
 import { readOptionGroups, readOptionValues } from '@/lib/variants/rules'
 import { cache } from 'react'
 import { db } from '@/lib/db'
@@ -47,6 +48,8 @@ export interface VariantDTO {
   compareAtPrice: number | null
   stock: number
   trackStock: boolean
+  /** The photo to show when this variant is picked (the id of one of the product's media), or null for the main photo. */
+  imageId: string | null
   isDefault: boolean
   /** Which option values this variant is ({ Size: "M" }); null for variants added by hand. */
   optionValues: Record<string, string> | null
@@ -92,7 +95,10 @@ export interface ProductPageData {
     name: string
     subtitle: string | null
     shortDescription: string | null
+    /** Safe HTML (sanitized on the server). */
     description: string | null
+    /** The first ~150 characters as plain words, for search engines. */
+    descriptionText: string | null
     seoTitle: string | null
     seoDescription: string | null
     /** How it is sold: counted, with variants, or measured. */
@@ -193,7 +199,9 @@ export const getProductPageData = cache(async (slug: string): Promise<ProductPag
       name: product.name,
       subtitle: product.subtitle,
       shortDescription: product.shortDescription,
-      description: product.description,
+      // Rebuilt from the allow-list on the server: safe to show as HTML. Older plain-text descriptions become paragraphs.
+      description: descriptionHtml(product.description) || null,
+      descriptionText: htmlToText(product.description, 150) || null,
       seoTitle: product.seoTitle,
       seoDescription: product.seoDescription,
       type: product.type,
@@ -211,6 +219,7 @@ export const getProductPageData = cache(async (slug: string): Promise<ProductPag
       stock: v.stock,
       // For the shop, a variant that keeps selling at zero behaves like one whose stock is not tracked.
       trackStock: v.trackStock && !v.allowBackorder,
+      imageId: v.imageId ?? null,
       isDefault: v.isDefault,
       optionValues: readOptionValues(v.optionValues),
     })),

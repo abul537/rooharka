@@ -41,7 +41,6 @@ export default function ProductTabs({ data }: { data: ProductPageData }) {
   if (tabs.length === 0) return null
 
   const current = tabs.find((t) => t.key === active) ?? tabs[0]
-  const paragraphs = (data.product.description ?? '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
 
   function onKeyDown(e: React.KeyboardEvent, index: number) {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
@@ -80,9 +79,11 @@ export default function ProductTabs({ data }: { data: ProductPageData }) {
             <Reviews items={data.reviews.items} count={data.reviews.count} average={data.reviews.average} />
           ) : (
             <>
-              {current.key === 'description' && paragraphs.map((p, i) => (
-                <p key={i} className="text-lg text-gray-700 mb-6 leading-relaxed">{p}</p>
-              ))}
+              {current.key === 'description' && data.product.description && (
+                // Safe to show as HTML: the server rebuilt it from an allow-list (lib/admin/product-mvp.ts) before sending it.
+                <div className="text-lg text-gray-700 leading-relaxed [&_p]:mb-6 [&_h2]:font-playfair [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-gray-900 [&_h2]:mt-8 [&_h2]:mb-3 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:text-gray-900 [&_h3]:mt-6 [&_h3]:mb-2 [&_h4]:font-semibold [&_h4]:mt-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-6 [&_li]:mb-1 [&_blockquote]:border-l-4 [&_blockquote]:border-brand-200 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:mb-6 [&_a]:text-brand-700 [&_a]:underline [&_hr]:my-8"
+                  dangerouslySetInnerHTML={{ __html: data.product.description }} />
+              )}
               {current.sections.map((s) => <SectionBlock key={s.id} section={s} />)}
             </>
           )}

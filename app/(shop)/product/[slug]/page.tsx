@@ -1,3 +1,4 @@
+import { headers } from 'next/headers'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getProductPageData } from '@/lib/data/product'
@@ -22,11 +23,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!data) return { title: 'Product not found' }
   const { product, media, store } = data
   const title = product.seoTitle ?? `${product.name}${product.subtitle ? `: ${product.subtitle}` : ''} | ${store.name}`
-  const description = product.seoDescription ?? product.shortDescription ?? undefined
+  // No search description typed: fall back to the short description, then to the first 150 characters of the description.
+  const description = product.seoDescription ?? product.shortDescription ?? product.descriptionText ?? undefined
   const image = media.find((m) => m.kind === 'IMAGE')?.url
+  const host = (await headers()).get('host')
   return {
     title,
     description,
+    // One official address per product, so search engines do not see copies (?utm=..., other hosts) as separate pages.
+    alternates: host ? { canonical: `https://${host}/product/${product.slug}` } : undefined,
     openGraph: { title, description, type: 'website', images: image ? [image] : undefined },
   }
 }
@@ -48,7 +53,7 @@ export default async function ProductPage({ params }: Props) {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: product.name,
-    description: product.shortDescription ?? undefined,
+    description: product.shortDescription ?? product.descriptionText ?? undefined,
     image: media.filter((m) => m.kind === 'IMAGE').map((m) => m.url),
     brand: { '@type': 'Brand', name: store.name },
     offers: {

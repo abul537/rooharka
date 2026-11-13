@@ -125,6 +125,12 @@ export default async function SettingsPage() {
         </div>
       </Card>
 
+      <Card title="AI writing assistant" hint="Adds a “Generate with AI” button to the product description. It uses your own Anthropic account, so you control the cost (a description costs a tiny fraction of a rupee). Limit: 10 descriptions an hour.">
+        <div className="space-y-4">
+          {SERVICES.filter((d) => d.key === 'ai').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
+        </div>
+      </Card>
+
       <Card title="Product page" hint="Switch parts of the product page on or off.">
         <ActionForm action={saveProductPageAction} className="space-y-5">
           <div className="grid sm:grid-cols-2 gap-3">

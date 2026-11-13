@@ -7,6 +7,10 @@ import { getProductForEdit, listMedia, listOrganisation, loadSections } from '@/
 import { margin } from '@/lib/admin/product-extras'
 import { formatPrice } from '@/lib/format'
 import SeoFields from '@/components/admin/SeoFields'
+import RichTextEditor from '@/components/admin/RichTextEditor'
+import ShippingFields from '@/components/admin/ShippingFields'
+import TaxonomyPicker from '@/components/admin/TaxonomyPicker'
+import { COUNTRY_CODES, countryName, descriptionHtml, htmlToText, isWeightUnit, showWeight } from '@/lib/admin/product-mvp'
 import { duplicateProductAction } from '../actions'
 import { listCategories } from '@/lib/admin/categories'
 import { loadServiceViews } from '@/lib/services/store-services'
@@ -38,6 +42,9 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
   const simple = p.type === 'SIMPLE'
   const shownStock = (stock: number) => String(measured ? fromBase(stock, unit!.code) : stock)
   const defaultVariant = p.variants.find((v) => v.isDefault) ?? p.variants[0]
+  const wUnit = isWeightUnit(p.weightUnit) ? p.weightUnit : 'g'
+  const images = media.filter((m) => m.kind === 'IMAGE')
+  const countries = COUNTRY_CODES.map((code) => ({ code, name: countryName(code) }))
   const slots = [...sections, ...Array.from({ length: BLANK_SECTION_SLOTS }, () => null)]
 
   return (
@@ -69,19 +76,19 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
                   <Field label="Title"><input name="name" defaultValue={p.name} required maxLength={120} className={inputCls} /></Field>
                   <Field label="Subtitle"><input name="subtitle" defaultValue={p.subtitle ?? ''} maxLength={160} className={inputCls} /></Field>
                   <Field label="Short description" hint="One or two lines shown near the price."><textarea name="shortDescription" defaultValue={p.shortDescription ?? ''} rows={3} maxLength={500} className={inputCls} /></Field>
-                  <Field label="Description"><textarea name="description" defaultValue={p.description ?? ''} rows={8} maxLength={10000} className={inputCls} /></Field>
+                  <div><span className="block text-sm font-medium mb-1">Description</span><RichTextEditor name="description" initialHtml={descriptionHtml(p.description)} /></div>
                 </div>
               </Card>
 
               <Card title={simple ? 'Pricing and inventory' : measured ? `Price per ${unit!.code} and inventory` : 'Variants: pricing and inventory'}
                 hint={`${measured ? `Price is for one ${unit!.code} (paisa allowed); stock is typed in ${unit!.code}.` : 'Prices are in whole rupees.'} Cost is what you pay for the item: customers never see it, it only shows your profit. Stock goes down automatically with orders and back up when an order is cancelled.`}>
                 <div className="overflow-x-auto -mx-2 px-2">
-                  <table className="w-full text-sm border-separate border-spacing-y-2" style={{ minWidth: simple ? 720 : 1080 }}>
+                  <table className="w-full text-sm border-separate border-spacing-y-2" style={{ minWidth: simple ? 820 : 1240 }}>
                     <thead className="text-left text-xs text-slate-500">
                       <tr>
                         {!simple && <th className="font-medium pr-2">Variant</th>}
                         <th className="font-medium pr-2">Price</th><th className="font-medium pr-2">Crossed-out</th><th className="font-medium pr-2">Cost</th>
-                        <th className="font-medium pr-2">In stock{measured ? ` (${unit!.code})` : ''}</th><th className="font-medium pr-2">SKU</th><th className="font-medium pr-2">Barcode</th><th className="font-medium pr-2">Weight (g)</th>
+                        <th className="font-medium pr-2">In stock{measured ? ` (${unit!.code})` : ''}</th><th className="font-medium pr-2">SKU</th><th className="font-medium pr-2">Barcode</th><th className="font-medium pr-2">Weight ({wUnit})</th>{images.length > 0 && <th className="font-medium pr-2">Photo</th>}
                         <th className="font-medium pr-2">Track stock</th>{!simple && <><th className="font-medium pr-2">On sale</th><th className="font-medium pr-2">First</th><th /></>}
                       </tr>
                     </thead>
@@ -109,7 +116,14 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
                             <td className="pr-2"><input name={`v_${v.id}_stock`} inputMode={measured ? 'decimal' : 'numeric'} defaultValue={shownStock(v.stock)} className={inputCls} aria-label={`Stock of ${v.label}`} /></td>
                             <td className="pr-2"><input name={`v_${v.id}_sku`} defaultValue={v.sku} maxLength={30} className={`${inputCls} font-mono uppercase`} aria-label={`SKU of ${v.label}`} /></td>
                             <td className="pr-2"><input name={`v_${v.id}_barcode`} defaultValue={v.barcode ?? ''} maxLength={32} className={`${inputCls} font-mono`} aria-label={`Barcode of ${v.label}`} /></td>
-                            <td className="pr-2"><input name={`v_${v.id}_weight`} inputMode="numeric" defaultValue={v.weightGrams ?? ''} className={inputCls} aria-label={`Weight of ${v.label} in grams`} /></td>
+                            <td className="pr-2"><input name={`v_${v.id}_weight`} inputMode="decimal" defaultValue={showWeight(v.weightGrams, wUnit)} className={inputCls} aria-label={`Weight of ${v.label} in ${wUnit}`} /></td>
+                            {images.length > 0 && (
+                              <td className="pr-2">
+                                <select name={`v_${v.id}_image`} defaultValue={v.imageId ?? ''} className={inputCls} aria-label={`Photo for ${v.label}`}>
+                                  <option value="">Main photo</option>{images.map((m, i) => <option key={m.assetId} value={m.assetId}>Photo {i + 1}{m.alt ? `: ${m.alt.slice(0, 20)}` : ''}</option>)}
+                                </select>
+                              </td>
+                            )}
                             <td className="pr-2 pt-2 text-center"><input type="checkbox" name={`v_${v.id}_track`} defaultChecked={v.trackStock} className="h-4 w-4" aria-label={`Track stock of ${v.label}`} /></td>
                             {!simple && (
                               <>
@@ -124,11 +138,16 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-slate-500 mt-2">Untick “Track stock” for items you never run out of (made to order, services): they can always be bought and their stock number is ignored.</p>
+                <p className="text-xs text-slate-500 mt-2">Untick “Track stock” for items you never run out of (made to order, services): they can always be bought and their stock number is ignored.{images.length > 0 && ' “Photo” is the picture shown when a customer picks that variant.'}</p>
+                <div className="grid gap-3 mt-4 border-t border-slate-100 pt-4">
+                  <input type="hidden" name="optionsSent" value="1" />
+                  <Check name="allowBackorder" label="Continue selling when out of stock" hint="Customers can still order at zero stock; the stock number keeps counting down (below zero) so you know how many you owe." defaultChecked={p.variants.some((v) => v.allowBackorder)} />
+                  <Check name="taxable" label="Charge tax on this product" hint="Recorded on the product for your accounts and future tax settings." defaultChecked={p.taxable} />
+                </div>
               </Card>
 
               <Card title="Search engine listing" hint="How this product may appear on Google, and its page address.">
-                <SeoFields name={p.name} shortDescription={p.shortDescription ?? ''} seoTitle={p.seoTitle ?? ''} seoDescription={p.seoDescription ?? ''} slug={p.slug} host={host} editableSlug />
+                <SeoFields name={p.name} shortDescription={p.shortDescription ?? htmlToText(p.description, 150)} seoTitle={p.seoTitle ?? ''} seoDescription={p.seoDescription ?? ''} slug={p.slug} host={host} editableSlug />
               </Card>
               {editable && <button className={primaryBtn}>Save product</button>}
             </div>
@@ -145,13 +164,18 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
               </Card>
               <Card title="Organisation">
                 <div className="grid gap-4">
-                  <Field label="Category">
+                  <Field label="Shop category" hint="Your own grouping, shown as a filter in your shop.">
                     <select name="categoryId" className={inputCls} defaultValue={p.categoryId ?? ''}><option value="">No category</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
                   </Field>
+                  <TaxonomyPicker id={p.taxonomyId} path={p.taxonomyPath ?? ''} />
+                  <Field label="Product type" hint="Your own words, e.g. T-shirt."><input name="productType" defaultValue={p.productType ?? ''} maxLength={80} className={inputCls} /></Field>
                   <Field label="Vendor" hint="The brand or supplier."><input name="vendor" defaultValue={p.vendor ?? ''} maxLength={80} list="vendors" className={inputCls} /></Field>
                   <datalist id="vendors">{org.vendors.map((v) => <option key={v} value={v} />)}</datalist>
                   <Field label="Tags" hint={`Separate with commas, e.g. summer, gift. Used to search and group products.${org.tags.length ? ` Already used: ${org.tags.slice(0, 12).join(', ')}` : ''}`}><input name="tags" defaultValue={p.tags.join(', ')} maxLength={700} className={inputCls} /></Field>
                 </div>
+              </Card>
+              <Card title="Shipping">
+                <ShippingFields requiresShipping={p.requiresShipping} weightUnit={wUnit} typedIn={wUnit} originCountry={p.originCountry ?? ''} hsCode={p.hsCode ?? ''} countries={countries} />
               </Card>
               <Card title="How it is sold">
                 <p className="text-sm text-slate-600 mb-3"><strong>{TYPE_LABEL[p.type]}</strong>. The type is chosen when a product is created.</p>

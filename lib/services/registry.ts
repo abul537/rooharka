@@ -27,6 +27,12 @@ export const SERVICES: ServiceDef[] = [
     config: [],
   },
   {
+    key: 'ai', name: 'AI writing assistant (Anthropic Claude)', type: 'FEATURE',
+    description: 'Writes product descriptions for you from the product title. Uses your own Anthropic account: create an API key at console.anthropic.com. Anthropic bills you a very small amount per description.',
+    credentials: [{ name: 'apiKey', label: 'Anthropic API key', secret: true, required: true, pattern: /^sk-ant-[A-Za-z0-9_-]{20,300}$/, patternHint: 'It starts with sk-ant-' }],
+    config: [],
+  },
+  {
     key: 'twilio', name: 'Twilio (SMS and WhatsApp)', type: 'MESSAGING',
     description: 'Sends OTP codes by SMS or WhatsApp from your own Twilio account. Twilio bills you per message.',
     credentials: [

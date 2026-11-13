@@ -66,7 +66,8 @@ function parseCommon(g: Getter): R<Omit<ProductEdit, 'status'> & { status: Produ
   if (g.get('optionsSent') != null) {
     extra.taxable = g.get('taxable') === 'on'
     extra.requiresShipping = g.get('requiresShipping') === 'on'
-    const wu = text(g, 'weightUnit'); if (isWeightUnit(wu)) extra.weightUnit = wu
+    // weightUnit = the unit the numbers on the form were typed in; weightUnitNext = the unit the owner wants to see from now on.
+    const wu = text(g, 'weightUnitNext') || text(g, 'weightUnit'); if (isWeightUnit(wu)) extra.weightUnit = wu
     const c = parseCountry(text(g, 'originCountry')); if (!c.ok) return c
     const h = parseHsCode(text(g, 'hsCode')); if (!h.ok) return h
     // A product that is not shipped has no origin or customs code.

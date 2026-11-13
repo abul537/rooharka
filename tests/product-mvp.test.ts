@@ -131,7 +131,7 @@ test('collections: title, page address made from the title, safe product selecti
   const c = parseCollection(G({ title: '  Eid   Collection ', isActive: 'on' }))
   assert.deepEqual(c, { ok: true, value: { title: 'Eid Collection', handle: 'eid-collection', description: null, isActive: true } })
   assert.ok(parseCollection(G({ title: 'Eid', handle: 'eid-2026' })).ok)
-  for (const bad of [{ title: 'x' }, { title: 'Eid', handle: 'Bad Handle' }, { title: 'Eid', description: 'x'.repeat(1001) }]) assert.equal(parseCollection(G(bad as Record<string, string>)).ok, false)
+  for (const bad of [{ title: 'x' }, { title: 'Eid', handle: 'Bad Handle' }, { title: 'Eid', description: 'x'.repeat(1001) }]) assert.equal(parseCollection(G(bad as unknown as Record<string, string>)).ok, false)
   assert.deepEqual(parseCollectionProducts(['p1', 'p2', 'p1', '']), { ok: true, value: ['p1', 'p2'] })
   assert.equal(parseCollectionProducts(['bad id!']).ok, false)
   assert.equal(parseCollectionProducts(Array.from({ length: 251 }, (_, i) => `p${i}`)).ok, false)
@@ -153,4 +153,34 @@ test('video size: 20 MB unless the plan says otherwise', () => {
   assert.equal(videoMaxBytes(null), 20 * 1024 * 1024)
   assert.equal(videoMaxBytes({ videoMb: 100 }), 100 * 1024 * 1024)
   assert.equal(videoMaxBytes({ videoMb: -5 }), 20 * 1024 * 1024); assert.equal(videoMaxBytes({ videoMb: 'big' }), 20 * 1024 * 1024)
+})
+
+import { findTaxonomy, parseTaxonomy, searchTaxonomy } from '@/lib/taxonomy/rules'
+import { stockLimited } from '@/lib/units/quantity'
+
+test('Google taxonomy: file is read, search ranks the closest category first', () => {
+  const list = parseTaxonomy(`# Google_Product_Taxonomy_Version: 2021-09-21
+1 - Animals & Pet Supplies
+166 - Apparel & Accessories
+1604 - Apparel & Accessories > Clothing
+212 - Apparel & Accessories > Clothing > Shirts & Tops
+5598 - Apparel & Accessories > Clothing > Outerwear > Coats & Jackets
+garbage line
+2271 - Apparel & Accessories > Clothing > Dresses
+505310 - Home & Garden > Linens & Bedding > Bedding > Bed Sheets > Shirts Storage`)
+  assert.equal(list.length, 7)
+  assert.deepEqual(findTaxonomy(list, 212), { id: 212, path: 'Apparel & Accessories > Clothing > Shirts & Tops' })
+  assert.equal(findTaxonomy(list, 999), null)
+  assert.equal(searchTaxonomy(list, 'shirt')[0].id, 212)
+  assert.deepEqual(searchTaxonomy(list, 'clothing dresses').map((e) => e.id), [2271])
+  assert.equal(searchTaxonomy(list, 'apparel').length, 5)
+  assert.deepEqual(searchTaxonomy(list, ''), []); assert.deepEqual(searchTaxonomy(list, 'zzz'), [])
+  assert.equal(searchTaxonomy(list, 'apparel', 2).length, 2)
+})
+
+test('continue selling when out of stock: the stock number stops limiting sales', () => {
+  assert.equal(stockLimited({ trackStock: true, allowBackorder: false }), true)
+  assert.equal(stockLimited({ trackStock: true, allowBackorder: true }), false)
+  assert.equal(stockLimited({ trackStock: false, allowBackorder: false }), false)
+  assert.equal(stockLimited({ trackStock: true }), true)
 })

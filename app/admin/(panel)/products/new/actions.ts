@@ -7,12 +7,15 @@ import { audit } from '@/lib/audit'
 import { AdminError } from '@/lib/admin/orders'
 import { parseNewProduct } from '@/lib/admin/product-rules'
 import { createProduct } from '@/lib/admin/products'
+import { withTaxonomyPath } from '@/lib/taxonomy/apply'
 import type { ActionState } from '@/components/admin/ActionForm'
 
 export async function createProductAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const g = await adminOrError('products.edit'); if ('error' in g) return g
   const parsed = parseNewProduct(fd)
   if (!parsed.ok) return { error: parsed.error }
+  const tax = await withTaxonomyPath(parsed.value.product)
+  if (tax) return { error: tax }
   let id: string
   try {
     id = await createProduct(g.admin, parsed.value)

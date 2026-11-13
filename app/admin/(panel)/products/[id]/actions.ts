@@ -10,6 +10,7 @@ import { AdminError } from '@/lib/admin/orders'
 import { parseProductEdit, parseSections, parseVariantFields, type SellMeta } from '@/lib/admin/product-rules'
 import { parseOptionGroups } from '@/lib/variants/rules'
 import { optionCapProblem } from '@/lib/admin/product-mvp'
+import { withTaxonomyPath } from '@/lib/taxonomy/apply'
 import type { ProductKind } from '@/lib/units/quantity'
 import { addVariant, attachMedia, deleteProduct, generateVariants, deleteVariant, moveMedia, removeMedia, saveProduct, saveSections, setMediaAlt, setPrimaryMedia } from '@/lib/admin/products'
 import { getServiceSecrets } from '@/lib/services/store-services'
@@ -40,8 +41,8 @@ async function guarded(
 
 /** The selling rules of a product come from the database (type and unit are fixed when it is created), never from the form. */
 async function sellMeta(storeId: string, productId: string) {
-  const p = await db.product.findFirst({ where: { id: productId, storeId }, select: { type: true, unitCode: true, qtyMin: true, qtyStep: true, variants: { select: { id: true } } } })
-  return p && { meta: { type: p.type as ProductKind, unitCode: p.unitCode } satisfies SellMeta, current: { qtyMin: p.qtyMin, qtyStep: p.qtyStep }, variantIds: p.variants.map((v) => v.id) }
+  const p = await db.product.findFirst({ where: { id: productId, storeId }, select: { type: true, unitCode: true, qtyMin: true, qtyStep: true, taxonomyId: true, variants: { select: { id: true } } } })
+  return p && { taxonomyId: p.taxonomyId as number | null, meta: { type: p.type as ProductKind, unitCode: p.unitCode } satisfies SellMeta, current: { qtyMin: p.qtyMin, qtyStep: p.qtyStep }, variantIds: p.variants.map((v) => v.id) }
 }
 
 export async function saveProductAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -51,6 +52,8 @@ export async function saveProductAction(_: ActionState, fd: FormData): Promise<A
   if (!owned) return { error: 'Product not found.' }
   const parsed = parseProductEdit(fd, owned.variantIds, owned.meta, owned.current)
   if (!parsed.ok) return { error: parsed.error }
+  const tax = await withTaxonomyPath(parsed.value.product, owned.taxonomyId)
+  if (tax) return { error: tax }
   return guarded('update', productId, async (admin) => {
     const v = parsed.value
     const changes = await saveProduct(admin, productId, v.product, v.variants, v.defaultId, v)
