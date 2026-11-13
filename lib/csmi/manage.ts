@@ -123,8 +123,9 @@ export async function saveSubscription(storeId: string, input: SubscriptionInput
 
 // -------------------------------------------------------------------- plans
 export async function savePlan(id: string | null, input: PlanInput) {
-  const { products, ordersPerMonth, staff, tagline, popular } = input.show
-  const limits = { ...(products ? { products } : {}), ...(ordersPerMonth ? { ordersPerMonth } : {}), ...(staff ? { staff } : {}), ...(tagline ? { tagline } : {}), ...(popular ? { popular: true } : {}) }
+  const { products, ordersPerMonth, staff, tagline, popular, videoMb } = input.show
+  // staff: 0 is a real choice (owner only), so it is kept; only "empty" (null) means unlimited.
+  const limits = { ...(products ? { products } : {}), ...(ordersPerMonth ? { ordersPerMonth } : {}), ...(staff !== null ? { staff } : {}), ...(videoMb ? { videoMb } : {}), ...(tagline ? { tagline } : {}), ...(popular ? { popular: true } : {}) }
   const data = { name: input.name, monthlyPrice: input.monthlyPrice, yearlyPrice: input.yearlyPrice, isActive: input.isActive, isPublic: input.isPublic, sortOrder: input.sortOrder, features: input.features as Prisma.InputJsonValue, limits: limits as Prisma.InputJsonValue }
   try {
     if (id) {

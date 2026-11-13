@@ -25,7 +25,7 @@ export const PAY_METHODS = ['bank', 'jazzcash', 'easypaisa', 'cash', 'other'] as
 
 // ------------------------------------------------------------------- plans
 /** Limits and wording shown on the public pricing page. A blank limit means unlimited. The staff limit and POS lite are enforced by the platform; products and orders are not yet. */
-export interface PlanShow { products: number | null; ordersPerMonth: number | null; staff: number | null; tagline: string; popular: boolean }
+export interface PlanShow { products: number | null; ordersPerMonth: number | null; staff: number | null; tagline: string; popular: boolean; /** Largest product video in MB; null = the standard 20 MB. */ videoMb?: number | null }
 export interface PlanInput { name: string; monthlyPrice: number; yearlyPrice: number | null; isActive: boolean; isPublic: boolean; sortOrder: number; features: string[]; show: PlanShow }
 export function parsePlan(g: Getter): Parsed<PlanInput> {
   const name = text(g, 'name')
@@ -42,12 +42,14 @@ export function parsePlan(g: Getter): Parsed<PlanInput> {
   const products = limit('limitProducts', 1), ordersPerMonth = limit('limitOrders', 1), staff = limit('limitStaff', 0)
   if (products === undefined || ordersPerMonth === undefined) return { ok: false, error: 'Product and order limits must be whole numbers above 0, or empty for unlimited.' }
   if (staff === undefined) return { ok: false, error: 'The staff limit must be a whole number (0 means the owner only), or empty for unlimited.' }
+  const videoMb = limit('limitVideoMb', 1)
+  if (videoMb === undefined || (videoMb !== null && videoMb > 500)) return { ok: false, error: 'The video size limit must be a whole number of MB from 1 to 500, or empty for the standard 20 MB.' }
   const tagline = text(g, 'tagline')
   if (tagline.length > 90) return { ok: false, error: 'The tagline must be 90 characters or fewer.' }
   const sortRaw = text(g, 'sortOrder')
   if (sortRaw !== '' && !/^\d{1,4}$/.test(sortRaw)) return { ok: false, error: 'The order must be a whole number from 0 to 9999.' }
   const features = FEATURE_KEYS.filter((k) => flag(g, `feature_${k}`))
-  return { ok: true, value: { name, monthlyPrice: monthly, yearlyPrice: yearly, isActive: flag(g, 'isActive'), isPublic: flag(g, 'isPublic'), sortOrder: sortRaw === '' ? 0 : Number(sortRaw), features, show: { products, ordersPerMonth, staff, tagline, popular: flag(g, 'popular') } } }
+  return { ok: true, value: { name, monthlyPrice: monthly, yearlyPrice: yearly, isActive: flag(g, 'isActive'), isPublic: flag(g, 'isPublic'), sortOrder: sortRaw === '' ? 0 : Number(sortRaw), features, show: { products, ordersPerMonth, staff, tagline, popular: flag(g, 'popular'), videoMb } } }
 }
 
 // ------------------------------------------------------------------- costs

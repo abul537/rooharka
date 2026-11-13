@@ -12,7 +12,7 @@ import { parseOptionGroups } from '@/lib/variants/rules'
 import { optionCapProblem } from '@/lib/admin/product-mvp'
 import { withTaxonomyPath } from '@/lib/taxonomy/apply'
 import type { ProductKind } from '@/lib/units/quantity'
-import { addVariant, attachMedia, deleteProduct, generateVariants, deleteVariant, moveMedia, removeMedia, saveProduct, saveSections, setMediaAlt, setPrimaryMedia } from '@/lib/admin/products'
+import { reorderMedia, videoLimitBytes, addVariant, attachMedia, deleteProduct, generateVariants, deleteVariant, moveMedia, removeMedia, saveProduct, saveSections, setMediaAlt, setPrimaryMedia } from '@/lib/admin/products'
 import { getServiceSecrets } from '@/lib/services/store-services'
 import { createUploadSignature, parseExternalMediaUrl, verifyUpload, type SignedUpload, type UploadReport } from '@/lib/media/cloudinary'
 import { destroyCloudFiles } from '@/lib/media/cloud-cleanup'
@@ -153,6 +153,14 @@ export async function attachUploadedMediaAction(productId: string, report: Parti
   if (!s) return { error: 'Cloudinary is not connected.' }
   const v = verifyUpload(report, { cloudName: s.credentials.cloudName, apiSecret: s.credentials.apiSecret }, g.admin.storeId)
   if (!v.ok) return { error: v.error }
+  if (v.kind === 'VIDEO') {
+    // The plan decides how large a video may be. The browser checks first; this is the check that counts.
+    const max = await videoLimitBytes(g.admin.storeId)
+    if (v.bytes > max) {
+      await destroyCloudFiles(g.admin.storeId, [{ provider: 'cloudinary', publicId: v.publicId, kind: 'VIDEO' }])
+      return { error: `Videos can be at most ${Math.round(max / 1024 / 1024)} MB on your plan. The file was removed; please upload a smaller one.` }
+    }
+  }
   return guarded('media.add', productId, async (admin) => {
     await attachMedia(admin, productId, { kind: v.kind, url: v.url, mimeType: v.mimeType, provider: 'cloudinary', publicId: v.publicId, bytes: v.bytes, width: v.width, height: v.height })
     return 'Uploaded.'
@@ -183,6 +191,15 @@ export async function primaryMediaAction(_: ActionState, fd: FormData): Promise<
 export async function moveMediaAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const dir = str(fd, 'dir') === 'up' ? 'up' : 'down'
   return guarded('media.move', str(fd, 'productId'), async (admin) => { await moveMedia(admin, str(fd, 'productId'), str(fd, 'linkId'), dir); return 'Order changed.' })
+}
+
+/** Drag-and-drop: the new order of ALL the product's photos and videos, first to last. */
+export async function reorderMediaAction(productId: string, linkIds: string[]): Promise<ActionState> {
+  if (!Array.isArray(linkIds) || linkIds.length > 50 || !linkIds.every((x) => typeof x === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(x))) return { error: 'Invalid order.' }
+  return guarded('media.reorder', String(productId), async (admin) => {
+    await reorderMedia(admin, String(productId), linkIds)
+    return 'Order saved. The first photo is the main picture.'
+  })
 }
 
 export async function altMediaAction(_: ActionState, fd: FormData): Promise<ActionState> {

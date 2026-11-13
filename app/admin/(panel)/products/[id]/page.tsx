@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth/guard'
 import { can } from '@/lib/auth/permissions'
 import { headers } from 'next/headers'
-import { getProductForEdit, listMedia, listOrganisation, loadSections } from '@/lib/admin/products'
+import { getProductForEdit, listMedia, listOrganisation, loadSections, videoLimitBytes } from '@/lib/admin/products'
 import { margin } from '@/lib/admin/product-extras'
 import { formatPrice } from '@/lib/format'
 import SeoFields from '@/components/admin/SeoFields'
@@ -30,9 +30,9 @@ const BLANK_SECTION_SLOTS = 3
 export default async function EditProduct({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string; copied?: string }> }) {
   const admin = await requireAdmin('products.view')
   const [{ id }, { created, copied }] = await Promise.all([params, searchParams])
-  const [p, cats, media, sections, services, org, host] = await Promise.all([
+  const [p, cats, media, sections, services, org, host, videoMax] = await Promise.all([
     getProductForEdit(admin.storeId, id), // every query below is scoped to this store
-    listCategories(admin.storeId), listMedia(admin.storeId, id), loadSections(admin.storeId, id), loadServiceViews(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => h.get('host') ?? ''),
+    listCategories(admin.storeId), listMedia(admin.storeId, id), loadSections(admin.storeId, id), loadServiceViews(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => h.get('host') ?? ''), videoLimitBytes(admin.storeId),
   ])
   if (!p) notFound()
   const editable = can(admin.role, 'products.edit')
@@ -62,7 +62,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
 
       <Card title="Photos and videos" hint="The first photo is the main picture. Use the arrows to change the order customers see.">
         {editable
-          ? <MediaManager productId={p.id} items={media} cloudReady={!!cloud?.enabled && cloud.configured} maxItems={12} />
+          ? <MediaManager productId={p.id} items={media} cloudReady={!!cloud?.enabled && cloud.configured} maxItems={12} videoMaxMb={Math.round(videoMax / 1024 / 1024)} />
           : <p className="text-sm text-slate-500">{media.length} file(s).</p>}
       </Card>
 

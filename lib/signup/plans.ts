@@ -1,5 +1,5 @@
 /** Turns a plan's stored limits and features into the lines shown on the pricing page. Pure, so it is tested. */
-export interface PlanLimits { products: number | null; ordersPerMonth: number | null; staff: number | null; tagline: string; popular: boolean }
+export interface PlanLimits { products: number | null; ordersPerMonth: number | null; staff: number | null; tagline: string; popular: boolean; /** Largest product video in MB (null = the standard 20 MB). */ videoMb: number | null }
 
 export const FEATURE_LABELS: Record<string, string> = {
   'sms-otp': 'Fake-order check by SMS code', 'whatsapp-otp': 'Fake-order check by WhatsApp code', jazzcash: 'JazzCash payments', easypaisa: 'EasyPaisa payments',
@@ -22,7 +22,7 @@ const num = (v: unknown, min = 1) => (typeof v === 'number' && Number.isInteger(
 
 export function readLimits(limits: unknown): PlanLimits {
   const l = (limits && typeof limits === 'object' ? limits : {}) as Record<string, unknown>
-  return { products: num(l.products), ordersPerMonth: num(l.ordersPerMonth), staff: num(l.staff, 0), tagline: typeof l.tagline === 'string' ? l.tagline.trim().slice(0, 90) : '', popular: l.popular === true }
+  return { products: num(l.products), ordersPerMonth: num(l.ordersPerMonth), staff: num(l.staff, 0), videoMb: num(l.videoMb), tagline: typeof l.tagline === 'string' ? l.tagline.trim().slice(0, 90) : '', popular: l.popular === true }
 }
 
 const fmt = (n: number) => n.toLocaleString('en-PK')

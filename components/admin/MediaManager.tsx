@@ -7,7 +7,7 @@ import { inputCls } from '@/components/admin/ui'
 import { classifyFile } from '@/lib/media/constants'
 import { imageVariant, videoPoster } from '@/lib/media/urls'
 import {
-  addExternalMediaAction, altMediaAction, attachUploadedMediaAction, moveMediaAction, primaryMediaAction, removeMediaAction, signMediaUploadAction,
+  addExternalMediaAction, altMediaAction, attachUploadedMediaAction, moveMediaAction, primaryMediaAction, removeMediaAction, reorderMediaAction, signMediaUploadAction,
 } from '@/app/admin/(panel)/products/[id]/actions'
 
 export interface MediaItem { id: string; isPrimary: boolean; kind: 'IMAGE' | 'VIDEO'; url: string; alt: string }
@@ -32,16 +32,36 @@ function upload(url: string, form: FormData, onProgress: (p: number) => void): P
   })
 }
 
-export default function MediaManager({ productId, items, cloudReady, maxItems }: { productId: string; items: MediaItem[]; cloudReady: boolean; maxItems: number }) {
+export default function MediaManager({ productId, items, cloudReady, maxItems, videoMaxMb = 20 }: { productId: string; items: MediaItem[]; cloudReady: boolean; maxItems: number; videoMaxMb?: number }) {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
   const [jobs, setJobs] = useState<Job[]>([])
   const [busy, setBusy] = useState(false)
+  // Drag-and-drop ordering: `order` is what is on screen while dragging; it is saved when the file is dropped.
+  const [order, setOrder] = useState<string[] | null>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [orderNote, setOrderNote] = useState<{ bad: boolean; text: string } | null>(null)
+  const shown = order ? order.map((id) => items.find((m) => m.id === id)).filter((m): m is MediaItem => !!m) : items
+  const dragOver = (overId: string) => {
+    if (!dragId || dragId === overId) return
+    const ids = (order ?? items.map((m) => m.id)).filter((id) => id !== dragId)
+    ids.splice(ids.indexOf(overId), 0, dragId)
+    setOrder(ids)
+  }
+  async function drop() {
+    setDragId(null)
+    if (!order || order.join() === items.map((m) => m.id).join()) { setOrder(null); return }
+    const r = await reorderMediaAction(productId, order).catch(() => ({ error: 'Could not reach the server.' } as { error?: string; ok?: string }))
+    setOrderNote(r?.error ? { bad: true, text: r.error } : { bad: false, text: r?.ok ?? 'Order saved.' })
+    router.refresh()
+    setOrder(null)
+  }
   const patch = (i: number, j: Partial<Job>) => setJobs((all) => all.map((x, k) => (k === i ? { ...x, ...j } : x)))
 
   async function uploadOne(file: File, i: number) {
     const check = classifyFile(file.name, file.size)
     if (!check.ok) return patch(i, { error: check.error })
+    if (check.type === 'video' && file.size > videoMaxMb * 1024 * 1024) return patch(i, { error: `${file.name}: videos can be at most ${videoMaxMb} MB on your plan.` })
     try {
       const signed = await signMediaUploadAction(check.type)
       if ('error' in signed) return patch(i, { error: signed.error })
@@ -73,8 +93,10 @@ export default function MediaManager({ productId, items, cloudReady, maxItems }:
   return (
     <div className="space-y-5">
       {items.length === 0 && <p className="text-sm text-slate-500">No photos or videos yet. The first photo you add becomes the main picture.</p>}
+      {items.length > 1 && <p className="text-xs text-slate-500">Drag a photo to change the order. The first photo is the main picture customers see.</p>}
+      {orderNote && <p role={orderNote.bad ? 'alert' : 'status'} className={`text-sm ${orderNote.bad ? 'text-red-700' : 'text-emerald-700'}`}>{orderNote.text}</p>}
       <ul className="grid sm:grid-cols-2 gap-4">
-        {items.map((m, idx) => {
+        {shown.map((m, idx) => {
           const common = (extra: Record<string, string>) => (
             <>
               <input type="hidden" name="productId" value={productId} />
@@ -84,7 +106,8 @@ export default function MediaManager({ productId, items, cloudReady, maxItems }:
           )
           const thumb = m.kind === 'IMAGE' ? imageVariant(m.url, 400) : videoPoster(m.url, 400)
           return (
-            <li key={m.id} className="rounded-lg border border-slate-200 p-3 space-y-2">
+            <li key={m.id} draggable onDragStart={(e) => { setDragId(m.id); e.dataTransfer.effectAllowed = 'move' }} onDragOver={(e) => { e.preventDefault(); dragOver(m.id) }} onDrop={(e) => { e.preventDefault(); void drop() }} onDragEnd={() => { if (dragId) void drop() }}
+              className={`rounded-lg border p-3 space-y-2 cursor-grab ${dragId === m.id ? 'border-slate-900 opacity-60' : 'border-slate-200'}`}>
               <div className="relative aspect-video bg-slate-100 rounded overflow-hidden flex items-center justify-center">
                 {thumb ? <img src={thumb} alt={m.alt} className="h-full w-full object-cover" loading="lazy" /> : <span className="text-sm text-slate-500">{m.kind === 'VIDEO' ? 'Video' : 'Photo'}</span>}
                 {m.kind === 'VIDEO' && <span className="absolute bottom-1 left-1 rounded bg-black/70 text-white text-xs px-1.5">Video</span>}
@@ -97,7 +120,7 @@ export default function MediaManager({ productId, items, cloudReady, maxItems }:
               </ActionForm>
               <div className="flex flex-wrap gap-2">
                 <ActionForm action={moveMediaAction}>{common({ dir: 'up' })}<button className={btn} disabled={idx === 0}>↑ Earlier</button></ActionForm>
-                <ActionForm action={moveMediaAction}>{common({ dir: 'down' })}<button className={btn} disabled={idx === items.length - 1}>↓ Later</button></ActionForm>
+                <ActionForm action={moveMediaAction}>{common({ dir: 'down' })}<button className={btn} disabled={idx === shown.length - 1}>↓ Later</button></ActionForm>
                 {m.kind === 'IMAGE' && !m.isPrimary && <ActionForm action={primaryMediaAction}>{common({})}<button className={btn}>Make main picture</button></ActionForm>}
                 <ActionForm action={removeMediaAction} confirm="Remove this file from the product?">{common({})}<button className={`${btn} text-red-700`}>Remove</button></ActionForm>
               </div>
@@ -113,7 +136,7 @@ export default function MediaManager({ productId, items, cloudReady, maxItems }:
               <label className="block text-sm font-medium mb-1">Upload photos or videos</label>
               <input ref={fileRef} type="file" multiple disabled={busy} onChange={(e) => onPick(e.target.files)}
                 accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime" className="block text-sm" />
-              <p className="text-xs text-slate-500 mt-1">Photos up to 10 MB, videos up to 100 MB. You can pick several at once.</p>
+              <p className="text-xs text-slate-500 mt-1">Photos (JPG, PNG, WebP, GIF) up to 10 MB, videos (MP4) up to {videoMaxMb} MB. You can pick several at once.</p>
             </div>
           ) : (
             <p className="text-sm text-amber-800">To upload files, connect Cloudinary in <a className="underline" href="/admin/settings">Settings</a>. Until then you can paste a link below.</p>

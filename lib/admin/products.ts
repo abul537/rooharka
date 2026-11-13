@@ -5,7 +5,7 @@ import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import type { ProductEdit, VariantEdit } from './product-rules'
 import { AdminError } from './orders'
-import { handleTakenError } from '@/lib/admin/product-mvp'
+import { handleTakenError, videoMaxBytes } from '@/lib/admin/product-mvp'
 import { LIST_PAGE_SIZE, LOW_STOCK_AT, cloneName, cloneSku, mergeTags, type BulkRequest, type ListQuery } from '@/lib/admin/product-extras'
 
 /** The database filter for the product list. Always starts from the store, so no filter can reach another store. */
@@ -438,6 +438,27 @@ export async function moveMedia(admin: StoreAdmin, productId: string, linkId: st
     ;[rows[i], rows[j]] = [rows[j], rows[i]]
     for (let k = 0; k < rows.length; k++) await tx.productMedia.update({ where: { id: rows[k].id }, data: { sortOrder: k } })
   })
+}
+
+/**
+ * Drag-and-drop: saves the whole new order in one go. The list must be exactly this product's files (a stale or
+ * tampered list is refused). The first PHOTO in the new order becomes the main picture, as in the shop gallery.
+ */
+export async function reorderMedia(admin: StoreAdmin, productId: string, linkIds: string[]) {
+  await db.$transaction(async (tx) => {
+    await ownedProduct(tx, admin, productId)
+    const rows = await tx.productMedia.findMany({ where: { productId }, select: { id: true, media: { select: { kind: true } } } })
+    const known = new Map(rows.map((r: { id: string; media: { kind: string } }) => [r.id, r.media.kind]))
+    if (linkIds.length !== rows.length || new Set(linkIds).size !== rows.length || !linkIds.every((id) => known.has(id))) throw new AdminError('The photos changed while you were moving them. Please reload the page.')
+    const firstImage = linkIds.find((id) => known.get(id) === 'IMAGE') ?? null
+    for (let i = 0; i < linkIds.length; i++) await tx.productMedia.update({ where: { id: linkIds[i] }, data: { sortOrder: i, isPrimary: linkIds[i] === firstImage } })
+  })
+}
+
+/** The largest product video this store may upload, from its plan (20 MB unless the platform owner set another size). */
+export async function videoLimitBytes(storeId: string): Promise<number> {
+  const s = await db.store.findUnique({ where: { id: storeId }, select: { subscription: { select: { plan: { select: { limits: true } } } } } })
+  return videoMaxBytes(s?.subscription?.plan?.limits ?? null)
 }
 
 export async function setMediaAlt(admin: StoreAdmin, productId: string, linkId: string, alt: string) {

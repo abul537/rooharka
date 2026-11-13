@@ -27,6 +27,8 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
   const ctaRef = useRef<HTMLDivElement>(null)
 
   const variant = useMemo(() => variants.find((v) => v.id === variantId) ?? variants[0], [variants, variantId])
+  // A variant with its own photo: tell the gallery to show it (see Gallery.tsx).
+  useEffect(() => { if (variant.imageId) window.dispatchEvent(new CustomEvent('variant-image', { detail: variant.imageId })) }, [variant.imageId])
   // Options (Size, Colour ...): used only when every live variant knows its option values; otherwise a plain list.
   const grouped = product.optionGroups.length > 0 && variants.every((v) => v.optionValues)
   const selection: Record<string, string> = grouped ? variant.optionValues ?? {} : {}

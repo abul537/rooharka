@@ -200,9 +200,12 @@ test('money parsing: rupees with up to 2 decimals, nothing else', () => {
 
 test('plan form', () => {
   const ok = parsePlan(form({ name: 'Growth', monthlyPrice: '3000', yearlyPrice: '30000', isActive: 'on' }))
-  assert.deepEqual(ok.ok && ok.value, { name: 'Growth', monthlyPrice: 3000, yearlyPrice: 30000, isActive: true, isPublic: false, sortOrder: 0, features: [], show: { products: null, ordersPerMonth: null, staff: null, tagline: '', popular: false } })
+  assert.deepEqual(ok.ok && ok.value, { name: 'Growth', monthlyPrice: 3000, yearlyPrice: 30000, isActive: true, isPublic: false, sortOrder: 0, features: [], show: { products: null, ordersPerMonth: null, staff: null, tagline: '', popular: false, videoMb: null } })
   const shown = parsePlan(form({ name: 'Pro', monthlyPrice: '5000', limitProducts: '100', limitStaff: '3', tagline: 'For growing shops', popular: 'on' }))
-  assert.deepEqual(shown.ok && shown.value.show, { products: 100, ordersPerMonth: null, staff: 3, tagline: 'For growing shops', popular: true })
+  assert.deepEqual(shown.ok && shown.value.show, { products: 100, ordersPerMonth: null, staff: 3, tagline: 'For growing shops', popular: true, videoMb: null })
+  const video = parsePlan(form({ name: 'Pro', monthlyPrice: '5000', limitVideoMb: '100' }))
+  assert.ok(video.ok && video.value.show.videoMb === 100)
+  for (const bad of ['0', '501', 'big']) assert.equal(parsePlan(form({ name: 'Pro', monthlyPrice: '5000', limitVideoMb: bad })).ok, false, bad)
   const rich = parsePlan(form({ name: 'Pro', monthlyPrice: '5000', isPublic: 'on', sortOrder: '2', feature_tcs: 'on', 'feature_sms-otp': 'on', feature_bogus: 'on' }))
   assert.deepEqual(rich.ok && [rich.value.isPublic, rich.value.sortOrder, rich.value.features], [true, 2, ['sms-otp', 'tcs']]) // unknown feature keys are ignored
   assert.equal(parsePlan(form({ name: 'Pro', monthlyPrice: '5000', sortOrder: 'x' })).ok, false)

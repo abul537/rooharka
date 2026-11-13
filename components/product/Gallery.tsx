@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import MediaImage from '@/components/media/MediaImage'
 import { Package, Play } from 'lucide-react'
 import type { MediaDTO } from '@/lib/data/product'
@@ -14,6 +14,16 @@ export default function Gallery({ media, productName }: { media: MediaDTO[]; pro
   const items = [...media].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
   const [active, setActive] = useState(0)
   const current = items[active]
+  // When the customer picks a variant that has its own photo, the purchase panel announces it and we show that photo.
+  useEffect(() => {
+    const onPick = (e: Event) => {
+      const i = items.findIndex((m) => m.id === (e as CustomEvent<string | null>).detail)
+      if (i >= 0) setActive(i)
+    }
+    window.addEventListener('variant-image', onPick)
+    return () => window.removeEventListener('variant-image', onPick)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [media])
 
   return (
     <div className="lg:sticky lg:top-24">

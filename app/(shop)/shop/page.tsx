@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Search } from 'lucide-react'
 import { getCurrentStore } from '@/lib/store'
 import { getCatalog } from '@/lib/data/catalog'
+import { listPublicCollections } from '@/lib/admin/collections'
 import { applyCatalog, pageWindow, parseCatalogParams, shopHref, SORTS, SORT_LABEL } from '@/lib/catalog'
 import ProductCard from '@/components/shop/ProductCard'
 
@@ -18,7 +19,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
   if (!store) {
     return <div className="container mx-auto px-4 py-32 text-center"><h1 className="font-playfair text-3xl font-bold text-gray-900">This store is not available right now.</h1></div>
   }
-  const { items, categories } = await getCatalog(store.id)
+  const [{ items, categories }, collections] = await Promise.all([getCatalog(store.id), listPublicCollections(store.id)])
   const params = parseCatalogParams(sp)
   const result = applyCatalog(items, params)
   const filtered = !!(params.q || params.category)
@@ -36,6 +37,12 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
       </section>
 
       <div className="container mx-auto px-4 pt-8">
+        {collections.length > 0 && (
+          <nav aria-label="Collections" className="mb-5 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-gray-600">Collections:</span>
+            {collections.map((c) => <Link key={c.handle} href={`/collections/${c.handle}`} className="whitespace-nowrap rounded-full border border-brand-200 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 transition hover:border-brand-600">{c.title}</Link>)}
+          </nav>
+        )}
         <form action="/shop" method="get" role="search" className="flex flex-col gap-3 sm:flex-row sm:items-center">
           {params.category && <input type="hidden" name="category" value={params.category} />}
           <div className="relative flex-1">
