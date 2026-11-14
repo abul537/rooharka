@@ -11,8 +11,14 @@ export interface ThemeSettings {
   /** ... or the owner's own brand colour (#rrggbb). When set, it wins over `color`. */
   customColor: string
   font: Font
+  /** How round the corners of buttons, cards and pictures are. */
+  corners: Corners
 }
-export const DEFAULT_THEME_SETTINGS: ThemeSettings = { color: 'emerald', customColor: '', font: 'sans' }
+export const CORNERS = { sharp: 'Sharp', soft: 'Soft', round: 'Round' } as const
+export type Corners = keyof typeof CORNERS
+/** [buttons, cards and pictures] as CSS lengths. "soft" is the look every shop had before this setting existed. */
+const RADIUS: Record<Corners, [string, string]> = { sharp: ['0.125rem', '0.25rem'], soft: ['0.75rem', '1.5rem'], round: ['9999px', '2rem'] }
+export const DEFAULT_THEME_SETTINGS: ThemeSettings = { color: 'emerald', customColor: '', font: 'sans', corners: 'soft' }
 export interface Shades { c50: string; c100: string; c200: string; c600: string; c700: string; c800: string }
 
 const HEX = /^#[0-9a-f]{6}$/
@@ -64,6 +70,7 @@ export function readThemeSettings(raw: unknown, fallback: ThemeSettings = DEFAUL
     color: COLORS.includes(v.color as Color) ? (v.color as Color) : fallback.color,
     customColor: custom?.ok ? custom.value : '',
     font: FONTS.includes(v.font as Font) ? (v.font as Font) : fallback.font,
+    corners: typeof v.corners === 'string' && v.corners in CORNERS ? (v.corners as Corners) : fallback.corners,
   }
 }
 export const themeShades = (s: ThemeSettings): Shades => (s.customColor ? shadesFromHex(s.customColor) : PALETTES[s.color])
@@ -71,7 +78,7 @@ export const themeShades = (s: ThemeSettings): Shades => (s.customColor ? shades
 /** The CSS variables for a theme, ready for a `style` attribute. */
 export function themeVariables(s: ThemeSettings): Record<string, string> {
   const p = themeShades(s)
-  return { '--c-50': p.c50, '--c-100': p.c100, '--c-200': p.c200, '--c-600': p.c600, '--c-700': p.c700, '--c-800': p.c800, '--heading-font': s.font === 'serif' ? 'var(--font-playfair)' : 'var(--font-inter)' }
+  return { '--c-50': p.c50, '--c-100': p.c100, '--c-200': p.c200, '--c-600': p.c600, '--c-700': p.c700, '--c-800': p.c800, '--heading-font': s.font === 'serif' ? 'var(--font-playfair)' : 'var(--font-inter)', '--r-btn': RADIUS[s.corners][0], '--r-box': RADIUS[s.corners][1] }
 }
 
 export const MAX_THEMES = 10

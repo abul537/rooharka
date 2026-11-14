@@ -16,6 +16,7 @@ export default async function MessagesPage() {
     <div className="max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Messages</h1>
+        <a href="/admin/messages/subscribers" className="text-sm font-medium underline">Newsletter subscribers</a>
         {unread > 0 && <ActionForm action={messageAction}><input type="hidden" name="op" value="all" /><button className="rounded-lg border border-slate-300 px-4 py-2 text-sm">Mark all as read</button></ActionForm>}
       </div>
       <p className="text-sm text-slate-600 -mt-3">Messages customers send from your shop’s Contact page. Reply by phone or WhatsApp with the buttons. Showing the latest 100.</p>

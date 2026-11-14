@@ -225,6 +225,7 @@ model Store {
   aiUsage       AiUsage[]
   visitorDays   VisitorDay[]
   shopThemes    ShopTheme[]
+  subscribers   NewsletterSubscriber[]
   subscription  Subscription?
   invoices      Invoice[]
   tickets       SupportTicket[]
@@ -652,6 +653,8 @@ model MediaAsset {
   provider  String    @default("external")
   /// Cloudinary's id for the file; needed to delete it there. Null for external links.
   publicId  String?
+  /// Length of a video in seconds, as measured by Cloudinary. Set when a video is checked for use in a theme section.
+  durationSec Float?
   createdAt DateTime  @default(now())
 
   store        Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -1381,6 +1384,18 @@ model Storefront {
   updatedAt DateTime @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+/// An email address a customer left in the shop's Newsletter section, asking to hear from the store.
+model NewsletterSubscriber {
+  id        String   @id @default(cuid())
+  storeId   String
+  email     String
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, email])
 }
 
 /// A theme: a named design a store owns. (Named ShopTheme because the older, unused models Theme and StoreTheme

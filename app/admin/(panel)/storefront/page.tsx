@@ -5,6 +5,9 @@ import { db } from '@/lib/db'
 import { loadStorefrontForEdit } from '@/lib/storefront/data'
 import { POLICY_KEYS, POLICY_TITLES } from '@/lib/storefront/rules'
 import { ensureTheme, getThemeForEdit, listThemes } from '@/lib/theme/data'
+import { loadSectionData } from '@/lib/theme/page-data'
+import { mediaSizes } from '@/lib/theme/media'
+import { TEMPLATE_TYPES, sectionMedia } from '@/lib/theme/schema'
 import { MAX_THEMES } from '@/lib/theme/settings'
 import { THEME_PRESETS } from '@/lib/theme/presets'
 import { listCollections } from '@/lib/admin/collections'
@@ -22,8 +25,9 @@ const ghost = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm f
 export default async function StorefrontPage({ searchParams }: { searchParams: Promise<{ tab?: string; theme?: string }> }) {
   const admin = await requireAdmin('settings.edit')
   const sp = await searchParams
-  const store = await db.store.findUnique({ where: { id: admin.storeId }, select: { name: true, settings: { select: { displayName: true } } } })
-  const { content: c, logoUrl, seo } = await loadStorefrontForEdit(admin.storeId, store?.settings?.displayName ?? store?.name ?? '')
+  const store = await db.store.findUnique({ where: { id: admin.storeId }, select: { name: true, currency: true, settings: { select: { displayName: true } } } })
+  const shopName = store?.settings?.displayName ?? store?.name ?? 'Our store'
+  const { content: c, logoUrl, seo } = await loadStorefrontForEdit(admin.storeId, shopName)
   const pages = sp.tab === 'pages'
 
   const head = (
@@ -31,7 +35,7 @@ export default async function StorefrontPage({ searchParams }: { searchParams: P
       <h1 className="text-2xl font-bold">Storefront</h1>
       <p className="text-slate-600 -mt-3">Design your shop from ready-made sections: choose them, put them in order and fill in your own words. No code needed.</p>
       <nav aria-label="Storefront" className="flex flex-wrap gap-2">
-        <Link href="/admin/storefront" className={tab(!pages)}>Themes and home page</Link>
+        <Link href="/admin/storefront" className={tab(!pages)}>Themes and page design</Link>
         <Link href="/admin/storefront?tab=pages" className={tab(pages)}>Header, footer and pages</Link>
       </nav>
     </>
@@ -57,10 +61,10 @@ export default async function StorefrontPage({ searchParams }: { searchParams: P
             <div className="sm:col-span-2"><button className={primaryBtn}>Save header and footer</button></div>
           </ActionForm>
         </Card>
-        <Card title="About, Contact and policy pages" hint="Policy pages appear in your footer only when they have text.">
+        <Card title="Contact and policy pages" hint="The About page is now designed with sections under “Themes and page design”. Policy pages appear in your footer only when they have text.">
           <ActionForm action={savePagesAction} className="space-y-4">
-            <Field label="About page heading"><input name="aboutTitle" defaultValue={c.about.title} maxLength={80} required className={inputCls} /></Field>
-            <Field label="About page text" hint="Leave a blank line between paragraphs. Up to 4000 characters."><textarea name="aboutBody" defaultValue={c.about.body} maxLength={4000} rows={7} className={area} /></Field>
+            <Field label="About page heading" hint="Used as the browser tab title of the About page."><input name="aboutTitle" defaultValue={c.about.title} maxLength={80} required className={inputCls} /></Field>
+            <input type="hidden" name="aboutBody" value={c.about.body} />
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2"><Field label="Contact page introduction"><textarea name="contactIntro" defaultValue={c.contact.intro} maxLength={300} rows={2} className={area} /></Field></div>
               <Field label="Shop address (optional)"><input name="contactAddress" defaultValue={c.contact.address} maxLength={200} className={inputCls} /></Field>
@@ -78,13 +82,18 @@ export default async function StorefrontPage({ searchParams }: { searchParams: P
   }
 
   // The first visit turns the shop's current home page into a live theme, so the editor opens on what customers see.
-  await ensureTheme(admin.storeId, c)
+  await ensureTheme(admin.storeId, c, shopName)
   const [themes, collections] = await Promise.all([listThemes(admin.storeId), listCollections(admin.storeId)])
   const chosen = themes.find((t) => t.id === sp.theme) ?? themes.find((t) => t.isActive) ?? themes[0]
-  const theme = chosen ? await getThemeForEdit(admin.storeId, chosen.id, c) : null
+  const theme = chosen ? await getThemeForEdit(admin.storeId, chosen.id, c, shopName) : null
+  // What the live preview needs: the store's real products, categories, collections and reviews, and known file sizes.
+  const allSections = theme ? TEMPLATE_TYPES.flatMap((t) => theme.pages[t].sections) : []
+  const [data, sizes] = theme
+    ? await Promise.all([loadSectionData({ id: admin.storeId, name: shopName, currency: store?.currency ?? 'PKR' }, allSections, true), mediaSizes(admin.storeId, allSections.flatMap(sectionMedia))])
+    : [null, {}]
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="space-y-6">
       {head}
 
       <Card title="Your themes" hint="One theme is live. The others are drafts: change them freely, preview them, and publish when you are happy. Customers only ever see the live theme.">
@@ -114,7 +123,7 @@ export default async function StorefrontPage({ searchParams }: { searchParams: P
           <ActionForm action={createThemeAction} className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-[1fr_1.4fr_auto] items-end">
             <Field label="New theme name (optional)"><input name="name" maxLength={50} placeholder="Eid sale" className={inputCls} /></Field>
             <Field label="Start from">
-              <select name="from" className={inputCls} defaultValue="catalogue">
+              <select name="from" className={inputCls} defaultValue="minimal">
                 <optgroup label="Ready-made designs">{Object.entries(THEME_PRESETS).map(([k, p]) => <option key={k} value={k}>{p.name}: {p.description}</option>)}</optgroup>
                 <optgroup label="A copy of one of your themes">{themes.map((t) => <option key={t.id} value={`copy:${t.id}`}>Copy of {t.name}</option>)}</optgroup>
               </select>
@@ -124,14 +133,13 @@ export default async function StorefrontPage({ searchParams }: { searchParams: P
         )}
       </Card>
 
-      {theme && (
+      {theme && data && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Editing: {theme.name} <span className={`ml-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${theme.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>{theme.isActive ? 'Live: saving changes your shop' : 'Draft: customers do not see it'}</span></h2>
-            <a href={`/admin/preview?path=/&theme=${theme.id}`} target="_blank" rel="noopener" className={`${ghost} inline-flex items-center gap-1`}><Eye className="h-4 w-4" aria-hidden /> Preview the saved version</a>
           </div>
           {/* The key restarts the editor when another theme is opened. */}
-          <ThemeEditor key={theme.id} theme={{ id: theme.id, name: theme.name, isActive: theme.isActive, settings: theme.settings, sections: theme.home.sections }} collections={collections.filter((x) => x.isActive).map((x) => ({ handle: x.handle, title: x.title }))} />
+          <ThemeEditor key={theme.id} theme={{ id: theme.id, name: theme.name, isActive: theme.isActive, settings: theme.settings, pages: theme.pages }} data={data} sizes={sizes} collections={collections.filter((x) => x.isActive).map((x) => ({ handle: x.handle, title: x.title }))} />
         </>
       )}
     </div>

@@ -7,7 +7,7 @@ import { audit } from '@/lib/audit'
 import { db } from '@/lib/db'
 import { applyPart, safeUrl, type Part } from '@/lib/storefront/rules'
 import { loadStorefrontForEdit, saveStorefront } from '@/lib/storefront/data'
-import { ThemeError, createTheme, deleteTheme, publishTheme, saveHomeTemplate, saveThemeSettings } from '@/lib/theme/data'
+import { ThemeError, createTheme, deleteTheme, publishTheme, saveTemplates, saveThemeSettings } from '@/lib/theme/data'
 import { parseCustomColor, parseThemeName, readThemeSettings } from '@/lib/theme/settings'
 import { THEME_PRESETS, type ThemePresetKey } from '@/lib/theme/presets'
 import type { ActionState } from '@/components/admin/ActionForm'
@@ -26,18 +26,19 @@ async function storeName(storeId: string) {
 
 // ------------------------------------------------------------------ the theme editor
 /**
- * "Save" in the editor: the theme's name, its colours and font, and the whole home page (sections, their settings
- * and blocks) in one go. Everything the browser sent is checked again here against the section library; the first
+ * "Save" in the editor: the theme's name, its colours and font, and corners, and its pages (Home and About: sections,
+ * their settings and blocks) in one go. Everything the browser sent is checked again here against the section library; the first
  * problem is returned in plain words and nothing is saved.
  */
-export async function saveThemeAction(input: { themeId: string; name: string; settings: unknown; template: unknown }): Promise<{ ok: string; live: boolean } | { error: string }> {
+export async function saveThemeAction(input: { themeId: string; name: string; settings: unknown; pages: unknown }): Promise<{ ok: string; live: boolean } | { error: string }> {
   const g = await adminOrError('settings.edit'); if ('error' in g) return g
   const name = parseThemeName(String(input?.name ?? '')); if (!name.ok) return { error: name.error }
   const s = (input?.settings && typeof input.settings === 'object' ? input.settings : {}) as Record<string, unknown>
   const custom = parseCustomColor(String(s.customColor ?? '')); if (!custom.ok) return { error: custom.error }
   try {
     const themeId = String(input?.themeId ?? '')
-    const saved = await saveHomeTemplate(g.admin.storeId, themeId, input?.template)
+    const pages = (input?.pages && typeof input.pages === 'object' ? input.pages : {}) as Record<string, unknown>
+    const saved = await saveTemplates(g.admin.storeId, themeId, { home: pages.home, about: pages.about })
     await saveThemeSettings(g.admin.storeId, themeId, readThemeSettings({ ...s, customColor: custom.value }), name.value)
     await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'theme.save', entity: 'Theme', entityId: themeId, after: { name: name.value, sections: saved.sections, live: saved.isActive } })
     refresh()

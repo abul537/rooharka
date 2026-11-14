@@ -291,6 +291,37 @@ The shop's home page is no longer written in code: it is drawn from the store's 
 - **Old shops:** `templateFromLegacy` turns the old Storefront settings into the same sections in the same order. A store without a saved theme is drawn that way; opening the editor saves it once as the live theme "My theme".
 - **Editor:** `/admin/storefront` (`components/admin/ThemeEditor.tsx`): add, drag or arrow to reorder, hide, remove; settings and blocks on the right; themes list with Preview, Publish, Delete, and "Add theme" from three ready designs or a copy.
 - **Draft preview:** `/admin/preview?theme=<id>` shows one of the store's own draft themes inside the owner's preview only (`rk_preview_theme` cookie, checked against the store).
-- **Not in a theme:** header, footer, About, Contact and policies ("Header, footer and pages" tab), because every theme shares them.
+- **Not in a theme:** header, footer, Contact and policies ("Header, footer and pages" tab), because every theme shares them.
 
 Run `pnpm db:push` and `pnpm exec prisma generate` (new tables `ShopTheme`, `ShopThemeTemplate`).
+
+### Theme engine v2: ten sections, variants and guard rails (Nov 2026)
+
+One engine, ten section types, each with a few layouts ("variants"). Home **and About** are templates on it; About has no page code of its own.
+
+| Section | Layouts |
+| --- | --- |
+| Hero | picture right / left, full width, video background, up to 3 slides, centred |
+| Featured products | 4 columns, 3 columns, row to swipe |
+| Category grid | 4 / 3 / 2 columns |
+| Gallery | 2 / 3 / 4 columns, masonry, row to swipe |
+| Story | picture beside text, text over picture, centred, timeline |
+| Video showcase | one, side by side, row to swipe |
+| Testimonials | cards, row to swipe, one large quote (real approved reviews only) |
+| Banner | strip, picture beside text |
+| Newsletter / call to action | centred, picture beside; optional email sign-up |
+| FAQ | one column, two columns |
+
+Highlights, Benefits and Collections remain as "classic" sections so existing shops lose nothing. Sections saved as the old "picture with text" / "text" types are read as Story.
+
+- **Limits (enforced when saving, in `lib/theme/schema.ts`):** picture shapes are presets only (1:1, 4:5, 16:9, 3:1, 21:9), never pixels; gallery 30 pictures (8 shown, the rest behind "Show all"); timeline 6 steps; hero 3 slides; 2 videos per video section and 3 video sections per page.
+- **Focal point:** stored as `"x,y"` (0 to 100 each); the owner drags a dot (`components/admin/FocalPicker.tsx`); drawn as `object-position`.
+- **Videos:** only files uploaded through the picker may be used. The server asks Cloudinary for the real length and size (`lib/theme/media.ts`): more than 15 seconds or 10 MB is refused and the file deleted. `saveTemplates` refuses any video address that has not passed (`MediaAsset.durationSec`). Nothing autoplays except the muted hero background, desktop only, `preload="metadata"`; phones get the picture.
+- **Loading:** only the first section's first picture is eager; everything else is lazy. Rows to swipe are CSS scroll-snap, no script.
+- **Media picker:** `components/admin/MediaPicker.tsx`: upload to the store's own Cloudinary, pick from the store's library (product photos included), or paste a picture address.
+- **Editor:** split screen: section list (drag, arrows, hide, add) | live preview drawn by the real section components from unsaved state (click a section to edit; the chosen one is outlined) | settings built from the section's description. Home / About switch, colour, font, corners, Save, Publish and the eye (draft preview on a real page). Tips appear when the top of the page is heavy (about 2 MB) or a gallery is long (`pageWarnings`).
+- **Starter designs:** Minimal, Editorial, Bold (and Spotlight, the original single-product look): JSON templates in `lib/theme/presets.ts`, not separate themes.
+- **Newsletter:** `POST /api/newsletter` (rate limited, per store) fills `NewsletterSubscriber`; the list is under Messages, "Newsletter subscribers".
+- **Deliberately not built:** custom CSS/HTML, blocks inside blocks, app blocks, pixel sizes, autoplay video on phones, unlimited media.
+
+Run `pnpm db:push` and `pnpm exec prisma generate` (new table `NewsletterSubscriber`, new column `MediaAsset.durationSec`).

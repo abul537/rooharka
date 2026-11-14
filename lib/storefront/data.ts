@@ -3,8 +3,7 @@ import { cookies } from 'next/headers'
 import { db } from '@/lib/db'
 import { isPreviewFor } from '@/lib/preview/server'
 import { PREVIEW_THEME_COOKIE } from '@/lib/preview/rules'
-import { getLiveTheme, getThemeById } from '@/lib/theme/data'
-import type { Template } from '@/lib/theme/schema'
+import { getLiveTheme, getThemeById, type Pages } from '@/lib/theme/data'
 import type { ThemeSettings } from '@/lib/theme/settings'
 import { memoKeyed } from '@/lib/memo'
 import { readStorefront, type StorefrontContent } from '@/lib/storefront/rules'
@@ -36,15 +35,15 @@ const load = memoKeyed(15_000, async (key: string): Promise<ShopContext> => {
  * looking at one of their own draft themes instead (it is loaded fresh, limited to this store, and never cached).
  * Worked out once per request.
  */
-export const getShopContext = cache(async (store: { id: string; name: string }): Promise<ShopContext & { theme: ThemeSettings; home: Template; draftTheme: boolean }> => {
+export const getShopContext = cache(async (store: { id: string; name: string }): Promise<ShopContext & { theme: ThemeSettings; pages: Pages; draftTheme: boolean }> => {
   const base = await load(`${store.id}|${store.name}`)
   if (await isPreviewFor(store.id)) {
     const wanted = (await cookies()).get(PREVIEW_THEME_COOKIE)?.value
-    const draft = wanted ? await getThemeById(store.id, wanted, base.content) : null
-    if (draft) return { ...base, theme: draft.settings, home: draft.home, draftTheme: true }
+    const draft = wanted ? await getThemeById(store.id, wanted, base.content, store.name) : null
+    if (draft) return { ...base, theme: draft.settings, pages: draft.pages, draftTheme: true }
   }
-  const live = await getLiveTheme(store.id, base.content)
-  return { ...base, theme: live.settings, home: live.home, draftTheme: false }
+  const live = await getLiveTheme(store.id, base.content, store.name)
+  return { ...base, theme: live.settings, pages: live.pages, draftTheme: false }
 })
 
 /** Uncached, for the dashboard editor (always shows what is really saved). */
