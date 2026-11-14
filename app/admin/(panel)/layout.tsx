@@ -25,7 +25,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const trialLeft = sub?.status === 'TRIALING' && sub.trialEndsAt ? Math.max(0, Math.ceil((sub.trialEndsAt.getTime() - Date.now()) / 86_400_000)) : null
   const canBill = can(admin.role, 'settings.edit')
 
-  const allowed = ['/admin', '/admin/orders', '/admin/messages', '/admin/customers', '/admin/security']
+  const allowed = ['/admin', '/admin/orders', '/admin/order-tracking', '/admin/messages', '/admin/customers', '/admin/security']
   if (can(admin.role, 'products.view')) allowed.push('/admin/products', '/admin/collections')
   if (can(admin.role, 'settings.edit')) allowed.push('/admin/storefront', '/admin/settings', '/admin/billing')
   if (can(admin.role, 'staff.manage')) allowed.push('/admin/team')

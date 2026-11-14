@@ -7,6 +7,7 @@ const ITEMS = [
   { href: '/admin', label: 'Overview', exact: true },
   { href: '/admin/pos', label: 'POS (counter sale)' },
   { href: '/admin/orders', label: 'Orders' },
+  { href: '/admin/order-tracking', label: 'Order tracking' },
   { href: '/admin/messages', label: 'Messages' },
   { href: '/admin/products', label: 'Products' },
   { href: '/admin/collections', label: 'Collections' },

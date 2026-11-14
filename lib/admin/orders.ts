@@ -63,6 +63,19 @@ export async function changeOrderStatus(admin: Actor, orderId: string, to: Order
   })
 }
 
+/**
+ * A message for the customer WITHOUT changing the status ("the courier is delayed by rain"). It appears on the
+ * customer's tracking page as a new line under the current step. Only for an order of the admin's own store.
+ */
+export async function addCustomerUpdate(admin: Actor, orderId: string, text: string) {
+  const order = await db.order.findFirst({ where: { id: orderId, storeId: admin.storeId }, select: { id: true, number: true, status: true } })
+  if (!order) throw new AdminError('Order not found.')
+  const clean = note(text)
+  if (!clean) throw new AdminError('Write the message for the customer first.')
+  await db.orderStatusHistory.create({ data: { orderId: order.id, status: order.status, note: clean, isPublic: true, createdById: admin.id } })
+  return { number: order.number, status: order.status }
+}
+
 /** Cancel before dispatch: stock goes back on the shelf and the customer's totals are corrected. */
 export async function cancelOrder(admin: StoreAdmin, orderId: string, reason: string) {
   return db.$transaction(async (tx) => {

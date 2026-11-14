@@ -326,6 +326,17 @@ Highlights, Benefits and Collections remain as "classic" sections so existing sh
 
 Run `pnpm db:push` and `pnpm exec prisma generate` (new table `NewsletterSubscriber`, new column `MediaAsset.durationSec`).
 
+### Order tracking page (Nov 2026)
+
+`/admin/order-tracking` (menu: "Order tracking", for everyone who may see orders) is the owner's side of the customer's `/track` page.
+
+- Orders are grouped by step (Placed, Confirmed, Packed, Shipped, Out for delivery; then Delivered, Returned, Cancelled) with a count on each; within a step the order that has waited longest is first, and one that has waited too long is flagged (`LATE_AFTER_HOURS`).
+- Each order shows **what the customer sees** (step and latest note) and buttons for its allowed next steps, with an optional **note for the customer** (ready-made suggestions per step). "Send note only" posts a message without changing the step (`addCustomerUpdate`).
+- Every change goes through the same `changeOrderStatus` as the order page and the bulk bar (allowed steps, unconfirmed advance check, two-people protection, audit line). Cancelling stays on the order's own page because it restocks and may need a refund.
+- "Tell the customer on WhatsApp" opens the owner's own WhatsApp with the message written (`wa.me`, no paid service; nothing is sent until the owner presses send).
+- A search box finds an order by number, tracking code, name or phone. A warning appears if customer tracking is switched off in Settings.
+- Rules in `lib/admin/order-tracking.ts`, tests in `tests/order-tracking.test.ts`. No database change.
+
 ### Settings page, organised (Nov 2026)
 
 `/admin/settings` shows one group at a time, chosen from a list on the left (`?tab=` in the address; groups are defined in `lib/admin/settings-tabs.ts`): **Store details**, **Payments and delivery**, **Checkout and orders** (order form, phone verification, tracking), **Couriers** (PostEx, courier list), **Product page**, **Connected services** (Cloudinary, AI). Only the open group's data is loaded. Long forms are split into titled parts (`Group` in `components/admin/ui.tsx`). No setting, action or database field changed; only where things sit.

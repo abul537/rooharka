@@ -21,6 +21,7 @@ function fail(e: unknown): ActionState {
 function done(orderId: string, ok: string): ActionState {
   revalidatePath(`/admin/orders/${orderId}`)
   revalidatePath('/admin/orders')
+  revalidatePath('/admin/order-tracking')
   revalidatePath('/admin')
   return { ok }
 }

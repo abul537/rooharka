@@ -29,6 +29,6 @@ export async function bulkOrderStepAction(action: unknown, ids: unknown): Promis
       lines.push({ id, number: null, ok: false, message: e instanceof AdminError ? e.message : 'Something went wrong; this order was not changed.' })
     }
   }
-  revalidatePath('/admin/orders'); revalidatePath('/admin')
+  revalidatePath('/admin/orders'); revalidatePath('/admin/order-tracking'); revalidatePath('/admin')
   return { lines }
 }
