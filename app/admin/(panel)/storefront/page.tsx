@@ -25,7 +25,7 @@ const ghost = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm f
 export default async function StorefrontPage({ searchParams }: { searchParams: Promise<{ tab?: string; theme?: string }> }) {
   const admin = await requireAdmin('settings.edit')
   const sp = await searchParams
-  const store = await db.store.findUnique({ where: { id: admin.storeId }, select: { name: true, currency: true, settings: { select: { displayName: true } } } })
+  const store = await db.store.findUnique({ where: { id: admin.storeId }, select: { name: true, settings: { select: { displayName: true, currency: true } } } })
   const shopName = store?.settings?.displayName ?? store?.name ?? 'Our store'
   const { content: c, logoUrl, seo } = await loadStorefrontForEdit(admin.storeId, shopName)
   const pages = sp.tab === 'pages'
@@ -89,7 +89,7 @@ export default async function StorefrontPage({ searchParams }: { searchParams: P
   // What the live preview needs: the store's real products, categories, collections and reviews, and known file sizes.
   const allSections = theme ? TEMPLATE_TYPES.flatMap((t) => theme.pages[t].sections) : []
   const [data, sizes] = theme
-    ? await Promise.all([loadSectionData({ id: admin.storeId, name: shopName, currency: store?.currency ?? 'PKR' }, allSections, true), mediaSizes(admin.storeId, allSections.flatMap(sectionMedia))])
+    ? await Promise.all([loadSectionData({ id: admin.storeId, name: shopName, currency: store?.settings?.currency ?? 'PKR' }, allSections, true), mediaSizes(admin.storeId, allSections.flatMap(sectionMedia))])
     : [null, {}]
 
   return (

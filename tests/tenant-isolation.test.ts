@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 const FILES = ['lib/theme/data.ts', 'app/admin/(panel)/orders/page.tsx', 'app/admin/(panel)/orders/slips/page.tsx', 'lib/admin/stats.ts', 'lib/admin/products.ts', 'lib/admin/collections.ts', 'lib/couriers/booking.ts', 'lib/couriers/webhook.ts', 'lib/couriers/vault.ts', 'lib/ai/describe.ts', 'app/admin/(panel)/products/export/route.ts']
 /** Tables whose rows belong to exactly one store. */
@@ -76,4 +76,22 @@ test('database schema: no model, enum or field is declared twice, and every rela
     }
   }
   assert.ok(names.length > 40, 'the schema was really read')
+})
+
+test('code only asks the Store table for columns it really has (currency lives in StoreSettings)', () => {
+  const schema = readFileSync('prisma/schema.prisma', 'utf8')
+  const body = /\nmodel Store \{([\s\S]*?)\n\}/.exec(schema)![1]
+  const fields = new Set([...body.matchAll(/^\s{2}(\w+)\s+\S/gm)].map((m) => m[1]).concat('_count'))
+  const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.name === 'generated' || e.name === 'node_modules' ? [] : e.isDirectory() ? files(`${dir}/${e.name}`) : /\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : [])
+  let seen = 0
+  for (const f of ['app', 'lib', 'components'].flatMap(files)) {
+    const src = readFileSync(f, 'utf8')
+    // Single-line `db.store.find…({ …, select: { a: true, b: true, nested: { … } } })`: the top-level names are checked.
+    for (const m of src.matchAll(/db\.store\.find\w+\(\{[^\n]*?select: \{([^\n]*)/g)) {
+      let depth = 0, top = ''
+      for (const ch of m[1]) { if (ch === '{') depth++; else if (ch === '}') { if (depth === 0) break; depth-- } else if (depth === 0) top += ch }
+      for (const k of top.matchAll(/(\w+):/g)) { seen++; assert.ok(fields.has(k[1]), `${f}: Store has no column "${k[1]}"`) }
+    }
+  }
+  assert.ok(seen > 10, 'the queries are really being reviewed')
 })
