@@ -2,14 +2,11 @@ import { headers } from 'next/headers'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getProductPageData } from '@/lib/data/product'
-import Gallery from '@/components/product/Gallery'
-import PurchasePanel from '@/components/product/PurchasePanel'
-import ProductTabs from '@/components/product/ProductTabs'
-import Faq from '@/components/product/Faq'
-import Link from 'next/link'
-import ProductCard from '@/components/shop/ProductCard'
 import { getCatalog } from '@/lib/data/catalog'
 import { relatedItems } from '@/lib/catalog'
+import { getShopContext } from '@/lib/storefront/data'
+import { loadSectionData } from '@/lib/theme/page-data'
+import { RenderSections } from '@/components/sections/registry'
 
 // Pages are rebuilt in the background at most once a minute, so dashboard edits
 // go live quickly without hitting the database on every visit.
@@ -41,10 +38,12 @@ export default async function ProductPage({ params }: Props) {
   const data = await getProductPageData(slug)
   if (!data) notFound()
 
-  const { product, variants, media, sections, settings, reviews, store } = data
-  const related = relatedItems((await getCatalog(store.id)).items, product.slug)
-  const keyBenefits = sections.find((s) => s.type === 'KEY_BENEFITS') ?? null
-  const faq = settings.showFaq ? sections.find((s) => s.type === 'FAQ') ?? null : null
+  const { product, variants, media, reviews, store } = data
+  // The page is DRAWN from the theme's "product" template: the product's own sections (photos and buy box,
+  // description, questions, related products) in the owner's order, with any other sections around them.
+  const { sections } = (await getShopContext(store)).pages.product
+  const [base, catalog] = await Promise.all([loadSectionData(store, sections), getCatalog(store.id)])
+  const sectionData = { ...base, product: { page: data, related: relatedItems(catalog.items, product.slug, 8) } }
 
   // Structured data so search engines can show price, stock and rating.
   const prices = variants.map((v) => v.price)
@@ -82,29 +81,7 @@ export default async function ProductPage({ params }: Props) {
           Draft: only you can see this product. Set its status to Active in your dashboard when it is ready. Customers cannot order it yet.
         </p>
       )}
-      <section className="py-8 md:py-14 bg-gradient-to-b from-brand-50 to-white">
-        <div className="container mx-auto px-4">
-          <nav aria-label="Breadcrumb" className="mb-6 text-sm text-gray-500">
-            <Link href="/" className="hover:text-brand-700">Home</Link><span aria-hidden> / </span><Link href="/shop" className="hover:text-brand-700">Shop</Link><span aria-hidden> / </span><span className="text-gray-800" aria-current="page">{product.name}</span>
-          </nav>
-          <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-start">
-            <Gallery media={media} productName={product.name} />
-            <PurchasePanel data={data} keyBenefits={keyBenefits} />
-          </div>
-        </div>
-      </section>
-
-      <ProductTabs data={data} />
-      {faq && <Faq section={faq} />}
-
-      {related.length > 0 && (
-        <section className="container mx-auto px-4 pt-16" aria-labelledby="related">
-          <h2 id="related" className="font-playfair text-2xl font-bold text-gray-900 md:text-3xl">You may also like</h2>
-          <ul className="mt-6 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
-            {related.map((item) => <li key={item.id} className="flex"><div className="flex w-full"><ProductCard item={item} currency={store.currency} /></div></li>)}
-          </ul>
-        </section>
-      )}
+      <RenderSections sections={sections} data={sectionData} ownHeading />
     </div>
   )
 }

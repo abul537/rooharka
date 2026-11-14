@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Eye } from 'lucide-react'
 import { publishThemeAction, saveThemeAction } from '@/app/admin/(panel)/storefront/actions'
 import {
-  CORE_SECTIONS, MAX_SECTIONS, RATIOS, SECTIONS, SECTION_BY_TYPE, TEMPLATE_LABEL, TEMPLATE_TYPES, newBlock, newSection, pageWarnings, sectionSummary,
+  MAX_SECTIONS, RATIOS, SECTION_BY_TYPE, sectionsFor, TEMPLATE_LABEL, TEMPLATE_TYPES, newBlock, newSection, pageWarnings, sectionSummary,
   type Block, type Field as FieldDef, type Section, type SectionDef, type Settings, type Template, type TemplateType, type Value,
 } from '@/lib/theme/schema'
 import { CORNERS, parseCustomColor, themeShades, themeVariables, type ThemeSettings } from '@/lib/theme/settings'
@@ -82,7 +82,7 @@ function SettingField({ f, all, onChange, collections, pick }: { f: FieldDef; al
 }
 
 /** The page drawn by the real section components from what is on screen now (not yet saved), shrunk to fit. */
-function LivePreview({ sections, data, settings, picked, onPick }: { sections: Section[]; data: SectionData; settings: ThemeSettings; picked: string | null; onPick: (id: string) => void }) {
+function LivePreview({ sections, data, settings, picked, onPick, ownHeading }: { sections: Section[]; data: SectionData; settings: ThemeSettings; picked: string | null; onPick: (id: string) => void; ownHeading: boolean }) {
   const frame = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState(0.5)
   useEffect(() => {
@@ -97,7 +97,7 @@ function LivePreview({ sections, data, settings, picked, onPick }: { sections: S
   useEffect(() => { if (picked) frame.current?.querySelector(`[data-section-id="${CSS.escape(picked)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }, [picked])
   const click = (e: React.MouseEvent) => {
     const t = e.target as HTMLElement
-    if (t.closest('a, button')) e.preventDefault() // links and buttons do nothing in the preview
+    if (t.closest('a, button, input, select')) { e.preventDefault(); e.stopPropagation() } // links, buttons and the order form do nothing in the preview
     const id = t.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId
     if (id) onPick(id)
   }
@@ -105,7 +105,7 @@ function LivePreview({ sections, data, settings, picked, onPick }: { sections: S
   return (
     <div ref={frame} className="max-h-[78vh] overflow-y-auto overflow-x-hidden rounded-xl border border-slate-300 bg-white" aria-label="Live preview of the page">
       <div onClickCapture={click} onSubmitCapture={(e) => e.preventDefault()} className="cursor-pointer bg-white pb-10 text-gray-900" style={{ ...(themeVariables(settings) as CSSProperties), width: PREVIEW_WIDTH, zoom }}>
-        {visible ? <RenderSections sections={sections} data={data} mark={picked} /> : <p className="p-24 text-center text-2xl text-slate-400">This page has no sections yet. Add one on the left.</p>}
+        {visible ? <RenderSections sections={sections} data={data} mark={picked} ownHeading={ownHeading} /> : <p className="p-24 text-center text-2xl text-slate-400">This page has no sections yet. Add one on the left.</p>}
       </div>
     </div>
   )
@@ -116,13 +116,15 @@ function LivePreview({ sections, data, settings, picked, onPick }: { sections: S
  * preview in the middle (click a section to edit it), and the chosen section's settings on the right.
  * Nothing reaches the shop until Save; the server checks everything again before storing it.
  */
-export default function ThemeEditor({ theme, collections, data, sizes }: {
+export default function ThemeEditor({ theme, collections, data, sizes, paths }: {
   theme: { id: string; name: string; isActive: boolean; settings: ThemeSettings; pages: Pages }
   collections: { handle: string; title: string }[]
   /** The store's real products, categories and reviews, so the preview shows the real thing. */
   data: SectionData
   /** Known file sizes (address -> bytes) for the "heavy top of page" warning. */
   sizes: Record<string, number>
+  /** Where the eye button opens each kind of page (a real product and collection of the store; null when there is none yet). */
+  paths: { product: string | null; collection: string | null }
 }) {
   const router = useRouter()
   const [name, setName] = useState(theme.name)
@@ -162,6 +164,8 @@ export default function ThemeEditor({ theme, collections, data, sizes }: {
 
   const customProblem = settings.customColor ? (() => { const r = parseCustomColor(settings.customColor); return r.ok ? null : r.error })() : null
   const shades = customProblem ? PALETTES[settings.color] : themeShades(settings)
+  const available = sectionsFor(tab)
+  const eye = tab === 'home' ? '/' : tab === 'about' ? '/about' : paths[tab]
   const shown: ThemeSettings = customProblem ? { ...settings, customColor: '' } : settings
 
   const send = async () => {
@@ -216,7 +220,9 @@ export default function ThemeEditor({ theme, collections, data, sizes }: {
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
           <button type="button" onClick={save} disabled={saving || !!customProblem || (!dirty && !note?.bad)} className={primaryBtn}>{saving ? 'Working…' : dirty ? (theme.isActive ? 'Save (updates your shop)' : 'Save draft') : 'Saved'}</button>
           {!theme.isActive && <button type="button" onClick={publish} disabled={saving || !!customProblem} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">Publish</button>}
-          <a href={`/admin/preview?path=${tab === 'about' ? '/about' : '/'}&theme=${theme.id}`} target="_blank" rel="noopener" className={`${ghost} inline-flex items-center gap-1`} title="Opens the saved version as a customer would see it, on a real page"><Eye className="h-4 w-4" aria-hidden /> Preview{dirty ? ' (saved version)' : ''}</a>
+          {eye
+            ? <a href={`/admin/preview?path=${encodeURIComponent(eye)}&theme=${theme.id}`} target="_blank" rel="noopener" className={`${ghost} inline-flex items-center gap-1`} title="Opens the saved version as a customer would see it, on a real page"><Eye className="h-4 w-4" aria-hidden /> Preview{dirty ? ' (saved version)' : ''}</a>
+            : <span className="text-slate-500">Add a {tab} to preview this page.</span>}
           <span className="flex items-center gap-1" aria-hidden>{[shades.c50, shades.c100, shades.c200, shades.c600, shades.c700, shades.c800].map((c) => <span key={c} className="h-5 w-5 rounded border border-slate-200" style={{ background: c }} />)}</span>
           {customProblem ? <span className="text-red-700" role="alert">{customProblem}</span> : settings.customColor ? <button type="button" className="underline" onClick={() => look({ customColor: '' })}>Use a ready colour instead</button> : null}
           {dirty && <span className="text-amber-700">You have changes that are not saved.</span>}
@@ -224,9 +230,10 @@ export default function ThemeEditor({ theme, collections, data, sizes }: {
         </div>
       </div>
 
-      <nav aria-label="Page to edit" className="flex gap-2">
+      <nav aria-label="Page to edit" className="flex flex-wrap gap-2">
         {TEMPLATE_TYPES.map((t) => <button key={t} type="button" onClick={() => openTab(t)} aria-pressed={tab === t} className={`rounded-full px-4 py-1.5 text-sm font-medium ${tab === t ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>{TEMPLATE_LABEL[t]}</button>)}
       </nav>
+      {(tab === 'product' || tab === 'collection') && <p className="-mt-1 text-xs text-slate-600">This design is used for <strong>every {tab} page</strong> of your shop. The preview shows one of your own {tab}s as an example; each {tab}’s name, photos, price and text still come from the {tab} itself.</p>}
 
       <div className="grid items-start gap-4 xl:grid-cols-[17rem_minmax(0,1fr)_22rem]">
         <section className="rounded-xl border border-slate-200 bg-white p-4" aria-label={`Sections on the ${TEMPLATE_LABEL[tab].toLowerCase()}`}>
@@ -244,19 +251,19 @@ export default function ThemeEditor({ theme, collections, data, sizes }: {
                 <div className="mt-1.5 flex gap-1 pl-6">
                   <button type="button" className={small} onClick={() => change((all) => move(all, i, i - 1))} disabled={i === 0} aria-label={`Move ${sectionSummary(s)} up`}>↑</button>
                   <button type="button" className={small} onClick={() => change((all) => move(all, i, i + 1))} disabled={i === sections.length - 1} aria-label={`Move ${sectionSummary(s)} down`}>↓</button>
-                  <button type="button" className={small} onClick={() => patch(s.id, { hidden: !s.hidden })} aria-pressed={s.hidden}>{s.hidden ? 'Show' : 'Hide'}</button>
+                  {SECTION_BY_TYPE.get(s.type)?.required ? <span className="self-center text-[11px] text-slate-500">always shown</span> : <button type="button" className={small} onClick={() => patch(s.id, { hidden: !s.hidden })} aria-pressed={s.hidden}>{s.hidden ? 'Show' : 'Hide'}</button>}
                 </div>
               </li>
             ))}
           </ol>
           <div className="mt-3">
             {sections.length < MAX_SECTIONS && <button type="button" onClick={() => setAdding(!adding)} className="w-full rounded-lg border border-dashed border-slate-400 px-3 py-2 text-sm font-medium hover:bg-slate-50" aria-expanded={adding}>{adding ? 'Close' : '+ Add section'}</button>}
-            {adding && <ul className="mt-2 max-h-96 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">{addGroup('Sections', CORE_SECTIONS)}{addGroup('Classic sections', SECTIONS.filter((d) => d.classic))}</ul>}
+            {adding && <ul className="mt-2 max-h-96 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">{available.some((d) => d.only) && addGroup(`Only for the ${TEMPLATE_LABEL[tab].toLowerCase()}`, available.filter((d) => d.only))}{addGroup('Sections', available.filter((d) => !d.only && !d.classic))}{addGroup('Classic sections', available.filter((d) => d.classic))}</ul>}
           </div>
         </section>
 
         <div className="min-w-0 space-y-2">
-          <LivePreview sections={sections} data={data} settings={shown} picked={picked} onPick={setPicked} />
+          <LivePreview sections={sections} data={data} settings={shown} picked={picked} onPick={setPicked} ownHeading={tab === 'product' || tab === 'collection'} />
           <p className="text-xs text-slate-500">This is how the page looks on a computer with what is on your screen now, saved or not. Click a section to edit it. For phones and a final check, save and press Preview.</p>
         </div>
 
@@ -270,7 +277,7 @@ export default function ThemeEditor({ theme, collections, data, sizes }: {
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div><h2 className="font-semibold">{def.name}</h2><p className="text-xs text-slate-500">{def.description}</p></div>
-                <button type="button" onClick={() => { if (window.confirm(`Remove “${def.name}” from the page?`)) remove(current.id) }} className="shrink-0 text-xs text-red-700 underline">Remove section</button>
+                {!def.required && <button type="button" onClick={() => { if (window.confirm(`Remove “${def.name}” from the page?`)) remove(current.id) }} className="shrink-0 text-xs text-red-700 underline">Remove section</button>}
               </div>
               {current.hidden && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">This section is hidden: customers do not see it. Press Show in the list to bring it back.</p>}
               {def.fields.map((f) => <SettingField key={`${current.id}-${f.key}`} f={f} all={current.settings} onChange={(k, v) => setValue(current.id, k, v)} collections={collections} pick={pick} />)}

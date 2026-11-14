@@ -21,7 +21,7 @@ const legacyPages = (legacy: StorefrontContent, storeName: string) => Object.fro
 
 const pick = (t: { id: string; settings: unknown; templates: { type: string; sections: unknown }[] }, legacy: StorefrontContent, storeName: string): LiveTheme => {
   const pages = legacyPages(legacy, storeName)
-  for (const row of t.templates) if ((TEMPLATE_TYPES as readonly string[]).includes(row.type)) pages[row.type as TemplateType] = readTemplate({ sections: row.sections })
+  for (const row of t.templates) if ((TEMPLATE_TYPES as readonly string[]).includes(row.type)) pages[row.type as TemplateType] = readTemplate({ sections: row.sections }, row.type as TemplateType)
   return { id: t.id, settings: readThemeSettings(t.settings, legacySettings(legacy)), pages }
 }
 const WITH_PAGES = { id: true, settings: true, templates: { select: { type: true, sections: true } } } as const
@@ -80,7 +80,7 @@ export async function saveTemplates(storeId: string, themeId: string, raw: Parti
   const pages: [TemplateType, Template][] = []
   for (const type of TEMPLATE_TYPES) {
     if (raw[type] === undefined) continue
-    const parsed = parseTemplate(raw[type])
+    const parsed = parseTemplate(raw[type], type)
     if (!parsed.ok) throw new ThemeError(parsed.error)
     pages.push([type, parsed.value])
   }
@@ -110,7 +110,7 @@ export async function saveThemeSettings(storeId: string, themeId: string, settin
 export async function createTheme(storeId: string, storeName: string, name: string, from: { preset: ThemePresetKey } | { copyOf: string }, legacy: StorefrontContent): Promise<string> {
   if ((await db.shopTheme.count({ where: { storeId } })) >= MAX_THEMES) throw new ThemeError(`You can keep up to ${MAX_THEMES} themes. Delete one you no longer need first.`)
   let settings: ThemeSettings, pages: Pages
-  if ('preset' in from) { const p = themePreset(from.preset, storeName); settings = p.settings; pages = { home: p.home, about: p.about } }
+  if ('preset' in from) { const p = themePreset(from.preset, storeName); settings = p.settings; pages = { home: p.home, about: p.about, product: p.product, collection: p.collection } }
   else {
     const src = await getThemeById(storeId, from.copyOf, legacy, storeName)
     if (!src) throw new ThemeError('The theme to copy was not found. Reload the page.')

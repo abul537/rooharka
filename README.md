@@ -325,3 +325,15 @@ Highlights, Benefits and Collections remain as "classic" sections so existing sh
 - **Deliberately not built:** custom CSS/HTML, blocks inside blocks, app blocks, pixel sizes, autoplay video on phones, unlimited media.
 
 Run `pnpm db:push` and `pnpm exec prisma generate` (new table `NewsletterSubscriber`, new column `MediaAsset.durationSec`).
+
+### Product and collection pages on the theme engine (Nov 2026)
+
+The theme now has four templates: `home`, `about`, `product`, `collection`. One product template designs **every** product page; one collection template every collection page.
+
+- **Page-only sections** (`only` in `lib/theme/schema.ts`): *Product photos and buy box* (`product-main`: photos left / right / on top, photo shape, background, path, sticky photos), *Description and details* (`product-info`: tabs / fold-out list / one after another, reviews on or off), *Product questions* (`product-faq`), *You may also like* (`related-products`: 4 or 3 columns or a row to swipe, how many), and *Collection heading and products* (`collection-main`: heading centred / left / compact, 4 / 3 / 2 columns, background, path, product count).
+- **Required sections:** `product-main` and `collection-main` cannot be removed or hidden. Saving without one is refused; a stored page that lost it gets it back when read, so a product page always shows its product.
+- **Everything else is free:** reorder the page's own sections, hide the optional ones, and add any general section (banner, story, gallery, FAQ, video, featured products…) above, between or below.
+- **Unchanged for existing shops:** a theme that has no saved product or collection template is drawn from `DEFAULT_PAGES`, the same parts in the same order as before. No database change.
+- **What stays per product:** name, photos, price, options, description, questions and reviews come from the product; the switches under Settings (reviews, questions, trust badges, sticky order bar, button text) still apply.
+- **Drawing:** `app/(shop)/product/[slug]/page.tsx` and `app/(shop)/collections/[handle]/page.tsx` pass the product / collection to `RenderSections` (`ownHeading`: the product or collection name is the page's h1, so other sections use h2). Search-engine data (JSON-LD, canonical address) is unchanged.
+- **Editor:** "Product page" and "Collection page" tabs. The live preview shows one of the store's own products and collections (`loadSamples`, limited to the admin's store); the eye opens that real page with the draft theme.

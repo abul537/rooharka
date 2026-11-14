@@ -5,7 +5,7 @@ import { db } from '@/lib/db'
 import { loadStorefrontForEdit } from '@/lib/storefront/data'
 import { POLICY_KEYS, POLICY_TITLES } from '@/lib/storefront/rules'
 import { ensureTheme, getThemeForEdit, listThemes } from '@/lib/theme/data'
-import { loadSectionData } from '@/lib/theme/page-data'
+import { loadSamples, loadSectionData } from '@/lib/theme/page-data'
 import { mediaSizes } from '@/lib/theme/media'
 import { TEMPLATE_TYPES, sectionMedia } from '@/lib/theme/schema'
 import { MAX_THEMES } from '@/lib/theme/settings'
@@ -25,7 +25,7 @@ const ghost = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm f
 export default async function StorefrontPage({ searchParams }: { searchParams: Promise<{ tab?: string; theme?: string }> }) {
   const admin = await requireAdmin('settings.edit')
   const sp = await searchParams
-  const store = await db.store.findUnique({ where: { id: admin.storeId }, select: { name: true, settings: { select: { displayName: true, currency: true } } } })
+  const store = await db.store.findUnique({ where: { id: admin.storeId }, select: { name: true, slug: true, settings: { select: { displayName: true, currency: true } } } })
   const shopName = store?.settings?.displayName ?? store?.name ?? 'Our store'
   const { content: c, logoUrl, seo } = await loadStorefrontForEdit(admin.storeId, shopName)
   const pages = sp.tab === 'pages'
@@ -33,7 +33,7 @@ export default async function StorefrontPage({ searchParams }: { searchParams: P
   const head = (
     <>
       <h1 className="text-2xl font-bold">Storefront</h1>
-      <p className="text-slate-600 -mt-3">Design your shop from ready-made sections: choose them, put them in order and fill in your own words. No code needed.</p>
+      <p className="text-slate-600 -mt-3">Design your home, About, product and collection pages from ready-made sections: choose them, put them in order and fill in your own words. No code needed.</p>
       <nav aria-label="Storefront" className="flex flex-wrap gap-2">
         <Link href="/admin/storefront" className={tab(!pages)}>Themes and page design</Link>
         <Link href="/admin/storefront?tab=pages" className={tab(pages)}>Header, footer and pages</Link>
@@ -88,9 +88,11 @@ export default async function StorefrontPage({ searchParams }: { searchParams: P
   const theme = chosen ? await getThemeForEdit(admin.storeId, chosen.id, c, shopName) : null
   // What the live preview needs: the store's real products, categories, collections and reviews, and known file sizes.
   const allSections = theme ? TEMPLATE_TYPES.flatMap((t) => theme.pages[t].sections) : []
-  const [data, sizes] = theme
-    ? await Promise.all([loadSectionData({ id: admin.storeId, name: shopName, currency: store?.settings?.currency ?? 'PKR' }, allSections, true), mediaSizes(admin.storeId, allSections.flatMap(sectionMedia))])
-    : [null, {}]
+  const ref = { id: admin.storeId, name: shopName, slug: store?.slug ?? '', currency: store?.settings?.currency ?? 'PKR' }
+  const [base, sizes, samples] = theme
+    ? await Promise.all([loadSectionData(ref, allSections, true), mediaSizes(admin.storeId, allSections.flatMap(sectionMedia)), loadSamples(ref)])
+    : [null, {}, null]
+  const data = base && samples ? { ...base, product: samples.product, collection: samples.collection } : null
 
   return (
     <div className="space-y-6">
@@ -133,13 +135,13 @@ export default async function StorefrontPage({ searchParams }: { searchParams: P
         )}
       </Card>
 
-      {theme && data && (
+      {theme && data && samples && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Editing: {theme.name} <span className={`ml-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${theme.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>{theme.isActive ? 'Live: saving changes your shop' : 'Draft: customers do not see it'}</span></h2>
           </div>
           {/* The key restarts the editor when another theme is opened. */}
-          <ThemeEditor key={theme.id} theme={{ id: theme.id, name: theme.name, isActive: theme.isActive, settings: theme.settings, pages: theme.pages }} data={data} sizes={sizes} collections={collections.filter((x) => x.isActive).map((x) => ({ handle: x.handle, title: x.title }))} />
+          <ThemeEditor key={theme.id} theme={{ id: theme.id, name: theme.name, isActive: theme.isActive, settings: theme.settings, pages: theme.pages }} data={data} sizes={sizes} paths={samples.paths} collections={collections.filter((x) => x.isActive).map((x) => ({ handle: x.handle, title: x.title }))} />
         </>
       )}
     </div>

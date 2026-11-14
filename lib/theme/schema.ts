@@ -66,6 +66,10 @@ export interface SectionDef {
   fields: Field[]; blocks?: BlockDef
   /** How many of this section a page may have (most make sense once). */
   max: number
+  /** A section that belongs to one kind of page only (the product's own details cannot be put on the home page). */
+  only?: 'product' | 'collection'
+  /** The heart of its page: always there, cannot be removed or hidden (a product page without the product is not one). */
+  required?: boolean
 }
 
 const sel = (...pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }))
@@ -214,20 +218,64 @@ export const SECTIONS: SectionDef[] = [
     blocks: { name: 'Benefit', plural: 'Benefits', max: 10, titleKey: 'text', fields: [{ key: 'text', label: 'Benefit', kind: 'text', max: 100, required: true }] },
   },
   { type: 'collection-list', name: 'Collections', max: 1, classic: true, description: 'Tiles for the collections you made by hand.', fields: [{ ...HEADING, default: 'Our collections' }] },
+  // ---- the product page's own sections: they show the product the customer is looking at
+  {
+    type: 'product-main', name: 'Product photos and buy box', max: 1, only: 'product', required: true,
+    description: 'The product’s photos beside its name, price, options and the order button. Always on the page.',
+    fields: [
+      { key: 'layout', label: 'Layout', kind: 'select', default: 'media-left', options: sel(['media-left', 'Photos on the left'], ['media-right', 'Photos on the right'], ['stacked', 'Photos on top, centred']) },
+      { key: 'ratio', label: 'Shape of the main photo', kind: 'ratio', default: '1:1' },
+      { key: 'background', label: 'Background', kind: 'select', default: 'tint', options: sel(['tint', 'Soft tint of your colour'], ['plain', 'Plain white']) },
+      { key: 'breadcrumb', label: 'Show the path (Home / Shop / product)', kind: 'check', default: true },
+      { key: 'stickyMedia', label: 'Keep the photos in view while the customer scrolls', kind: 'check', default: true, hint: 'On computers only.' },
+    ],
+  },
+  {
+    type: 'product-info', name: 'Description and details', max: 1, only: 'product',
+    description: 'The product’s description, its extra details (ingredients, how to use…) and its reviews.',
+    fields: [
+      { key: 'layout', label: 'Layout', kind: 'select', default: 'tabs', options: sel(['tabs', 'Tabs'], ['accordion', 'Fold-out list'], ['stacked', 'One after another']) },
+      { key: 'reviews', label: 'Include the reviews', kind: 'check', default: true, hint: 'Also needs “Show reviews” switched on under Settings.' },
+    ],
+  },
+  { type: 'product-faq', name: 'Product questions', max: 1, only: 'product', description: 'The questions and answers you wrote for this product. Hidden for products that have none.', fields: [{ ...HEADING, hint: 'Empty = the heading you gave the product’s questions.' }] },
+  {
+    type: 'related-products', name: 'You may also like', max: 1, only: 'product', description: 'Other products from the same category.',
+    fields: [
+      { ...HEADING, default: 'You may also like' },
+      { key: 'layout', label: 'Layout', kind: 'select', default: 'grid-4', options: sel(['grid-4', '4 columns'], ['grid-3', '3 columns'], ['carousel', 'Row to swipe']) },
+      { key: 'count', label: 'How many', kind: 'select', default: '4', options: sel(['3', '3'], ['4', '4'], ['6', '6'], ['8', '8']) },
+    ],
+  },
+  // ---- the collection page's own section
+  {
+    type: 'collection-main', name: 'Collection heading and products', max: 1, only: 'collection', required: true,
+    description: 'The collection’s name, its description and its products in your order. Always on the page.',
+    fields: [
+      { key: 'layout', label: 'Heading', kind: 'select', default: 'centered', options: sel(['centered', 'Centred'], ['left', 'On the left'], ['compact', 'Small, no description']) },
+      { key: 'columns', label: 'Products in a row (on computers)', kind: 'select', default: '4', options: sel(['4', '4'], ['3', '3'], ['2', '2']) },
+      { key: 'background', label: 'Background', kind: 'select', default: 'tint', options: sel(['tint', 'Soft tint of your colour'], ['plain', 'Plain white']) },
+      { key: 'breadcrumb', label: 'Show the path (Home / Shop)', kind: 'check', default: true },
+      { key: 'count', label: 'Show how many products there are', kind: 'check', default: false },
+    ],
+  },
 ]
 /** The ten sections of the library, without the classic ones. */
-export const CORE_SECTIONS = SECTIONS.filter((x) => !x.classic)
+export const CORE_SECTIONS = SECTIONS.filter((x) => !x.classic && !x.only)
 export const SECTION_BY_TYPE: ReadonlyMap<string, SectionDef> = new Map(SECTIONS.map((s) => [s.type, s]))
 
 // ------------------------------------------------------------------ a template
 export interface Block { id: string; settings: Settings }
 export interface Section { id: string; type: string; hidden: boolean; settings: Settings; blocks: Block[] }
 export interface Template { sections: Section[] }
-export const TEMPLATE_TYPES = ['home', 'about'] as const
-export const TEMPLATE_LABEL: Record<(typeof TEMPLATE_TYPES)[number], string> = { home: 'Home page', about: 'About page' }
+export const TEMPLATE_TYPES = ['home', 'about', 'product', 'collection'] as const
+export const TEMPLATE_LABEL: Record<(typeof TEMPLATE_TYPES)[number], string> = { home: 'Home page', about: 'About page', product: 'Product page', collection: 'Collection page' }
 export const isTemplateType = (v: unknown): v is (typeof TEMPLATE_TYPES)[number] => (TEMPLATE_TYPES as readonly unknown[]).includes(v)
 export type TemplateType = (typeof TEMPLATE_TYPES)[number]
 export const MAX_SECTIONS = 25
+/** The sections a kind of page may use: the general ones, plus that page's own. */
+export const sectionsFor = (page: TemplateType): SectionDef[] => SECTIONS.filter((d) => !d.only || d.only === page)
+const allowedOn = (def: SectionDef, page: TemplateType | undefined) => !def.only || def.only === page
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const idOk = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(v)
@@ -291,13 +339,14 @@ function upgrade(item: unknown): unknown {
   return item
 }
 
-function clean(raw: unknown, strict: boolean): { ok: true; value: Template } | { ok: false; error: string } {
+function clean(raw: unknown, strict: boolean, page?: TemplateType): { ok: true; value: Template } | { ok: false; error: string } {
   const list = (Array.isArray(obj(raw).sections) ? (obj(raw).sections as unknown[]) : []).map(upgrade)
   if (strict && list.length > MAX_SECTIONS) return { ok: false, error: `A page can have at most ${MAX_SECTIONS} sections.` }
   const sections: Section[] = [], seen = new Set<string>(), perType = new Map<string, number>()
   for (const item of list.slice(0, MAX_SECTIONS)) {
     const s = obj(item), def = SECTION_BY_TYPE.get(String(s.type))
     if (!def) { if (strict) return { ok: false, error: 'This page contains a section that does not exist any more. Reload the page.' }; continue }
+    if (!allowedOn(def, page)) { if (strict) return { ok: false, error: `“${def.name}” cannot be used on this page.` }; continue }
     const n = (perType.get(def.type) ?? 0) + 1
     if (n > def.max) { if (strict) return { ok: false, error: `“${def.name}” can be used at most ${def.max === 1 ? 'once' : `${def.max} times`} on a page.` }; continue }
     const id = idOk(s.id) && !seen.has(s.id) ? s.id : null
@@ -323,15 +372,21 @@ function clean(raw: unknown, strict: boolean): { ok: true; value: Template } | {
       }
     }
     seen.add(id); perType.set(def.type, n)
-    sections.push({ id, type: def.type, hidden: s.hidden === true, settings: settings.value, blocks })
+    sections.push({ id, type: def.type, hidden: s.hidden === true && !def.required, settings: settings.value, blocks })
+  }
+  // The heart of a page is always there: put back if a stored page lost it, refused if the editor sent a page without it.
+  for (const def of SECTIONS) {
+    if (!def.required || def.only !== page || sections.some((x) => x.type === def.type)) continue
+    if (strict) return { ok: false, error: `“${def.name}” must stay on the ${TEMPLATE_LABEL[page!].toLowerCase()}.` }
+    sections.unshift(newSection(def.type, `${def.type}-1`)!)
   }
   return { ok: true, value: { sections } }
 }
 
 /** Reading what is stored: never fails, drops what it does not understand. */
-export const readTemplate = (raw: unknown): Template => (clean(raw, false) as { ok: true; value: Template }).value
+export const readTemplate = (raw: unknown, page: TemplateType = 'home'): Template => (clean(raw, false, page) as { ok: true; value: Template }).value
 /** Saving what the editor sent: the first problem is reported in plain words and nothing is saved. */
-export const parseTemplate = (raw: unknown) => clean(raw, true)
+export const parseTemplate = (raw: unknown, page: TemplateType = 'home') => clean(raw, true, page)
 
 /** A new section of a type, filled with its starting values. `id` must be new on the page. */
 export function newSection(type: string, id: string): Section | null {
@@ -386,7 +441,13 @@ export function aboutFromLegacy(c: StorefrontContent, storeName: string): Templa
   ] })
 }
 /** The template a store gets for a page before it saves one of its own. */
-export const legacyTemplate = (type: TemplateType, c: StorefrontContent, storeName: string): Template => (type === 'about' ? aboutFromLegacy(c, storeName) : templateFromLegacy(c))
+/** The product and collection pages as every shop had them before they could be designed: the same parts in the same order. */
+export const DEFAULT_PAGES: Record<'product' | 'collection', () => Template> = {
+  product: () => ({ sections: ['product-main', 'product-info', 'product-faq', 'related-products'].map((t) => newSection(t, `${t}-1`)!) }),
+  collection: () => ({ sections: [newSection('collection-main', 'collection-main-1')!] }),
+}
+export const legacyTemplate = (type: TemplateType, c: StorefrontContent, storeName: string): Template =>
+  type === 'about' ? aboutFromLegacy(c, storeName) : type === 'home' ? templateFromLegacy(c) : DEFAULT_PAGES[type]()
 
 // ------------------------------------------------------------------ guard rails for the editor
 export interface PageWarning { sectionId: string | null; text: string }

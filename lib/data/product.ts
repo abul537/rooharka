@@ -174,10 +174,17 @@ const dec = (d: { toNumber(): number }) => d.toNumber()
 export const getProductPageData = cache(async (slug: string): Promise<ProductPageData | null> => {
   const store = await getCurrentStore()
   if (!store) return null
+  return loadProductPage(store, slug, await isPreviewFor(store.id))
+})
 
+/**
+ * One product of the store GIVEN, with everything its page shows. The shop uses it for the store of the address
+ * visited; the dashboard's theme editor uses it for the signed-in admin's own store (its live preview).
+ */
+export async function loadProductPage(store: ProductPageData['store'], slug: string, preview: boolean): Promise<ProductPageData | null> {
   // One round of parallel queries (reviews and settings do not need the product's id first).
   // Customers see live products only. The owner in preview also sees drafts (never archived ones).
-  const status = { in: visibleStatuses(await isPreviewFor(store.id)) }
+  const status = { in: visibleStatuses(preview) }
   const reviewWhere = { isApproved: true, product: { storeId: store.id, slug, status } }
   const [product, stats, reviews, settingsBlock] = await Promise.all([
     db.product.findFirst({
@@ -260,7 +267,7 @@ export const getProductPageData = cache(async (slug: string): Promise<ProductPag
     },
     settings: parseSettings(settingsBlock?.isVisible === false ? null : settingsBlock?.data),
   }
-})
+}
 
 /** Slug of the store's first active product (used by the /product index). */
 export async function getFirstProductSlug(): Promise<string | null> {

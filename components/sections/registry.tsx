@@ -11,6 +11,11 @@ import ProductCard from '@/components/shop/ProductCard'
 import TrustIcon from '@/components/shop/TrustIcon'
 import MediaImage from '@/components/media/MediaImage'
 import NewsletterForm from '@/components/sections/NewsletterForm'
+import type { ProductPageData } from '@/lib/data/product'
+import ProductGallery from '@/components/product/Gallery'
+import PurchasePanel from '@/components/product/PurchasePanel'
+import ProductTabs from '@/components/product/ProductTabs'
+import ProductFaqList from '@/components/product/Faq'
 
 /**
  * THE SECTION COMPONENTS: one per section type, each drawing every one of its layouts (variants) from the section's
@@ -33,8 +38,12 @@ export interface SectionData {
   /** Product ids of each collection a product grid asked for, in the owner's order. */
   collectionProducts: Record<string, string[]>
   reviews: HomeReviews
+  /** On a product page: the product being looked at, and others from its category. */
+  product?: { page: ProductPageData; related: CatalogItem[] }
+  /** On a collection page: the collection being looked at, with its live products in the owner's order. */
+  collection?: { title: string; description: string | null; items: CatalogItem[] }
 }
-type Props = { section: Section; data: SectionData; /** True for the first section on the page (its picture loads first, its headline is the page's h1). */ first: boolean }
+type Props = { section: Section; data: SectionData; /** True for the first section on the page: its picture loads first. */ first: boolean; /** True when this section's headline is the page's main heading (h1). Product and collection pages have their own. */ lead: boolean }
 
 const s = (x: { settings: Section['settings'] }, key: string) => String(x.settings[key] ?? '')
 const on = (section: Section, key: string) => section.settings[key] === true
@@ -65,9 +74,9 @@ const Title = ({ id, text, center = false }: { id: string; text: string; center?
 const labelled = (section: Section) => (s(section, 'title') ? { 'aria-labelledby': `h-${section.id}` } : { 'aria-label': section.type })
 
 // ============================================================================ 1. Hero
-function HeroText({ section, data, first, light, center }: Props & { light: boolean; center: boolean }) {
+function HeroText({ section, data, lead, light, center }: Props & { light: boolean; center: boolean }) {
   const spotlight = on(section, 'spotlight') ? data.products[0] ?? null : null
-  const r = data.reviews, H = first ? 'h1' : 'h2'
+  const r = data.reviews, H = lead ? 'h1' : 'h2'
   return (
     <div className={center ? 'mx-auto max-w-3xl text-center' : 'max-w-xl'}>
       {s(section, 'badge') && <p className={`mb-5 inline-block rounded-full px-4 py-1.5 text-sm font-medium ${light ? 'bg-white/20 text-white backdrop-blur' : 'bg-brand-100 text-brand-800'}`}>{s(section, 'badge')}</p>}
@@ -102,7 +111,7 @@ function Cover({ image, focal, ratio, priority, children, video }: { image: stri
   )
 }
 function Hero(p: Props) {
-  const { section, data, first } = p
+  const { section, data, first, lead } = p
   const layout = s(section, 'layout')
   const spotlight = on(section, 'spotlight') ? data.products[0] ?? null : null
   const image = s(section, 'imageUrl') || spotlight?.imageUrl || ''
@@ -112,7 +121,7 @@ function Hero(p: Props) {
       <section aria-roledescription="carousel" aria-label="Highlights" className="relative">
         <ul className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:thin]" tabIndex={0}>
           {section.blocks.map((b, i) => {
-            const H = first && i === 0 ? 'h1' : 'h2'
+            const H = lead && i === 0 ? 'h1' : 'h2'
             return (
               <li key={b.id} className="w-full shrink-0 snap-center" aria-roledescription="slide" aria-label={`${i + 1} of ${section.blocks.length}`}>
                 <Cover image={s(b, 'imageUrl')} focal={s(b, 'imageFocal')} ratio={s(section, 'ratio')} priority={first && i === 0}>
@@ -424,6 +433,83 @@ function Benefits({ section }: Props) {
   )
 }
 
+// ============================================================================ the product page's own sections
+/** Shown in the editor's preview when the store has nothing to show yet; customers never see it. */
+const Empty = ({ text }: { text: string }) => <section className="container mx-auto px-4 py-16"><p className={`border-2 border-dashed border-gray-300 p-12 text-center text-gray-500 ${box}`}>{text}</p></section>
+const Crumbs = ({ last, center = false }: { last?: string; center?: boolean }) => (
+  <nav aria-label="Breadcrumb" className={`mb-6 text-sm text-gray-500 ${center ? 'text-center' : ''}`}>
+    <Link href="/" className="hover:text-brand-700">Home</Link><span aria-hidden> / </span><Link href="/shop" className="hover:text-brand-700">Shop</Link>{last && <><span aria-hidden> / </span><span className="text-gray-800" aria-current="page">{last}</span></>}
+  </nav>
+)
+const tint = (section: Section) => (s(section, 'background') === 'plain' ? 'bg-white' : 'bg-gradient-to-b from-brand-50 to-white')
+
+function ProductMain({ section, data }: Props) {
+  const d = data.product?.page
+  if (!d) return <Empty text="Your product’s photos and buy box appear here. Add a product to see them." />
+  const layout = s(section, 'layout'), stacked = layout === 'stacked'
+  const keyBenefits = d.sections.find((x) => x.type === 'KEY_BENEFITS') ?? null
+  return (
+    <section className={`py-8 md:py-14 ${tint(section)}`}>
+      <div className="container mx-auto px-4">
+        {on(section, 'breadcrumb') && <Crumbs last={d.product.name} />}
+        <div className={stacked ? 'mx-auto grid max-w-3xl gap-10' : 'grid items-start gap-10 lg:grid-cols-2 lg:gap-16'}>
+          <div className={layout === 'media-right' ? 'lg:order-2' : ''}><ProductGallery media={d.media} productName={d.product.name} ratio={ratioCss(s(section, 'ratio'))} sticky={!stacked && on(section, 'stickyMedia')} /></div>
+          <PurchasePanel data={d} keyBenefits={keyBenefits} />
+        </div>
+      </div>
+    </section>
+  )
+}
+function ProductInfo({ section, data }: Props) {
+  const d = data.product?.page
+  if (!d) return null
+  const layout = s(section, 'layout')
+  return <ProductTabs data={d} layout={layout === 'accordion' || layout === 'stacked' ? layout : 'tabs'} reviews={on(section, 'reviews')} />
+}
+function ProductFaq({ section, data }: Props) {
+  const d = data.product?.page
+  const faq = d && d.settings.showFaq ? d.sections.find((x) => x.type === 'FAQ') : null
+  return faq ? <ProductFaqList section={faq} title={s(section, 'title')} /> : null
+}
+function RelatedProducts({ section, data }: Props) {
+  const list = (data.product?.related ?? []).slice(0, Number(s(section, 'count')) || 4)
+  if (list.length === 0) return null
+  const layout = s(section, 'layout')
+  const card = (item: CatalogItem) => <div className="flex w-full"><ProductCard item={item} currency={data.store.currency} /></div>
+  return (
+    <section className="container mx-auto px-4 pt-16" aria-labelledby={`h-${section.id}`}>
+      <h2 id={`h-${section.id}`} className="font-playfair text-2xl font-bold text-gray-900 md:text-3xl">{s(section, 'title') || 'You may also like'}</h2>
+      {layout === 'carousel' ? <ul className={`mt-6 ${row}`} tabIndex={0}>{list.map((item) => <li key={item.id} className="flex w-[70%] shrink-0 snap-start sm:w-[42%] lg:w-[23.5%]">{card(item)}</li>)}</ul>
+        : <ul className={`mt-6 grid grid-cols-2 gap-4 sm:gap-6 ${layout === 'grid-3' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>{list.map((item) => <li key={item.id} className="flex">{card(item)}</li>)}</ul>}
+    </section>
+  )
+}
+
+// ============================================================================ the collection page's own section
+const GRID: Record<string, string> = { '2': 'grid-cols-1 sm:grid-cols-2', '3': 'grid-cols-2 lg:grid-cols-3', '4': 'grid-cols-2 lg:grid-cols-4' }
+function CollectionMain({ section, data, first }: Props) {
+  const c = data.collection
+  if (!c) return <Empty text="A collection’s name and products appear here. Make a collection to see them." />
+  const layout = s(section, 'layout'), left = layout !== 'centered'
+  return (
+    <div className={`${tint(section)} pb-12`}>
+      <section className={`border-b border-brand-100 ${layout === 'compact' ? 'py-6' : 'py-12'} ${left ? '' : 'text-center'}`}>
+        <div className="container mx-auto px-4">
+          {on(section, 'breadcrumb') && <Crumbs center={!left} />}
+          <h1 className={`font-playfair font-bold text-gray-900 ${layout === 'compact' ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl'}`}>{c.title}</h1>
+          {c.description && layout !== 'compact' && <p className={`mt-3 max-w-xl text-gray-600 ${left ? '' : 'mx-auto'}`}>{c.description}</p>}
+          {on(section, 'count') && c.items.length > 0 && <p className="mt-2 text-sm text-gray-500">{c.items.length} product{c.items.length === 1 ? '' : 's'}</p>}
+        </div>
+      </section>
+      <div className="container mx-auto px-4 pt-8">
+        {c.items.length === 0
+          ? <p className="py-16 text-center text-gray-600">Nothing here yet. <Link href="/shop" className="text-brand-700 underline">Browse the whole shop</Link>.</p>
+          : <ul className={`grid gap-4 sm:gap-6 ${GRID[s(section, 'columns')] ?? GRID['4']}`}>{c.items.map((item, i) => <li key={item.id} className="flex"><div className="flex w-full"><ProductCard item={item} currency={data.store.currency} priority={first && i < 4} /></div></li>)}</ul>}
+      </div>
+    </div>
+  )
+}
+
 /**
  * THE COMPONENT REGISTRY: section type -> the component that draws it. The names here must match the types in
  * lib/theme/schema.ts (a test checks that every described section has a component and the other way round).
@@ -431,17 +517,18 @@ function Benefits({ section }: Props) {
 export const SECTION_COMPONENTS: Record<string, (p: Props) => ReactNode> = {
   hero: Hero, 'product-grid': ProductGrid, 'category-list': CategoryList, gallery: Gallery, story: Story, video: Video, reviews: Reviews, banner: Banner, cta: Cta, faq: Faq,
   highlights: Highlights, benefits: Benefits, 'collection-list': CollectionList,
+  'product-main': ProductMain, 'product-info': ProductInfo, 'product-faq': ProductFaq, 'related-products': RelatedProducts, 'collection-main': CollectionMain,
 }
 
 /**
  * Draws a page from its template: each visible section, in order, through the registry.
  * `mark` (the editor's live preview only) outlines one section so the owner sees which one they are changing.
  */
-export function RenderSections({ sections, data, mark }: { sections: Section[]; data: SectionData; mark?: string | null }) {
+export function RenderSections({ sections, data, mark, ownHeading = false }: { sections: Section[]; data: SectionData; mark?: string | null; /** The page has its own main heading (a product's or collection's name), so no section claims it. */ ownHeading?: boolean }) {
   const visible = sections.filter((x) => !x.hidden)
   const outline: CSSProperties = { outline: '3px solid #2563eb', outlineOffset: '-3px' }
   return <>{visible.map((section, i) => {
     const C = SECTION_COMPONENTS[section.type]
-    return C ? <div key={section.id} data-section-id={section.id} style={mark === section.id ? outline : undefined}><C section={section} data={data} first={i === 0} /></div> : null
+    return C ? <div key={section.id} data-section-id={section.id} style={mark === section.id ? outline : undefined}><C section={section} data={data} first={i === 0} lead={i === 0 && !ownHeading} /></div> : null
   })}</>
 }

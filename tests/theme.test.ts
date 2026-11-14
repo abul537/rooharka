@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readCloudDetails, templateVideos, videoVerdict, CORE_SECTIONS, FOLD_BUDGET_BYTES, MAX_GALLERY_IMAGES, MAX_HERO_SLIDES, MAX_SECTIONS, MAX_STORY_STEPS, MAX_VIDEOS_PER_SECTION, MAX_VIDEO_SECTIONS, RATIOS, SECTIONS, SECTION_BY_TYPE, aboutFromLegacy, fieldDefault, focalCss, newBlock, newSection, pageWarnings, parseTemplate, ratioCss, readTemplate, sectionMedia, sectionSummary, templateFromLegacy } from '@/lib/theme/schema'
+import { DEFAULT_PAGES, TEMPLATE_TYPES, sectionsFor, readCloudDetails, templateVideos, videoVerdict, CORE_SECTIONS, FOLD_BUDGET_BYTES, MAX_GALLERY_IMAGES, MAX_HERO_SLIDES, MAX_SECTIONS, MAX_STORY_STEPS, MAX_VIDEOS_PER_SECTION, MAX_VIDEO_SECTIONS, RATIOS, SECTIONS, SECTION_BY_TYPE, aboutFromLegacy, fieldDefault, focalCss, newBlock, newSection, pageWarnings, parseTemplate, ratioCss, readTemplate, sectionMedia, sectionSummary, templateFromLegacy } from '@/lib/theme/schema'
 import { parseSubscriberEmail } from '@/lib/theme/newsletter'
 import { MIN_CONTRAST, contrastWithWhite, normalizeHex, parseCustomColor, parseThemeName, readThemeSettings, shadesFromHex, themeShades, themeVariables } from '@/lib/theme/settings'
 import { THEME_PRESETS, themePreset, type ThemePresetKey } from '@/lib/theme/presets'
@@ -32,7 +32,10 @@ test('section library: every section is well described (the editor builds its fo
     const mainKind = s.blocks?.fields.find((f) => f.key === s.blocks!.titleKey)?.kind
     const main = mainKind === 'image' ? 'https://cdn.example.pk/a.jpg' : mainKind === 'video' ? 'https://cdn.example.pk/a.mp4' : 'Something'
     const withBlock = s.blocks ? { ...fresh, blocks: [{ id: 'b1', settings: { ...newBlock(s.blocks, 'b1').settings, [s.blocks.titleKey]: main } }] } : fresh
-    assert.deepEqual(parseTemplate({ sections: [withBlock] }), { ok: true, value: { sections: [withBlock] } }, s.type)
+    // ...on the page it belongs to (a page's own sections sit beside that page's required one).
+    const need = s.only ? SECTIONS.find((d) => d.only === s.only && d.required)! : null
+    const page = need && need.type !== s.type ? [newSection(need.type, 'm1')!, withBlock] : [withBlock]
+    assert.deepEqual(parseTemplate({ sections: page }, s.only ?? 'home'), { ok: true, value: { sections: page } }, s.type)
   }
   assert.equal(newSection('nope', 'x'), null)
 })
@@ -237,8 +240,8 @@ test('themes are stored and read per store, and the shop never trusts a stored t
   for (const m of data.matchAll(/db\.shopTheme\.(findFirst|findMany|count|updateMany)\(([^)]*)\)/g)) assert.match(m[2], /storeId/, m[0].slice(0, 80))
   assert.doesNotMatch(data, /db\.shopTheme\.findUnique/)
   assert.ok([...data.matchAll(/db\.shopTheme\./g)].length >= 8, 'the queries are really being reviewed')
-  assert.match(data, /const parsed = parseTemplate\(raw\[type\]\)/, 'what the editor sends is checked on the server')
-  assert.match(data, /readTemplate\(\{ sections: row\.sections \}\)/, 'what is stored is cleaned again when read')
+  assert.match(data, /const parsed = parseTemplate\(raw\[type\], type\)/, 'what the editor sends is checked on the server')
+  assert.match(data, /readTemplate\(\{ sections: row\.sections \}, row\.type as TemplateType\)/, 'what is stored is cleaned again when read')
   assert.match(data, /if \(t\.isActive\) throw new ThemeError/, 'the live theme cannot be deleted')
   const ctx = readFileSync('lib/storefront/data.ts', 'utf8')
   assert.match(ctx, /if \(await isPreviewFor\(store\.id\)\) \{[\s\S]*getThemeById\(store\.id, wanted/, 'a draft theme is shown only inside the owner\'s own preview, and only this store\'s')
@@ -303,4 +306,74 @@ test('the section components keep the performance promises', () => {
   // Home and About are both drawn by the same engine; About has no page code of its own.
   for (const page of ['app/(shop)/page.tsx', 'app/(shop)/about/page.tsx']) assert.match(readFileSync(page, 'utf8'), /<RenderSections sections=\{sections\}/)
   assert.match(readFileSync('app/(shop)/about/page.tsx', 'utf8'), /pages\.about/)
+})
+
+// ------------------------------------------------------------------ product and collection pages on the engine
+test('product and collection pages are templates too: their own sections stay on their own page', () => {
+  assert.deepEqual([...TEMPLATE_TYPES], ['home', 'about', 'product', 'collection'])
+  const own = (page: 'product' | 'collection') => SECTIONS.filter((d) => d.only === page).map((d) => d.type)
+  assert.deepEqual(own('product'), ['product-main', 'product-info', 'product-faq', 'related-products'])
+  assert.deepEqual(own('collection'), ['collection-main'])
+  assert.deepEqual(SECTIONS.filter((d) => d.required).map((d) => d.type), ['product-main', 'collection-main'])
+  // Every general section may be used on every page; a page's own sections only there.
+  for (const t of TEMPLATE_TYPES) {
+    const names = sectionsFor(t).map((d) => d.type)
+    for (const d of SECTIONS) assert.equal(names.includes(d.type), !d.only || d.only === t, `${d.type} on ${t}`)
+  }
+  for (const [page, other] of [['home', 'product-main'], ['about', 'collection-main'], ['collection', 'product-info'], ['product', 'collection-main']] as const) {
+    const base = page === 'product' ? [newSection('product-main', 'm')!] : page === 'collection' ? [newSection('collection-main', 'm')!] : []
+    const r = parseTemplate({ sections: [...base, newSection(other, 'x')!] }, page)
+    assert.ok(!r.ok && /cannot be used on this page/.test(r.error), `${other} refused on ${page}`)
+    assert.ok(!readTemplate({ sections: [...base, newSection(other, 'x')!] }, page).sections.some((x) => x.type === other), 'and dropped when read')
+  }
+})
+
+test('the heart of a product or collection page cannot be removed or hidden', () => {
+  for (const page of ['product', 'collection'] as const) {
+    const main = `${page}-main`
+    const def = DEFAULT_PAGES[page]()
+    assert.equal(def.sections[0].type, main)
+    assert.deepEqual(parseTemplate(def, page), { ok: true, value: def }, 'the default page saves unchanged')
+    // Removed: refused when saving, put back when reading (so a damaged stored page still shows the product).
+    const without = { sections: def.sections.filter((x) => x.type !== main).concat(newSection('faq', 'f1')!) }
+    const r = parseTemplate(without, page)
+    assert.ok(!r.ok && /must stay on the/.test(r.error))
+    assert.equal(readTemplate(without, page).sections[0].type, main)
+    assert.equal(readTemplate({ sections: [] }, page).sections.length, 1)
+    assert.equal(readTemplate(null, page).sections[0].type, main)
+    // Hidden: quietly shown again.
+    const hidden = parseTemplate({ sections: def.sections.map((x) => ({ ...x, hidden: true })) }, page)
+    assert.ok(hidden.ok && hidden.value.sections.find((x) => x.type === main)!.hidden === false)
+    if (hidden.ok && page === 'product') assert.equal(hidden.value.sections.find((x) => x.type === 'related-products')!.hidden, true, 'other sections may be hidden')
+    // At most one, and general sections are welcome around it in any order.
+    assert.ok(!parseTemplate({ sections: [newSection(main, 'a')!, newSection(main, 'b')!] }, page).ok)
+    const mixed = { sections: [{ ...newSection('banner', 'b1')!, settings: { ...newSection('banner', 'b1')!.settings, title: 'Free delivery' } }, ...def.sections, newSection('reviews', 'r1')!] }
+    assert.deepEqual(parseTemplate(mixed, page), { ok: true, value: mixed })
+  }
+  // The default product page is exactly the page every shop had before: same parts, same order.
+  assert.deepEqual(DEFAULT_PAGES.product().sections.map((x) => x.type), ['product-main', 'product-info', 'product-faq', 'related-products'])
+  assert.deepEqual(DEFAULT_PAGES.product().sections[0].settings, { layout: 'media-left', ratio: '1:1', background: 'tint', breadcrumb: true, stickyMedia: true })
+  assert.deepEqual(DEFAULT_PAGES.collection().sections[0].settings, { layout: 'centered', columns: '4', background: 'tint', breadcrumb: true, count: false })
+  // Home and About never grow a product section by accident.
+  assert.deepEqual(readTemplate({ sections: [] }, 'home'), { sections: [] })
+  assert.deepEqual(readTemplate({ sections: [] }, 'about'), { sections: [] })
+})
+
+test('starter designs set up the product and collection pages, and the shop pages are drawn from the theme', () => {
+  for (const k of Object.keys(THEME_PRESETS) as ThemePresetKey[]) {
+    const p = themePreset(k, 'Ali Store')
+    assert.deepEqual(parseTemplate(p.product, 'product'), { ok: true, value: p.product }, k)
+    assert.deepEqual(parseTemplate(p.collection, 'collection'), { ok: true, value: p.collection }, k)
+  }
+  assert.deepEqual(themePreset('spotlight', 'S').product, DEFAULT_PAGES.product(), 'Spotlight keeps the original product page')
+  assert.notDeepEqual(themePreset('bold', 'S').product, themePreset('editorial', 'S').product)
+  const product = readFileSync('app/(shop)/product/[slug]/page.tsx', 'utf8'), collection = readFileSync('app/(shop)/collections/[handle]/page.tsx', 'utf8')
+  assert.match(product, /pages\.product/); assert.match(product, /<RenderSections sections=\{sections\} data=\{sectionData\} ownHeading \/>/)
+  assert.match(product, /application\/ld\+json/, 'search-engine data is kept')
+  assert.match(collection, /pages\.collection/); assert.match(collection, /ownHeading/)
+  assert.match(collection, /getPublicCollection\(store\.id, handle/, 'a collection is still looked up inside its own store')
+  // The editor's sample product is loaded for the admin's own store, never by the address of the request.
+  const pd = readFileSync('lib/theme/page-data.ts', 'utf8')
+  assert.match(pd, /loadProductPage\(\{ id: store\.id,[^)]*\}, pickP\.slug, false\)/)
+  assert.match(readFileSync('lib/data/product.ts', 'utf8'), /db\.product\.findFirst\(\{\s*where: \{ storeId: store\.id, slug, status \}/)
 })

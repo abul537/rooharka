@@ -5,7 +5,7 @@
  */
 import { defaultStorefront } from '@/lib/storefront/rules'
 import { presetContent } from '@/lib/storefront/presets'
-import { aboutFromLegacy, readTemplate, templateFromLegacy, type Template } from '@/lib/theme/schema'
+import { aboutFromLegacy, readTemplate, templateFromLegacy, type Template, type TemplateType } from '@/lib/theme/schema'
 import type { ThemeSettings } from '@/lib/theme/settings'
 
 export const THEME_PRESETS = {
@@ -15,11 +15,11 @@ export const THEME_PRESETS = {
   spotlight: { name: 'Spotlight', description: 'Built around one hero product with a story and benefits (the original Darwaish design).' },
 } as const
 export type ThemePresetKey = keyof typeof THEME_PRESETS
-export interface ThemePreset { settings: ThemeSettings; home: Template; about: Template }
+export interface ThemePreset { settings: ThemeSettings; home: Template; about: Template; product: Template; collection: Template }
 
-const page = (sections: object[]): Template => readTemplate({ sections })
+const page = (sections: object[], type: TemplateType = 'home'): Template => readTemplate({ sections }, type)
 
-export function themePreset(key: ThemePresetKey, storeName: string): ThemePreset {
+function basePreset(key: ThemePresetKey, storeName: string): Pick<ThemePreset, 'settings' | 'home' | 'about'> {
   const base = defaultStorefront(storeName)
   const about = aboutFromLegacy(base, storeName)
   const faq = { id: 'faq-1', type: 'faq', settings: { title: 'Questions, answered', layout: 'one' }, blocks: base.faq.map((f, i) => ({ id: `b${i + 1}`, settings: f })) }
@@ -71,5 +71,25 @@ export function themePreset(key: ThemePresetKey, storeName: string): ThemePreset
       faq,
       { id: 'cta-1', type: 'cta', settings: { layout: 'centered', title: base.cta.title, text: base.cta.text, label: base.cta.label, link: '/shop' } },
     ]),
+  }
+}
+
+/** How each starter design sets up the product and collection pages: the same sections, different layouts. */
+const SHOP_PAGES: Record<ThemePresetKey, { main: object; info: object; related: object; collection: object }> = {
+  minimal: { main: { layout: 'media-left', ratio: '1:1', background: 'plain' }, info: { layout: 'stacked' }, related: { layout: 'grid-4', count: '4' }, collection: { layout: 'left', columns: '4', background: 'plain' } },
+  editorial: { main: { layout: 'media-left', ratio: '4:5', background: 'tint' }, info: { layout: 'accordion' }, related: { layout: 'grid-3', count: '3' }, collection: { layout: 'centered', columns: '3', background: 'tint' } },
+  bold: { main: { layout: 'media-right', ratio: '1:1', background: 'tint' }, info: { layout: 'tabs' }, related: { layout: 'carousel', count: '8' }, collection: { layout: 'centered', columns: '4', background: 'tint', count: true } },
+  spotlight: { main: {}, info: {}, related: {}, collection: {} },
+}
+
+export function themePreset(key: ThemePresetKey, storeName: string): ThemePreset {
+  const v = SHOP_PAGES[key]
+  return {
+    ...basePreset(key, storeName),
+    product: page([
+      { id: 'product-main-1', type: 'product-main', settings: v.main }, { id: 'product-info-1', type: 'product-info', settings: v.info },
+      { id: 'product-faq-1', type: 'product-faq' }, { id: 'related-products-1', type: 'related-products', settings: { title: 'You may also like', ...v.related } },
+    ], 'product'),
+    collection: page([{ id: 'collection-main-1', type: 'collection-main', settings: v.collection }], 'collection'),
   }
 }

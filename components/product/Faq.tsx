@@ -2,13 +2,13 @@ import { ChevronDown } from 'lucide-react'
 import type { SectionDTO } from '@/lib/data/product'
 
 /** FAQ accordion built on native <details>: keyboard accessible, works without JavaScript. */
-export default function Faq({ section }: { section: SectionDTO }) {
+export default function Faq({ section, title }: { section: SectionDTO; /** Replaces the heading when the theme gives one. */ title?: string }) {
   if (section.items.length === 0) return null
   return (
     <section className="py-16 bg-gradient-to-b from-white to-brand-50" aria-labelledby="faq-heading">
       <div className="container mx-auto px-4 max-w-3xl">
         <h2 id="faq-heading" className="font-playfair text-4xl font-bold text-gray-900 mb-12 text-center">
-          {section.title}
+          {title || section.title}
         </h2>
         <div className="space-y-4">
           {section.items.map((item, i) => (

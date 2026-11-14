@@ -9,7 +9,7 @@ import type { MediaDTO } from '@/lib/data/product'
  * Product gallery: images and videos uploaded for the product, primary first.
  * With no media yet it shows a neutral placeholder so the page never looks broken.
  */
-export default function Gallery({ media, productName }: { media: MediaDTO[]; productName: string }) {
+export default function Gallery({ media, productName, ratio = '1 / 1', sticky = true }: { media: MediaDTO[]; productName: string; /** Shape of the main photo, as a CSS aspect-ratio (from the theme's presets). */ ratio?: string; sticky?: boolean }) {
   // Primary image first, the rest in saved order.
   const items = [...media].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
   const [active, setActive] = useState(0)
@@ -26,9 +26,9 @@ export default function Gallery({ media, productName }: { media: MediaDTO[]; pro
   }, [media])
 
   return (
-    <div className="lg:sticky lg:top-24">
+    <div className={sticky ? 'lg:sticky lg:top-24' : undefined}>
       <div className="relative">
-        <div className="relative w-full aspect-square rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-brand-100 to-brand-50 flex items-center justify-center">
+        <div className="relative w-full rounded-[var(--r-box,1.5rem)] overflow-hidden shadow-2xl bg-gradient-to-br from-brand-100 to-brand-50 flex items-center justify-center" style={{ aspectRatio: ratio }}>
           {!current && (
             <div className="text-center">
               <div className="w-48 h-48 sm:w-64 sm:h-64 mx-auto mb-6 rounded-full bg-gradient-to-r from-brand-200 to-brand-600 shadow-2xl flex items-center justify-center">
