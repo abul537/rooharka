@@ -224,7 +224,7 @@ model Store {
   collections   Collection[]
   aiUsage       AiUsage[]
   visitorDays   VisitorDay[]
-  themes        Theme[]
+  shopThemes    ShopTheme[]
   subscription  Subscription?
   invoices      Invoice[]
   tickets       SupportTicket[]
@@ -1383,9 +1383,10 @@ model Storefront {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 }
 
-/// A theme: a named design a store owns. Exactly one per store is live (`isActive`); the others are drafts.
+/// A theme: a named design a store owns. (Named ShopTheme because the older, unused models Theme and StoreTheme
+/// already exist above; they are left untouched so no existing table is dropped.) Exactly one per store is live (`isActive`); the others are drafts.
 /// `settings` holds the look shared by every page (brand colour, heading font); see lib/theme/settings.ts.
-model Theme {
+model ShopTheme {
   id        String   @id @default(cuid())
   storeId   String
   name      String
@@ -1395,21 +1396,21 @@ model Theme {
   updatedAt DateTime @updatedAt
 
   store     Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  templates ThemeTemplate[]
+  templates ShopThemeTemplate[]
 
   @@index([storeId, isActive])
 }
 
 /// For one theme and one kind of page ("home"): the ordered list of sections to draw, each with its own settings
 /// and blocks, as JSON. Its shape is defined and checked by lib/theme/schema.ts (never trusted as stored).
-model ThemeTemplate {
+model ShopThemeTemplate {
   id        String   @id @default(cuid())
   themeId   String
   type      String   // home
   sections  Json     @default("[]")
   updatedAt DateTime @updatedAt
 
-  theme Theme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+  theme ShopTheme @relation(fields: [themeId], references: [id], onDelete: Cascade)
 
   @@unique([themeId, type])
 }

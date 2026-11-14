@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 
 const FILES = ['lib/theme/data.ts', 'app/admin/(panel)/orders/page.tsx', 'app/admin/(panel)/orders/slips/page.tsx', 'lib/admin/stats.ts', 'lib/admin/products.ts', 'lib/admin/collections.ts', 'lib/couriers/booking.ts', 'lib/couriers/webhook.ts', 'lib/couriers/vault.ts', 'lib/ai/describe.ts', 'app/admin/(panel)/products/export/route.ts']
 /** Tables whose rows belong to exactly one store. */
-const OWNED = ['theme', 'visitorDay', 'contactMessage', 'product', 'collection', 'category', 'order', 'tenantCourierCredential', 'aiUsage', 'storeSettings']
+const OWNED = ['shopTheme', 'visitorDay', 'contactMessage', 'product', 'collection', 'category', 'order', 'tenantCourierCredential', 'aiUsage', 'storeSettings']
 /** Reads and many-row writes: the filter itself must name the store. */
 const MUST_SCOPE = ['findFirst', 'findMany', 'findUnique', 'count', 'groupBy', 'updateMany', 'deleteMany']
 
@@ -51,4 +51,29 @@ test('storefront product data never selects the private cost', () => {
   for (const file of ['lib/data/catalog.ts', 'lib/data/checkout.ts', 'lib/data/product.ts', 'components/product/PurchasePanel.tsx']) {
     assert.doesNotMatch(readFileSync(file, 'utf8'), /costPrice/, `${file} must not touch the cost`)
   }
+})
+
+/**
+ * The database schema cannot be validated by a tool in every environment, so these checks read it as text and
+ * catch the mistakes that stop `prisma db push`: the same model or enum declared twice, or the same field twice
+ * in one model.
+ */
+test('database schema: no model, enum or field is declared twice, and every relation points at a model that exists', () => {
+  const schema = readFileSync('prisma/schema.prisma', 'utf8')
+  const names = [...schema.matchAll(/^(?:model|enum)\s+(\w+)\s*\{/gm)].map((m) => m[1])
+  const twice = names.filter((n, i) => names.indexOf(n) !== i)
+  assert.deepEqual(twice, [], `declared twice: ${twice.join(', ')}`)
+  const known = new Set(names)
+  const scalars = new Set(['String', 'Int', 'BigInt', 'Float', 'Decimal', 'Boolean', 'DateTime', 'Json', 'Bytes'])
+  for (const m of schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
+    const fields = m[2].split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('//') && !l.startsWith('@@')).map((l) => l.split(/\s+/))
+    const fieldNames = fields.map((f) => f[0])
+    const dup = fieldNames.filter((n, i) => fieldNames.indexOf(n) !== i)
+    assert.deepEqual(dup, [], `model ${m[1]} declares a field twice: ${dup.join(', ')}`)
+    for (const [name, type] of fields) {
+      const base = (type ?? '').replace(/[?\[\]]/g, '')
+      assert.ok(scalars.has(base) || known.has(base) || base.startsWith('Unsupported'), `model ${m[1]}, field ${name}: unknown type ${type}`)
+    }
+  }
+  assert.ok(names.length > 40, 'the schema was really read')
 })

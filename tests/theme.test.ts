@@ -143,8 +143,9 @@ test('every section in the library has a component that draws it, and the other 
 test('themes are stored and read per store, and the shop never trusts a stored template', () => {
   const data = readFileSync('lib/theme/data.ts', 'utf8')
   // Every theme query names the store; a template is looked up through a theme that was checked first.
-  for (const m of data.matchAll(/db\.theme\.(findFirst|findMany|count|updateMany)\(([^)]*)\)/g)) assert.match(m[2], /storeId/, m[0].slice(0, 80))
-  assert.doesNotMatch(data, /db\.theme\.findUnique/)
+  for (const m of data.matchAll(/db\.shopTheme\.(findFirst|findMany|count|updateMany)\(([^)]*)\)/g)) assert.match(m[2], /storeId/, m[0].slice(0, 80))
+  assert.doesNotMatch(data, /db\.shopTheme\.findUnique/)
+  assert.ok([...data.matchAll(/db\.shopTheme\./g)].length >= 8, 'the queries are really being reviewed')
   assert.match(data, /const parsed = parseTemplate\(raw\)/, 'what the editor sends is checked on the server')
   assert.match(data, /readTemplate\(\{ sections: home\.sections \}\)/, 'what is stored is cleaned again when read')
   assert.match(data, /if \(t\.isActive\) throw new ThemeError/, 'the live theme cannot be deleted')

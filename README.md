@@ -286,11 +286,11 @@ The shop's home page is no longer written in code: it is drawn from the store's 
 - **Section library:** `lib/theme/schema.ts`. Each section type describes its own settings (text, textarea, image, link, select, tick box, collection) and blocks. The editor builds its forms from that description. `readTemplate` (never fails, drops what it does not understand) is used when drawing; `parseTemplate` (first problem in plain words) when saving.
 - **Components:** `components/sections/registry.tsx` holds one server component per section and the registry `SECTION_COMPONENTS` (type -> component). A test checks that the library and the registry match.
 - **To add a section:** describe it in `SECTIONS`, write its component, add it to `SECTION_COMPONENTS`. No editor or database change.
-- **Storage:** `Theme` (name, live flag, settings JSON) and `ThemeTemplate` (theme, page type, sections JSON). Sections live inside the template's JSON, as in Shopify, not in a table of their own.
+- **Storage:** `ShopTheme` (name, live flag, settings JSON) and `ShopThemeTemplate` (theme, page type, sections JSON). (The older, unused `Theme` and `StoreTheme` models are left as they are.) Sections live inside the template's JSON, as in Shopify, not in a table of their own.
 - **Branding:** `lib/theme/settings.ts`. A ready palette or the owner's own colour (six shades are made from it; colours too light for white button text are refused), and the heading font, sent to the shop as CSS variables.
 - **Old shops:** `templateFromLegacy` turns the old Storefront settings into the same sections in the same order. A store without a saved theme is drawn that way; opening the editor saves it once as the live theme "My theme".
 - **Editor:** `/admin/storefront` (`components/admin/ThemeEditor.tsx`): add, drag or arrow to reorder, hide, remove; settings and blocks on the right; themes list with Preview, Publish, Delete, and "Add theme" from three ready designs or a copy.
 - **Draft preview:** `/admin/preview?theme=<id>` shows one of the store's own draft themes inside the owner's preview only (`rk_preview_theme` cookie, checked against the store).
 - **Not in a theme:** header, footer, About, Contact and policies ("Header, footer and pages" tab), because every theme shares them.
 
-Run `pnpm db:push` and `pnpm exec prisma generate` (new tables `Theme`, `ThemeTemplate`).
+Run `pnpm db:push` and `pnpm exec prisma generate` (new tables `ShopTheme`, `ShopThemeTemplate`).
