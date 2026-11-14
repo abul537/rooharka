@@ -16,6 +16,8 @@ import { signToken, verifyToken } from '@/lib/secrets'
 export const PREVIEW_LINK_SECONDS = 60
 export const PREVIEW_SESSION_SECONDS = 60 * 60
 export const PREVIEW_COOKIE = 'rk_preview'
+/** Which of the store's own draft themes the owner is looking at. Only read inside a valid preview. */
+export const PREVIEW_THEME_COOKIE = 'rk_preview_theme'
 const LINK = 'preview-link', SESSION = 'preview-session'
 
 /** Shown when someone tries to order (or ask for a phone code) from inside a preview. */
@@ -61,8 +63,9 @@ export function previewAllowedAt(i: { bound: boolean; hostStoreId: string | null
 export const visibleStatuses = (preview: boolean): ('ACTIVE' | 'DRAFT')[] => (preview ? ['ACTIVE', 'DRAFT'] : ['ACTIVE'])
 
 /** The address the Preview button opens: the shop's own address, the one-minute token and the page to show. */
-export function previewLink(origin: string, path: string, token: string): string {
-  return `${origin.replace(/\/+$/, '')}/api/preview?secret=${encodeURIComponent(token)}&slug=${encodeURIComponent(safePreviewPath(path))}`
+/** `theme` (optional) = one of the store's own themes to look at instead of the live one. */
+export function previewLink(origin: string, path: string, token: string, theme?: string | null): string {
+  return `${origin.replace(/\/+$/, '')}/api/preview?secret=${encodeURIComponent(token)}&slug=${encodeURIComponent(safePreviewPath(path))}${theme && /^[A-Za-z0-9_-]{1,40}$/.test(theme) ? `&theme=${theme}` : ''}`
 }
 
 /** The shop's public address: its own live domain first, then its free platform address, else where the dashboard is open now (development). */

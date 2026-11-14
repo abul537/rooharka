@@ -9,7 +9,8 @@ import PreviewBanner from '@/components/shop/PreviewBanner'
 import VisitBeacon from '@/components/shop/VisitBeacon'
 import { getShopContext } from '@/lib/storefront/data'
 import { safeUrl } from '@/lib/storefront/rules'
-import { themeStyle } from '@/lib/storefront/theme'
+import type { CSSProperties } from 'react'
+import { themeVariables } from '@/lib/theme/settings'
 
 /** Title, description and icon come from the store's own Settings; nothing is shared between stores. */
 export async function generateMetadata(): Promise<Metadata> {
@@ -41,9 +42,9 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
     )
   }
   const [ctx, preview, raw] = await Promise.all([getShopContext(store), isPreviewFor(store.id), getStoreForHost()])
-  const { announcement, color, font } = ctx.content
+  const { announcement } = ctx.content
   return (
-    <div style={themeStyle(color, font)} className="flex min-h-screen flex-col bg-white text-gray-900">
+    <div style={themeVariables(ctx.theme) as CSSProperties} className="flex min-h-screen flex-col bg-white text-gray-900">
       {announcement.text && (
         <p className="bg-brand-700 px-4 py-2 text-center text-sm text-white">
           {announcement.text}
@@ -53,7 +54,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       <ShopHeader name={store.name} ctx={ctx} />
       <main className="flex-1">{children}</main>
       <ShopFooter name={store.name} ctx={ctx} />
-      {preview ? <PreviewBanner closed={raw?.approval !== 'APPROVED'} /> : <VisitBeacon />}
+      {preview ? <PreviewBanner closed={raw?.approval !== 'APPROVED'} draftTheme={ctx.draftTheme} /> : <VisitBeacon />}
     </div>
   )
 }

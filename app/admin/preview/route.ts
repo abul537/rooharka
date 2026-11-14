@@ -15,7 +15,8 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(request: Request) {
   const admin = await requireAdmin() // not signed in -> login page
-  const path = safePreviewPath(new URL(request.url).searchParams.get('path'))
+  const params = new URL(request.url).searchParams
+  const path = safePreviewPath(params.get('path'))
   const [store, host] = await Promise.all([
     db.store.findUnique({ where: { id: admin.storeId }, select: { slug: true, domains: { where: { verifiedAt: { not: null } }, select: { host: true, isPrimary: true } } } }),
     headers().then((h) => h.get('host')),
@@ -23,5 +24,5 @@ export async function GET(request: Request) {
   if (!store) redirect('/admin')
   const origin = storeOrigin({ domains: store.domains, free: storeAddress(store.slug), requestHost: host })
   await audit({ storeId: admin.storeId, userId: admin.id, action: 'store.preview', entity: 'Store', entityId: admin.storeId, after: { path } })
-  redirect(previewLink(origin, path, makeLinkToken({ storeId: admin.storeId, userId: admin.id })))
+  redirect(previewLink(origin, path, makeLinkToken({ storeId: admin.storeId, userId: admin.id }), params.get('theme')))
 }

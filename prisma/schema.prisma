@@ -224,6 +224,7 @@ model Store {
   collections   Collection[]
   aiUsage       AiUsage[]
   visitorDays   VisitorDay[]
+  themes        Theme[]
   subscription  Subscription?
   invoices      Invoice[]
   tickets       SupportTicket[]
@@ -1380,6 +1381,37 @@ model Storefront {
   updatedAt DateTime @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+/// A theme: a named design a store owns. Exactly one per store is live (`isActive`); the others are drafts.
+/// `settings` holds the look shared by every page (brand colour, heading font); see lib/theme/settings.ts.
+model Theme {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  isActive  Boolean  @default(false)
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store     Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  templates ThemeTemplate[]
+
+  @@index([storeId, isActive])
+}
+
+/// For one theme and one kind of page ("home"): the ordered list of sections to draw, each with its own settings
+/// and blocks, as JSON. Its shape is defined and checked by lib/theme/schema.ts (never trusted as stored).
+model ThemeTemplate {
+  id        String   @id @default(cuid())
+  themeId   String
+  type      String   // home
+  sections  Json     @default("[]")
+  updatedAt DateTime @updatedAt
+
+  theme Theme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@unique([themeId, type])
 }
 
 /// A message a customer sent through the store's Contact page. The store owner reads and answers it from the dashboard.
