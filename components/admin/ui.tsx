@@ -31,3 +31,14 @@ export function Check({ name, label, defaultChecked, hint }: { name: string; lab
     </label>
   )
 }
+
+/** A titled part inside one form, so a long form reads as a few short ones. */
+export function Group({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="border-t border-slate-100 pt-5 first:border-t-0 first:pt-0">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
+      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+      <div className="mt-3">{children}</div>
+    </div>
+  )
+}

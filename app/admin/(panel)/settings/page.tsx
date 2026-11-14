@@ -13,7 +13,10 @@ import OtpSettings from '@/components/admin/OtpSettings'
 import { loadOtpSettings } from '@/lib/otp/service'
 import { DEFAULT_OTP_SETTINGS } from '@/lib/otp/rules'
 import { SERVICES } from '@/lib/services/registry'
-import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
+import Link from 'next/link'
+import type { ReactNode } from 'react'
+import { Card, Check, Field, Group, inputCls, primaryBtn } from '@/components/admin/ui'
+import { SETTINGS_TABS, settingsHref, settingsTab } from '@/lib/admin/settings-tabs'
 import { saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveTrackingAction } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -29,18 +32,25 @@ const POLICY_TEXT: Record<string, string> = {
   CUSTOMER_CHOICE: 'Customer chooses: cash on delivery, or pay everything online',
 }
 
-export default async function SettingsPage() {
+/**
+ * SETTINGS. One group at a time (lib/admin/settings-tabs.ts), chosen in the list on the left: only that group's
+ * data is loaded, and each card saves by itself.
+ */
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
   const admin = await requireAdmin('settings.edit')
-  const [{ settings: s, wallets, fields, productPage: pp }, services, courierConfig, otp] = await Promise.all([loadSettings(admin.storeId), loadServiceViews(admin.storeId), loadCourierConfig(admin.storeId), loadOtpSettings(admin.storeId)])
-  const [postex, host] = await Promise.all([connectionStatus(admin.storeId, 'postex'), headers().then((h) => h.get('host') ?? '')])
-  const webhookUrl = `https://${host}/api/webhooks/postex/${admin.storeId}?key=${webhookKey(admin.storeId, 'postex')}`
-  if (!s) return <p>Store settings are missing. Run the seed again.</p>
+  const tab = settingsTab((await searchParams).tab)
+  const current = SETTINGS_TABS.find((t) => t.key === tab)!
+  const needsServices = tab === 'checkout' || tab === 'couriers' || tab === 'connections'
+  const [loaded, services] = await Promise.all([
+    tab === 'couriers' || tab === 'connections' ? null : loadSettings(admin.storeId),
+    needsServices ? loadServiceViews(admin.storeId) : null,
+  ])
+  if (loaded && !loaded.settings) return <p>Store settings are missing. Run the seed again.</p>
+  const s = loaded?.settings, wallets = loaded?.wallets, fields = loaded?.fields, pp = loaded?.productPage
 
-  return (
-    <div className="max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
-      <p className="text-slate-600 -mt-3">Changes apply to your customers right away.</p>
-
+  let content: ReactNode = null
+  if (tab === 'general' && s) content = (
+    <>
       <Card title="Store details" hint="Shown to customers on the site and used for support.">
         <ActionForm action={saveStoreInfoAction} className="grid sm:grid-cols-2 gap-4">
           <Field label="Store name"><input name="displayName" defaultValue={s.displayName} required maxLength={60} className={inputCls} /></Field>
@@ -50,26 +60,36 @@ export default async function SettingsPage() {
           <div className="sm:col-span-2"><button className={primaryBtn}>Save store details</button></div>
         </ActionForm>
       </Card>
-
+    </>
+  )
+  else if (tab === 'payments' && s && wallets) content = (
+    <>
       <Card title="Payments and delivery" hint="How customers pay and what delivery costs. Online payments are checked by you before you ship.">
         <ActionForm action={savePaymentsAction} className="space-y-5">
+          <Group title="How customers pay">
           <Field label="Payment policy">
             <select name="paymentPolicy" defaultValue={s.paymentPolicy} className={inputCls}>
               {Object.entries(POLICY_TEXT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </Field>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Delivery charge (Rs.)" hint="0 for free delivery."><input name="deliveryCharge" inputMode="numeric" defaultValue={s.deliveryCharge} className={inputCls} /></Field>
-            <Field label="Free delivery on orders over (Rs.)" hint="Leave empty to always charge delivery."><input name="freeDeliveryOver" inputMode="numeric" defaultValue={s.freeDeliveryOver ?? ''} className={inputCls} /></Field>
-            <Field label="Advance amount (only for “advance first”)">
+          <div className="mt-4 grid sm:grid-cols-2 gap-4">
+            <Field label="Advance amount" hint="Only used when the customer pays an advance first.">
               <select name="advanceAmountMode" defaultValue={s.advanceAmountMode} className={inputCls}>
                 <option value="DELIVERY_CHARGE">Equal to the delivery charge</option>
                 <option value="FIXED">A fixed amount (Rs.)</option>
                 <option value="PERCENT">A percentage of the order</option>
               </select>
             </Field>
-            <Field label="Fixed amount or percentage"><input name="advanceAmountValue" inputMode="numeric" defaultValue={s.advanceAmountValue ?? ''} className={inputCls} /></Field>
+            <Field label="Fixed amount or percentage" hint="Only for “fixed amount” or “percentage”."><input name="advanceAmountValue" inputMode="numeric" defaultValue={s.advanceAmountValue ?? ''} className={inputCls} /></Field>
           </div>
+          </Group>
+          <Group title="Delivery charge">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Delivery charge (Rs.)" hint="0 for free delivery."><input name="deliveryCharge" inputMode="numeric" defaultValue={s.deliveryCharge} className={inputCls} /></Field>
+            <Field label="Free delivery on orders over (Rs.)" hint="Leave empty to always charge delivery."><input name="freeDeliveryOver" inputMode="numeric" defaultValue={s.freeDeliveryOver ?? ''} className={inputCls} /></Field>
+          </div>
+          </Group>
+          <Group title="Your wallet accounts" hint="Customers who pay online send the money to these accounts; you check each payment before you ship.">
           <div className="grid sm:grid-cols-2 gap-4">
             {(['jazzcash', 'easypaisa'] as const).map((k) => (
               <fieldset key={k} className="rounded-lg border border-slate-200 p-4 space-y-3">
@@ -80,10 +100,16 @@ export default async function SettingsPage() {
               </fieldset>
             ))}
           </div>
+          </Group>
           <button className={primaryBtn}>Save payments and delivery</button>
         </ActionForm>
       </Card>
-
+    </>
+  )
+  else if (tab === 'checkout' && s && fields && services) {
+    const otp = await loadOtpSettings(admin.storeId)
+    content = (
+      <>
       <Card title="Checkout form" hint="Choose what customers must fill in. Name, mobile number and address are always required so you can deliver and call.">
         <ActionForm action={saveFieldsAction} className="space-y-4">
           <div className="divide-y divide-slate-100">
@@ -104,11 +130,7 @@ export default async function SettingsPage() {
           <button className={primaryBtn}>Save checkout form</button>
         </ActionForm>
       </Card>
-
       <OtpSettings otp={otp ?? DEFAULT_OTP_SETTINGS} views={services} />
-
-      <PostexConnect connected={postex.connected} lastError={postex.lastError} webhookUrl={webhookUrl} />
-      <CourierSettings config={courierConfig} views={services} />
 
       <Card title="Order tracking" hint="Customers track orders at /track with their tracking code.">
         <ActionForm action={saveTrackingAction} className="space-y-3">
@@ -117,22 +139,22 @@ export default async function SettingsPage() {
           <button className={primaryBtn}>Save tracking</button>
         </ActionForm>
       </Card>
-
-
-      <Card title="Photos and videos" hint="Product photos and videos are stored in your own Cloudinary account, so you stay in control of cost and files. Cloudinary has a free plan.">
-        <div className="space-y-4">
-          {SERVICES.filter((d) => d.key === 'cloudinary').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
-        </div>
-      </Card>
-
-      <Card title="AI writing assistant" hint="Adds a “Generate with AI” button to the product description. It uses your own Anthropic account, so you control the cost (a description costs a tiny fraction of a rupee). Limit: 10 descriptions an hour.">
-        <div className="space-y-4">
-          {SERVICES.filter((d) => d.key === 'ai').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
-        </div>
-      </Card>
-
-      <Card title="Product page" hint="Switch parts of the product page on or off.">
+      </>
+    )
+  } else if (tab === 'couriers' && services) {
+    const [courierConfig, postex, host] = await Promise.all([loadCourierConfig(admin.storeId), connectionStatus(admin.storeId, 'postex'), headers().then((h) => h.get('host') ?? '')])
+    const webhookUrl = `https://${host}/api/webhooks/postex/${admin.storeId}?key=${webhookKey(admin.storeId, 'postex')}`
+    content = (
+      <>
+        <PostexConnect connected={postex.connected} lastError={postex.lastError} webhookUrl={webhookUrl} />
+        <CourierSettings config={courierConfig} views={services} />
+      </>
+    )
+  } else if (tab === 'product' && pp) content = (
+    <>
+      <Card title="Product page" hint="These switches and words apply to every product. To change the layout of the page (photo side, tabs, order of sections), use Storefront, Product page.">
         <ActionForm action={saveProductPageAction} className="space-y-5">
+          <Group title="Show on every product page">
           <div className="grid sm:grid-cols-2 gap-3">
             <Check name="showReviews" label="Reviews" defaultChecked={pp.showReviews} />
             <Check name="showFaq" label="Questions and answers" defaultChecked={pp.showFaq} />
@@ -140,15 +162,22 @@ export default async function SettingsPage() {
             <Check name="showStickyBuyBar" label="Sticky buy bar on phones" defaultChecked={pp.showStickyBuyBar} />
             <Check name="showStockCount" label="“Only N left” warning" defaultChecked={pp.showStockCount} />
           </div>
+          </Group>
+          <Group title="Stock and quantity">
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Show warning when stock is at or below"><input name="lowStockThreshold" inputMode="numeric" defaultValue={pp.lowStockThreshold} className={inputCls} /></Field>
             <Field label="Most a customer can order at once"><input name="maxQuantity" inputMode="numeric" defaultValue={pp.maxQuantity} className={inputCls} /></Field>
+          </div>
+          </Group>
+          <Group title="Words on the page">
+          <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Buy button text"><input name="buyButtonLabel" defaultValue={pp.buyButtonLabel} maxLength={30} className={inputCls} /></Field>
             <Field label="Badge text (optional)"><input name="badgeText" defaultValue={pp.badgeText ?? ''} maxLength={80} className={inputCls} /></Field>
             <div className="sm:col-span-2"><Field label="Guarantee text (optional)"><input name="guaranteeText" defaultValue={pp.guaranteeText ?? ''} maxLength={200} className={inputCls} /></Field></div>
           </div>
+          </Group>
+          <Group title="Trust badges" hint="Up to 5 short promises shown under the order button. Leave a line empty to skip it.">
           <div className="space-y-2">
-            <p className="text-sm font-medium">Trust badges (up to 5)</p>
             {Array.from({ length: 5 }, (_, i) => (
               <div key={i} className="grid grid-cols-[8rem_1fr] gap-2">
                 <select name={`trustIcon${i}`} defaultValue={pp.trustBadges[i]?.icon ?? 'shield'} className={inputCls} aria-label={`Badge ${i + 1} icon`}>
@@ -158,9 +187,49 @@ export default async function SettingsPage() {
               </div>
             ))}
           </div>
+          </Group>
           <button className={primaryBtn}>Save product page</button>
         </ActionForm>
       </Card>
+    </>
+  )
+  else if (tab === 'connections' && services) content = (
+    <>
+      <Card title="Photos and videos" hint="Product photos and videos are stored in your own Cloudinary account, so you stay in control of cost and files. Cloudinary has a free plan.">
+        <div className="space-y-4">
+          {SERVICES.filter((d) => d.key === 'cloudinary').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
+        </div>
+      </Card>
+      <Card title="AI writing assistant" hint="Adds a “Generate with AI” button to the product description. It uses your own Anthropic account, so you control the cost (a description costs a tiny fraction of a rupee). Limit: 10 descriptions an hour.">
+        <div className="space-y-4">
+          {SERVICES.filter((d) => d.key === 'ai').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
+        </div>
+      </Card>
+      <p className="text-sm text-slate-600">Looking for something else? Your SMS and WhatsApp provider is under <Link href={settingsHref('checkout')} className="underline">Checkout and orders</Link>, and courier accounts are under <Link href={settingsHref('couriers')} className="underline">Couriers</Link>.</p>
+    </>
+  )
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <p className="mt-1 text-slate-600">Each card saves by itself, and changes apply to your customers right away.</p>
+      </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <nav aria-label="Settings groups" className="flex gap-2 overflow-x-auto pb-1 lg:sticky lg:top-6 lg:flex-col lg:gap-1 lg:overflow-visible lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:p-2">
+          {SETTINGS_TABS.map((t) => (
+            <Link key={t.key} href={settingsHref(t.key)} aria-current={t.key === tab ? 'page' : undefined}
+              className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors lg:whitespace-normal ${t.key === tab ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 lg:border-0'}`}>
+              {t.label}
+              <span className={`hidden text-xs font-normal lg:block ${t.key === tab ? 'text-slate-300' : 'text-slate-500'}`}>{t.about}</span>
+            </Link>
+          ))}
+        </nav>
+        <div className="max-w-3xl space-y-6">
+          <div className="lg:hidden"><h2 className="text-lg font-semibold">{current.label}</h2><p className="text-sm text-slate-600">{current.about}</p></div>
+          {content}
+        </div>
+      </div>
     </div>
   )
 }

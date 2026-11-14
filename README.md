@@ -326,6 +326,10 @@ Highlights, Benefits and Collections remain as "classic" sections so existing sh
 
 Run `pnpm db:push` and `pnpm exec prisma generate` (new table `NewsletterSubscriber`, new column `MediaAsset.durationSec`).
 
+### Settings page, organised (Nov 2026)
+
+`/admin/settings` shows one group at a time, chosen from a list on the left (`?tab=` in the address; groups are defined in `lib/admin/settings-tabs.ts`): **Store details**, **Payments and delivery**, **Checkout and orders** (order form, phone verification, tracking), **Couriers** (PostEx, courier list), **Product page**, **Connected services** (Cloudinary, AI). Only the open group's data is loaded. Long forms are split into titled parts (`Group` in `components/admin/ui.tsx`). No setting, action or database field changed; only where things sit.
+
 ### Product and collection pages on the theme engine (Nov 2026)
 
 The theme now has four templates: `home`, `about`, `product`, `collection`. One product template designs **every** product page; one collection template every collection page.

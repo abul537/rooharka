@@ -139,7 +139,7 @@ export default function MediaManager({ productId, items, cloudReady, maxItems, v
               <p className="text-xs text-slate-500 mt-1">Photos (JPG, PNG, WebP, GIF) up to 10 MB, videos (MP4) up to {videoMaxMb} MB. You can pick several at once.</p>
             </div>
           ) : (
-            <p className="text-sm text-amber-800">To upload files, connect Cloudinary in <a className="underline" href="/admin/settings">Settings</a>. Until then you can paste a link below.</p>
+            <p className="text-sm text-amber-800">To upload files, connect Cloudinary in <a className="underline" href="/admin/settings?tab=connections">Settings</a>. Until then you can paste a link below.</p>
           )}
           {jobs.length > 0 && (
             <ul className="space-y-1 text-sm" aria-live="polite">
