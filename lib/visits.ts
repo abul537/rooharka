@@ -4,6 +4,7 @@
  * different the next day, different on every store, and cannot be turned back into an IP address.
  */
 import { db } from '@/lib/db'
+import { pruneErrors } from '@/lib/errors/record'
 import { hmacHex } from '@/lib/secrets'
 import { VISIT_KEEP_DAYS, pktDay } from '@/lib/admin/insights'
 
@@ -23,6 +24,7 @@ export async function recordVisit(storeId: string, ip: string, userAgent: string
 /** Daily clean-up: visitor rows older than 120 days are not needed for any report. */
 export async function pruneVisits(now = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - VISIT_KEEP_DAYS * 86_400_000)
+  await pruneErrors(now)
   await db.speedDay.deleteMany({ where: { day: { lt: pktDay(cutoff) } } }) // the speed rows of the same age go too
   return (await db.visitorDay.deleteMany({ where: { lastSeenAt: { lt: cutoff } } })).count
 }

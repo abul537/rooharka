@@ -35,11 +35,11 @@ test('every shop picture goes through the one image component', () => {
 
 test('pages are drawn on the server; scripts go to the browser only for things a visitor operates', () => {
   // Pages themselves are never client components.
-  for (const f of files('app/(shop)').filter((p) => /\/(page|layout)\.tsx$/.test(p))) assert.doesNotMatch(readFileSync(f, 'utf8'), /^'use client'/, f)
+  for (const f of files('app/(shop)').filter((p) => /\/(page|layout|loading|not-found)\.tsx$/.test(p))) assert.doesNotMatch(readFileSync(f, 'utf8'), /^'use client'/, f)
   const client = [...files('app/(shop)'), ...files('components/shop'), ...files('components/product'), ...files('components/sections'), ...files('components/media')].filter((f) => /^'use client'/.test(readFileSync(f, 'utf8'))).sort()
   assert.deepEqual(client, [
     'app/(shop)/checkout/CheckoutFlow.tsx', 'app/(shop)/checkout/steps/addressStep.tsx', 'app/(shop)/checkout/steps/paymentStep.tsx', 'app/(shop)/checkout/success/CopyCode.tsx',
-    'app/(shop)/contact/ContactForm.tsx', 'app/(shop)/verify/VerifyFlow.tsx',
+    'app/(shop)/contact/ContactForm.tsx', 'app/(shop)/error.tsx', 'app/(shop)/verify/VerifyFlow.tsx',
     'components/product/Gallery.tsx', 'components/product/ProductTabs.tsx', 'components/product/PurchasePanel.tsx',
     'components/sections/NewsletterForm.tsx', 'components/shop/MobileMenu.tsx', 'components/shop/SpeedBeacon.tsx', 'components/shop/VisitBeacon.tsx',
   ], 'a new client component on the storefront is a decision: add it here on purpose')

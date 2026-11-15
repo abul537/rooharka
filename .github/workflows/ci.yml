@@ -1,0 +1,38 @@
+# Runs on every push and pull request: the same checks a careful developer runs by hand.
+# If a step fails, GitHub shows a red cross on the commit and emails you. Nothing is deployed from here.
+name: checks
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Placeholders so the code can be compiled. No real database or secret is used in these checks.
+      DATABASE_URL: postgresql://user:pass@localhost:5432/placeholder
+      APP_SECRET: ci-placeholder-secret-ci-placeholder-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate the database client
+        run: pnpm exec prisma generate
+      - name: The database schema is valid
+        run: pnpm exec prisma validate
+      - name: Types (catches a wrong column name, a missing property…)
+        run: pnpm exec tsc --noEmit
+      - name: Tests
+        run: pnpm test
+      - name: Build
+        # Building needs no live database for the shop pages, but if a page ever does, this step shows it
+        # without blocking the checks above. Remove "continue-on-error" once the first run is green.
+        continue-on-error: true
+        run: pnpm build

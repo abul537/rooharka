@@ -6,6 +6,11 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' }, // nobody may embed our pages (clickjacking)
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+  // A content security policy for the things that can be locked without touching scripts: nobody may frame our
+  // pages, change where links resolve (<base>), post our forms to another site, or load plugins.
+  { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" },
+  // Live sites only: browsers remember for a year to use https and never plain http (not sent in development).
+  ...(process.env.NODE_ENV === 'production' ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' }] : []),
 ]
 
 // The platform's own web addresses (PLATFORM_HOST="rooharka.pk"): the home page there is the public sign-up site, not a shop.

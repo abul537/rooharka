@@ -1244,6 +1244,25 @@ model JobRun {
   @@index([name, startedAt])
 }
 
+/// A page that crashed, for the platform owner's error list. The same error on the same day is ONE row with a count,
+/// so a broken page cannot flood the table. Holds no customer data.
+model ErrorEvent {
+  id          String   @id @default(cuid())
+  day         String   // YYYY-MM-DD in Pakistan time
+  fingerprint String   // hash of kind + page + message
+  kind        String   // server | client
+  storeId     String?
+  path        String
+  message     String
+  digest      String?
+  count       Int      @default(1)
+  firstAt     DateTime @default(now())
+  lastAt      DateTime @default(now())
+
+  @@unique([day, fingerprint])
+  @@index([lastAt])
+}
+
 /// The courier credential vault: one row per store and courier. The token is AES-256-GCM encrypted with a key that
 /// lives only in the environment (APP_SECRET), never in this table. Never selected into a page or API response.
 model TenantCourierCredential {
