@@ -1,3 +1,4 @@
+import { logStock } from '@/lib/stock-log'
 import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import { loadPosAccess } from '@/lib/entitlements/service'
@@ -69,6 +70,7 @@ export async function ringUpSale(admin: StoreAdmin, req: SaleRequest): Promise<S
           const r = await tx.productVariant.updateMany({ where: { id: l.v.id, ...(stockLimited(l.v) ? { stock: { gte: l.quantity } } : {}) }, data: { stock: { decrement: l.quantity } } })
           if (r.count === 0) throw new PosError(`“${l.v.product.name} (${l.v.label})” just sold out.`)
         }
+        await logStock(tx, admin.storeId, lines.filter((l) => l.v.trackStock).map((l) => ({ productId: l.v.product.id, variantId: l.v.id, delta: -l.quantity, reason: 'COUNTER_SALE' as const, userId: admin.id })))
 
         // A named phone number builds that customer's history; no phone means the store's single walk-in profile.
         const named = req.customerPhone !== null
@@ -119,7 +121,10 @@ export async function voidSale(admin: StoreAdmin, orderId: string, reason: strin
     if (!order) throw new PosError('Counter sale not found.')
     const r = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'CANCELLED', paymentStatus: 'REFUNDED', cancelledReason: reason.trim().slice(0, 300) || null } })
     if (r.count === 0) throw new PosError('This sale was already cancelled.')
-    for (const it of order.items) if (it.variantId) await tx.productVariant.updateMany({ where: { id: it.variantId, trackStock: true }, data: { stock: { increment: it.quantity } } })
+    for (const it of order.items) if (it.variantId) {
+      const back = await tx.productVariant.updateMany({ where: { id: it.variantId, trackStock: true }, data: { stock: { increment: it.quantity } } })
+      if (back.count > 0 && it.productId) await logStock(tx, admin.storeId, [{ productId: it.productId, variantId: it.variantId, delta: it.quantity, reason: 'COUNTER_VOID', note: `Sale #${order.number}`, orderId: order.id, userId: admin.id }])
+    }
     const c = await tx.customer.findUnique({ where: { id: order.customerId }, select: { phone: true, ordersCount: true, totalSpent: true } })
     if (c && c.phone !== WALK_IN_PHONE) await tx.customer.update({ where: { id: order.customerId }, data: { ordersCount: Math.max(0, c.ordersCount - 1), totalSpent: Math.max(0, c.totalSpent.toNumber() - order.total.toNumber()) } })
     await tx.payment.updateMany({ where: { orderId: order.id }, data: { status: 'REFUNDED' } })

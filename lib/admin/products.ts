@@ -1,3 +1,4 @@
+import { logStock } from '@/lib/stock-log'
 import { randomBytes } from 'node:crypto'
 import { slugify, uniqueSlug, type NewProduct, type NewVariant, type ProductEditResult, type SectionEdit } from '@/lib/admin/product-rules'
 import { combinations, planGeneration, readOptionValues, skuFor, variantLabel, type OptionGroup } from '@/lib/variants/rules'
@@ -110,6 +111,7 @@ function saveProductTx(admin: StoreAdmin, productId: string, p: ProductEdit, var
         const after = await tx.productVariant.update({ where: { id: v.id }, data: { stock: { increment: delta } }, select: { stock: true } })
         if (after.stock < 0 && !measure.allowBackorder) await tx.productVariant.update({ where: { id: v.id }, data: { stock: 0 } })
         changes[`${v.label}.stockChange`] = delta
+        await logStock(tx, admin.storeId, [{ productId, variantId: v.id, delta, reason: 'ADJUSTED', userId: admin.id }])
       }
     }
     if (product.status !== p.status) changes.status = [product.status, p.status]

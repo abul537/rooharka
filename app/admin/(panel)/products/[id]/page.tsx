@@ -1,3 +1,4 @@
+import StockHistory from '@/components/admin/StockHistory'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth/guard'
@@ -209,6 +210,8 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
           </ActionForm>
         ) : <p className="text-sm text-slate-500">{sections.length} section(s).</p>}
       </Card>
+
+      <StockHistory storeId={admin.storeId} productId={p.id} unitCode={p.type === 'MEASURABLE' ? p.unitCode : null} variants={p.variants.map((v) => ({ id: v.id, label: v.label }))} />
 
       {editable && (
         <Card title="Duplicate this product" hint="Makes a full copy as a draft: variants (with new SKUs), photos and videos, page sections, category, vendor, tags, options and search text. Reviews, orders and barcodes stay with the original.">

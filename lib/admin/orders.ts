@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import { HELD_MESSAGE, isHeld } from '@/lib/fraud/rules'
 import { queueOrderMessage } from '@/lib/notify/send'
+import { logStock } from '@/lib/stock-log'
 import { afterPaymentReceived, checkTransition, isValidTrackingNo, label, type OrderStatus } from './order-rules'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { ADAPTERS, type BookingInput } from '@/lib/couriers/adapters'
@@ -97,7 +98,8 @@ export async function cancelOrder(admin: StoreAdmin, orderId: string, reason: st
 
     for (const item of order.items) {
       if (item.variantId) {
-        await tx.productVariant.updateMany({ where: { id: item.variantId, trackStock: true }, data: { stock: { increment: item.quantity } } })
+        const back = await tx.productVariant.updateMany({ where: { id: item.variantId, trackStock: true }, data: { stock: { increment: item.quantity } } })
+        if (back.count > 0 && item.productId) await logStock(tx, admin.storeId, [{ productId: item.productId, variantId: item.variantId, delta: item.quantity, reason: 'ORDER_CANCELLED', note: `Order #${order.number}`, orderId: order.id, userId: admin.id }])
       }
     }
     const customer = await tx.customer.findUnique({ where: { id: order.customerId }, select: { ordersCount: true, totalSpent: true } })

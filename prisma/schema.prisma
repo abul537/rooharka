@@ -243,6 +243,7 @@ model Store {
   speedDays     SpeedDay[]
   discounts     Discount[]
   checkoutLeads CheckoutLead[]
+  stockMovements StockMovement[]
   subscription  Subscription?
   invoices      Invoice[]
   tickets       SupportTicket[]
@@ -1484,6 +1485,26 @@ model CheckoutLead {
 
   @@unique([storeId, phone])
   @@index([storeId, recoveredAt, updatedAt])
+}
+
+/// One line per change of a variant's stock: who or what changed it, by how much, and why. Kept so an owner can
+/// answer "where did my stock go?". Written in the same transaction as the change itself.
+model StockMovement {
+  id        String   @id @default(cuid())
+  storeId   String
+  productId String
+  variantId String
+  /// Positive = stock came in, negative = stock went out (base units for measured products).
+  delta     Int
+  reason    String   // ORDER | ORDER_CANCELLED | COUNTER_SALE | COUNTER_VOID | ADJUSTED | IMPORT | RETURN_RESTOCKED
+  note      String?
+  orderId   String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, productId, createdAt])
 }
 
 enum DiscountKind {

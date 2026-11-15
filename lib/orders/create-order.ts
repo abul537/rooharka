@@ -1,3 +1,4 @@
+import { logStock } from '@/lib/stock-log'
 import { db } from '@/lib/db'
 import { resolveAddress } from '@/lib/address-db'
 import { generateTrackingCode } from '@/lib/tracking-code'
@@ -169,6 +170,7 @@ export async function createOrder(
           })
           if (res.count === 0) throw new OrderError('OUT_OF_STOCK', `"${l.v.product.name} (${l.v.label})" just sold out.`)
         }
+        await logStock(tx, storeId, lines.filter((l) => l.v.trackStock).map((l) => ({ productId: l.v.product.id, variantId: l.v.id, delta: -l.quantity, reason: 'ORDER' as const, note: `Order by ${input.customer.firstName}` })))
 
         // The discount code is claimed inside the same transaction: with a limit of 100 uses, the 101st order is
         // refused even if two customers press the button in the same instant.
