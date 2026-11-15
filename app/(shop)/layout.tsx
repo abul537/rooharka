@@ -11,6 +11,8 @@ import SpeedBeacon from '@/components/shop/SpeedBeacon'
 import { PixelPageViews } from '@/components/shop/Pixels'
 import { hasPixels, pixelScript } from '@/lib/pixels'
 import { getShopContext } from '@/lib/storefront/data'
+import { URDU_FONT, isRtl, t } from '@/lib/i18n'
+import { LangProvider } from '@/components/shop/Lang'
 import { sharePreview } from '@/lib/seo'
 import { safeUrl } from '@/lib/storefront/rules'
 import type { CSSProperties } from 'react'
@@ -49,12 +51,15 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
   }
   const [ctx, preview, raw] = await Promise.all([getShopContext(store), isPreviewFor(store.id), getStoreForHost()])
   const { announcement } = ctx.content
+  const rtl = isRtl(ctx.lang)
   return (
-    <div style={themeVariables(ctx.theme) as CSSProperties} className="flex min-h-screen flex-col bg-white text-gray-900">
+    // Urdu: the whole shop reads right to left, in an Urdu typeface the device already has.
+    <div lang={ctx.lang} dir={rtl ? 'rtl' : undefined} style={{ ...themeVariables(ctx.theme), ...(rtl ? { fontFamily: URDU_FONT } : {}) } as CSSProperties} className="flex min-h-screen flex-col bg-white text-gray-900">
+      <LangProvider lang={ctx.lang}>
       {announcement.text && (
         <p className="bg-brand-700 px-4 py-2 text-center text-sm text-white">
           {announcement.text}
-          {announcement.link && (announcement.link.startsWith('/') ? <Link href={announcement.link} className="ml-2 font-semibold underline">Learn more</Link> : <a href={announcement.link} target="_blank" rel="noopener noreferrer" className="ml-2 font-semibold underline">Learn more</a>)}
+          {announcement.link && (announcement.link.startsWith('/') ? <Link href={announcement.link} className="ml-2 font-semibold underline">{t(ctx.lang, 'Learn more')}</Link> : <a href={announcement.link} target="_blank" rel="noopener noreferrer" className="ml-2 font-semibold underline">Learn more</a>)}
         </p>
       )}
       <ShopHeader name={store.name} ctx={ctx} />
@@ -63,6 +68,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       {preview ? <PreviewBanner closed={raw?.approval !== 'APPROVED'} draftTheme={ctx.draftTheme} /> : <><VisitBeacon /><SpeedBeacon /></>}
       {/* The owner's own advertising pixels (never in a preview). The script is built only from strictly checked ids. */}
       {!preview && hasPixels(ctx.pixels) && <><script dangerouslySetInnerHTML={{ __html: pixelScript(ctx.pixels) }} /><PixelPageViews /></>}
+      </LangProvider>
     </div>
   )
 }

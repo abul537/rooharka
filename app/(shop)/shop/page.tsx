@@ -5,6 +5,7 @@ import { getCurrentStore } from '@/lib/store'
 import { getCatalog } from '@/lib/data/catalog'
 import { listPublicCollections } from '@/lib/admin/collections'
 import { applyCatalog, pageWindow, parseCatalogParams, shopHref, SORTS, SORT_LABEL } from '@/lib/catalog'
+import { getShopContext } from '@/lib/storefront/data'
 import ProductCard from '@/components/shop/ProductCard'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +20,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
   if (!store) {
     return <div className="container mx-auto px-4 py-32 text-center"><h1 className="font-playfair text-3xl font-bold text-gray-900">This store is not available right now.</h1></div>
   }
-  const [{ items, categories }, collections] = await Promise.all([getCatalog(store.id), listPublicCollections(store.id)])
+  const [{ items, categories }, collections, { lang }] = await Promise.all([getCatalog(store.id), listPublicCollections(store.id), getShopContext(store)])
   const params = parseCatalogParams(sp)
   const result = applyCatalog(items, params)
   const filtered = !!(params.q || params.category)
@@ -85,7 +86,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
           </div>
         ) : (
           <ul className="mt-6 grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
-            {result.items.map((item, i) => <li key={item.id} className="flex"><div className="flex w-full"><ProductCard item={item} currency={store.currency} priority={i < 4} /></div></li>)}
+            {result.items.map((item, i) => <li key={item.id} className="flex"><div className="flex w-full"><ProductCard item={item} lang={lang} currency={store.currency} priority={i < 4} /></div></li>)}
           </ul>
         )}
 

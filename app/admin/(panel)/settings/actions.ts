@@ -1,5 +1,6 @@
 'use server'
 
+import { parseLanguage } from '@/lib/i18n'
 import { revalidatePath } from 'next/cache'
 import { adminOrError } from '@/lib/auth/guard'
 import { audit } from '@/lib/audit'
@@ -66,6 +67,10 @@ export async function saveFraudAction(_: ActionState, fd: FormData): Promise<Act
 /** The owner's advertising pixel ids (Meta, TikTok, Google Analytics). Checked strictly: they are written into the shop's pages. */
 export async function savePixelsAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run('pixels', fd, (f) => parsePixelsForm((k) => f.get(k)), (storeId, v) => saveExtra(storeId, 'pixels', v), ['/admin/settings'], 'Pixels saved. Your shop reports to them from the next page view.')
+}
+/** The language of the shop's fixed words (menu, buttons, cart): English or Urdu. */
+export async function saveLanguageAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('language', fd, (f) => parseLanguage((k) => f.get(k)), (storeId, v) => saveExtra(storeId, 'language', v), ['/admin/settings'], 'Language saved. Your shop shows it now.')
 }
 /** Which order messages customers get, on which channel, and whether the owner is emailed about new orders. */
 export async function saveNotifyAction(_: ActionState, fd: FormData): Promise<ActionState> {

@@ -1,5 +1,6 @@
 'use client'
 
+import { useT } from '@/components/shop/Lang'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { addItem } from '@/lib/cart-client'
@@ -27,6 +28,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
   const [typed, setTyped] = useState<string | null>(null) // what is being typed in the "how much" box
   const [showBar, setShowBar] = useState(false)
   const [added, setAdded] = useState<'no' | 'yes' | 'full'>('no')
+  const tr = useT()
   const ctaRef = useRef<HTMLDivElement>(null)
 
   const variant = useMemo(() => variants.find((v) => v.id === variantId) ?? variants[0], [variants, variantId])
@@ -167,7 +169,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
                     <span className="font-bold text-gray-900">{v.label}</span>
                     {(out || v.badge) && (
                       <span className={`text-xs text-white px-2 py-1 rounded ${out ? 'bg-gray-500' : 'bg-brand-600'}`}>
-                        {out ? 'Sold out' : v.badge}
+                        {out ? tr('Sold out') : v.badge}
                       </span>
                     )}
                   </div>
@@ -222,15 +224,15 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
             className="flex-1 bg-gradient-to-r from-brand-700 to-brand-800 text-white py-4 rounded-xl font-bold text-lg hover:shadow-2xl hover:scale-[1.02] transition-all flex items-center justify-center disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
           >
             <ShoppingCart className="mr-3 w-5 h-5" aria-hidden />
-            {soldOut ? 'Out of stock' : `${settings.buyButtonLabel} · ${formatPrice(total, store.currency)}`}
+            {soldOut ? tr('Out of stock') : `${settings.buyButtonLabel} · ${formatPrice(total, store.currency)}`}
           </button>
         </div>
         {/* Add to cart keeps the customer shopping; the big button above goes straight to checkout with this one product. */}
         {!soldOut && (
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={addToCart} className="flex-1 rounded-xl border-2 border-brand-700 py-3 font-semibold text-brand-800 transition hover:bg-brand-50">{added === 'yes' ? 'Added to cart ✓' : 'Add to cart'}</button>
-            {added === 'yes' && <a href="/cart" className="font-semibold text-brand-700 underline">View cart</a>}
-            {added === 'full' && <p role="alert" className="basis-full text-sm text-red-700">Your cart is full (20 different items). Please check out first.</p>}
+            <button type="button" onClick={addToCart} className="flex-1 rounded-xl border-2 border-brand-700 py-3 font-semibold text-brand-800 transition hover:bg-brand-50">{added === 'yes' ? tr('Added to cart ✓') : tr('Add to cart')}</button>
+            {added === 'yes' && <a href="/cart" className="font-semibold text-brand-700 underline">{tr('View cart')}</a>}
+            {added === 'full' && <p role="alert" className="basis-full text-sm text-red-700">{tr('Your cart is full (20 different items). Please check out first.')}</p>}
           </div>
         )}
       </div>
@@ -282,7 +284,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
           </div>
           <button type="button" onClick={order} disabled={soldOut} tabIndex={showBar ? 0 : -1}
             className="ml-auto bg-gradient-to-r from-brand-700 to-brand-800 text-white px-6 py-3 rounded-xl font-bold disabled:opacity-50">
-            {soldOut ? 'Out of stock' : settings.buyButtonLabel}
+            {soldOut ? tr('Out of stock') : settings.buyButtonLabel}
           </button>
         </div>
       )}

@@ -428,6 +428,6 @@ test('a product can show its own design: B and C are product pages with the same
   }
   // The choice is saved only for the admin's own store, from a fixed list, and the shop page follows it.
   const act = readFileSync('app/admin/(panel)/products/[id]/actions.ts', 'utf8')
-  assert.match(act, /if \(!\(design in PRODUCT_DESIGNS\)\) return \{ error/); assert.match(act, /where: \{ id: productId, storeId: admin\.storeId \}, data: \{ pageDesign: design \|\| null \}/)
+  assert.match(act, /if \(!Object\.hasOwn\(PRODUCT_DESIGNS, design\)\) return \{ error/); assert.match(act, /where: \{ id: productId, storeId: admin\.storeId \}, data: \{ pageDesign: design \|\| null \}/)
   assert.match(readFileSync('prisma/schema.prisma', 'utf8'), /pageDesign\s+String\?/)
 })

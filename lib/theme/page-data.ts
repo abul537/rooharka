@@ -4,6 +4,7 @@ import { getPublicCollection, listPublicCollections } from '@/lib/admin/collecti
 import type { Section } from '@/lib/theme/schema'
 import type { SectionData } from '@/components/sections/registry'
 import { relatedItems, type CatalogItem } from '@/lib/catalog'
+import { getShopContext } from '@/lib/storefront/data'
 import { loadProductPage } from '@/lib/data/product'
 
 type StoreRef = { id: string; name: string; currency: string }
@@ -45,14 +46,15 @@ export async function loadSectionData(store: StoreRef, sections: Section[], forE
   const all = forEditor || uses('collection-list') ? await listPublicCollections(store.id) : []
   // The editor's live preview may switch a grid to any collection, so it gets them all (the shop only what the page uses).
   const handles = forEditor ? all.slice(0, 40).map((c) => c.handle) : [...new Set(visible.filter((s) => s.type === 'product-grid' && s.settings.source === 'collection' && s.settings.collection).map((s) => String(s.settings.collection)))]
-  const [{ items, categories }, reviews, collections, picked] = await Promise.all([
+  const [{ items, categories }, reviews, collections, picked, lang] = await Promise.all([
     getCatalog(store.id),
     getHomeReviews(store.id),
     all,
     Promise.all(handles.map(async (h) => [h, (await getPublicCollection(store.id, h))?.products.map((p) => p.productId) ?? []] as const)),
+    getShopContext(store).then((c) => c.lang), // already remembered for this request: no extra database question
   ])
   return {
-    store: { name: store.name, currency: store.currency },
+    store: { name: store.name, currency: store.currency }, lang,
     products: [...items].sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || b.createdAt - a.createdAt).slice(0, forEditor ? 60 : undefined),
     categories, collections, collectionProducts: Object.fromEntries(picked), reviews,
   }

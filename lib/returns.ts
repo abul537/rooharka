@@ -101,7 +101,7 @@ export function parseReturnAsk(body: unknown): { ok: true; value: ReturnAsk } | 
   if (!body || typeof body !== 'object') return { ok: false, error: 'Please fill in the form.' }
   const b = body as Record<string, unknown>
   const reason = String(b.reason ?? '')
-  if (!(reason in RETURN_REASONS)) return { ok: false, error: 'Please choose a reason.' }
+  if (!Object.hasOwn(RETURN_REASONS, reason)) return { ok: false, error: 'Please choose a reason.' }
   const note = line(b.note, 500)
   if (reason === 'OTHER' && note.length < 5) return { ok: false, error: 'Please tell us the reason in a few words.' }
   return { ok: true, value: { code: line(b.code, 40), last4: String(b.last4 ?? '').replace(/\D/g, '').slice(-4), reason: reason as ReturnReason, note, items: b.items, website: line(b.website, 100) } }

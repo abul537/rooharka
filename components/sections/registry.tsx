@@ -8,6 +8,7 @@ import { GALLERY_FOLD, focalCss, ratioCss, type Block, type Section } from '@/li
 import { imageVariant, videoPoster } from '@/lib/media/urls'
 import { formatPrice } from '@/lib/format'
 import ProductCard from '@/components/shop/ProductCard'
+import type { Lang } from '@/lib/i18n'
 import TrustIcon from '@/components/shop/TrustIcon'
 import MediaImage from '@/components/media/MediaImage'
 import NewsletterForm from '@/components/sections/NewsletterForm'
@@ -31,6 +32,8 @@ import ProductFaqList from '@/components/product/Faq'
  */
 export interface SectionData {
   store: { name: string; currency: string }
+  /** The shop's language (English when not given). */
+  lang?: Lang
   /** The store's live products, featured first then newest. */
   products: CatalogItem[]
   categories: { slug: string; name: string; count: number }[]
@@ -179,7 +182,7 @@ function ProductGrid({ section, data, first }: Props) {
   const all = source === 'collection' && handle ? `/collections/${handle}` : '/shop'
   // A grid that would be empty (an emptied collection, or nothing besides the featured product) is simply not drawn.
   if (list.length === 0 && (source === 'collection' || on(section, 'skipFirst'))) return null
-  const card = (item: CatalogItem, i: number) => <div className="flex w-full"><ProductCard item={item} currency={data.store.currency} priority={first && i < 4} /></div>
+  const card = (item: CatalogItem, i: number) => <div className="flex w-full"><ProductCard item={item} lang={data.lang} currency={data.store.currency} priority={first && i < 4} /></div>
   return (
     <section className="container mx-auto px-4 pt-20" aria-labelledby={`h-${section.id}`}>
       <div className="flex items-end justify-between gap-4">
@@ -475,7 +478,7 @@ function RelatedProducts({ section, data }: Props) {
   const list = (data.product?.related ?? []).slice(0, Number(s(section, 'count')) || 4)
   if (list.length === 0) return null
   const layout = s(section, 'layout')
-  const card = (item: CatalogItem) => <div className="flex w-full"><ProductCard item={item} currency={data.store.currency} /></div>
+  const card = (item: CatalogItem) => <div className="flex w-full"><ProductCard item={item} lang={data.lang} currency={data.store.currency} /></div>
   return (
     <section className="container mx-auto px-4 pt-16" aria-labelledby={`h-${section.id}`}>
       <h2 id={`h-${section.id}`} className="font-playfair text-2xl font-bold text-gray-900 md:text-3xl">{s(section, 'title') || 'You may also like'}</h2>
@@ -504,7 +507,7 @@ function CollectionMain({ section, data, first }: Props) {
       <div className="container mx-auto px-4 pt-8">
         {c.items.length === 0
           ? <p className="py-16 text-center text-gray-600">Nothing here yet. <Link href="/shop" className="text-brand-700 underline">Browse the whole shop</Link>.</p>
-          : <ul className={`grid gap-4 sm:gap-6 ${GRID[s(section, 'columns')] ?? GRID['4']}`}>{c.items.map((item, i) => <li key={item.id} className="flex"><div className="flex w-full"><ProductCard item={item} currency={data.store.currency} priority={first && i < 4} /></div></li>)}</ul>}
+          : <ul className={`grid gap-4 sm:gap-6 ${GRID[s(section, 'columns')] ?? GRID['4']}`}>{c.items.map((item, i) => <li key={item.id} className="flex"><div className="flex w-full"><ProductCard item={item} lang={data.lang} currency={data.store.currency} priority={first && i < 4} /></div></li>)}</ul>}
       </div>
     </div>
   )

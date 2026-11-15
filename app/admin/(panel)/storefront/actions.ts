@@ -57,7 +57,7 @@ export async function createThemeAction(_: ActionState, fd: FormData): Promise<A
   const g = await adminOrError('settings.edit'); if ('error' in g) return g
   const from = String(fd.get('from') ?? '')
   const copyOf = from.startsWith('copy:') ? from.slice(5) : null
-  if (!copyOf && !(from in THEME_PRESETS)) return { error: 'Choose a design to start from.' }
+  if (!copyOf && !Object.hasOwn(THEME_PRESETS, from)) return { error: 'Choose a design to start from.' }
   const name = parseThemeName(String(fd.get('name') ?? '') || (copyOf ? 'Copy of my theme' : THEME_PRESETS[from as ThemePresetKey].name)); if (!name.ok) return { error: name.error }
   let id: string
   try {

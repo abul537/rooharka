@@ -41,7 +41,7 @@ test('pages are drawn on the server; scripts go to the browser only for things a
     'app/(shop)/cart/CartView.tsx', 'app/(shop)/checkout/CheckoutFlow.tsx', 'app/(shop)/checkout/steps/addressStep.tsx', 'app/(shop)/checkout/steps/paymentStep.tsx', 'app/(shop)/checkout/success/CopyCode.tsx',
     'app/(shop)/contact/ContactForm.tsx', 'app/(shop)/error.tsx', 'app/(shop)/verify/VerifyFlow.tsx',
     'components/product/Gallery.tsx', 'components/product/ProductTabs.tsx', 'components/product/PurchasePanel.tsx', 'components/product/ReviewForm.tsx',
-    'components/sections/NewsletterForm.tsx', 'components/shop/CartLink.tsx', 'components/shop/MobileMenu.tsx', 'components/shop/Pixels.tsx', 'components/shop/ReturnForm.tsx', 'components/shop/SpeedBeacon.tsx', 'components/shop/VisitBeacon.tsx',
+    'components/sections/NewsletterForm.tsx', 'components/shop/CartLink.tsx', 'components/shop/Lang.tsx', 'components/shop/MobileMenu.tsx', 'components/shop/Pixels.tsx', 'components/shop/ReturnForm.tsx', 'components/shop/SpeedBeacon.tsx', 'components/shop/VisitBeacon.tsx',
   ], 'a new client component on the storefront is a decision: add it here on purpose')
 })
 

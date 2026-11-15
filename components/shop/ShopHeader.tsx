@@ -2,11 +2,12 @@ import Link from 'next/link'
 import { Search } from 'lucide-react'
 import MobileMenu from '@/components/shop/MobileMenu'
 import CartLink from '@/components/shop/CartLink'
+import { t } from '@/lib/i18n'
 import type { ShopContext } from '@/lib/storefront/data'
 
 export const navItems = (ctx: ShopContext) => [
-  { label: 'Home', href: '/' }, { label: 'Shop', href: '/shop' }, { label: 'About', href: '/about' }, { label: 'Contact', href: '/contact' },
-  ...(ctx.trackingEnabled ? [{ label: 'Track order', href: '/track' }] : []),
+  { label: t(ctx.lang, 'Home'), href: '/' }, { label: t(ctx.lang, 'Shop'), href: '/shop' }, { label: t(ctx.lang, 'About'), href: '/about' }, { label: t(ctx.lang, 'Contact'), href: '/contact' },
+  ...(ctx.trackingEnabled ? [{ label: t(ctx.lang, 'Track order'), href: '/track' }] : []),
 ]
 
 /** Sticky header: the store's own logo and name (from Settings and Storefront), links, search and the cart. */
@@ -30,8 +31,8 @@ export default function ShopHeader({ name, ctx }: { name: string; ctx: ShopConte
         </nav>
         <div className="flex items-center gap-1">
           <form action="/shop" method="get" role="search" className="relative hidden lg:block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
-            <input name="q" placeholder="Search products" aria-label="Search products" maxLength={60} className="w-52 rounded-full border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600" />
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
+            <input name="q" placeholder={t(ctx.lang, 'Search products')} aria-label={t(ctx.lang, 'Search products')} maxLength={60} className="w-52 rounded-full border border-gray-200 bg-gray-50 py-2 ps-9 pe-3 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600" />
           </form>
           <CartLink />
           <MobileMenu items={items} />

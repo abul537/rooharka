@@ -1,6 +1,7 @@
 import { readPixels, type Pixels } from '@/lib/pixels'
 import { cache } from 'react'
 import { cookies } from 'next/headers'
+import { readLanguage, type Lang } from '@/lib/i18n'
 import { db } from '@/lib/db'
 import { isPreviewFor } from '@/lib/preview/server'
 import { PREVIEW_THEME_COOKIE } from '@/lib/preview/rules'
@@ -17,6 +18,8 @@ export interface ShopContext {
   trackingEnabled: boolean
   /** The owner's advertising pixel ids (checked; empty when not connected). */
   pixels: Pixels
+  /** The language of the shop's fixed words: English or Urdu (right to left). */
+  lang: Lang
 }
 
 /** Remembered per store (lib/cache.ts) and forgotten the moment anything is saved in the dashboard. */
@@ -30,6 +33,7 @@ const load = storeCached('context', 15, async (storeId, name): Promise<ShopConte
     logoUrl: s?.logoUrl ?? null, phone: s?.supportPhone ?? null, whatsapp: s?.supportWhatsapp ?? null, email: s?.supportEmail ?? null,
     trackingEnabled: s?.orderTrackingEnabled ?? true,
     pixels: readPixels(s?.extra),
+    lang: readLanguage(s?.extra),
   }
 })
 

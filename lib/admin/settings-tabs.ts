@@ -4,7 +4,7 @@
  * `cards` names what each group contains; a test checks nothing is listed twice or left out.
  */
 export const SETTINGS_TABS = [
-  { key: 'general', label: 'Store details', about: 'Your shop’s name and how customers reach you.', cards: ['store'] },
+  { key: 'general', label: 'Store details', about: 'Your shop’s name, how customers reach you, and the shop’s language.', cards: ['store', 'language'] },
   { key: 'payments', label: 'Payments and delivery', about: 'How customers pay and what delivery costs.', cards: ['payments'] },
   { key: 'checkout', label: 'Checkout and orders', about: 'The order form, the fake-order check, messages to customers, phone verification and order tracking.', cards: ['checkout-form', 'fraud', 'notify', 'otp', 'tracking'] },
   { key: 'couriers', label: 'Couriers', about: 'The delivery companies you use and automatic booking.', cards: ['postex', 'couriers'] },

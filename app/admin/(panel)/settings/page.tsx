@@ -23,7 +23,8 @@ import { EVENT_LABEL, NOTIFY_EVENTS, readNotify } from '@/lib/notify/rules'
 import { resolveProvider } from '@/lib/otp/rules'
 import { loadExtra } from '@/lib/admin/extra'
 import { loadFraudSettings } from '@/lib/fraud/store'
-import { saveNotifyAction, savePixelsAction, saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveFraudAction, saveTrackingAction } from './actions'
+import { LANGUAGES, readLanguage } from '@/lib/i18n'
+import { saveLanguageAction, saveNotifyAction, savePixelsAction, saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveFraudAction, saveTrackingAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const s = loaded?.settings, wallets = loaded?.wallets, fields = loaded?.fields, pp = loaded?.productPage
 
   let content: ReactNode = null
+  const language = tab === 'general' ? readLanguage(await loadExtra(admin.storeId)) : 'en'
   if (tab === 'general' && s) content = (
     <>
       <Card title="Store details" hint="Shown to customers on the site and used for support.">
@@ -64,6 +66,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <Field label="Support phone"><input name="supportPhone" defaultValue={s.supportPhone} placeholder="03001234567" className={inputCls} /></Field>
           <Field label="WhatsApp number"><input name="supportWhatsapp" defaultValue={s.supportWhatsapp} placeholder="03001234567" className={inputCls} /></Field>
           <div className="sm:col-span-2"><button className={primaryBtn}>Save store details</button></div>
+        </ActionForm>
+      </Card>
+      <Card title="Shop language" hint="The language of your shop’s fixed words: the menu, buttons, cart and totals. With Urdu the shop also reads right to left. What you type yourself (product names, descriptions, page sections) is always shown exactly as you typed it. The checkout form and the order tracking page are still in English for now.">
+        <ActionForm action={saveLanguageAction} className="flex flex-wrap items-end gap-3">
+          <Field label="Language"><select name="language" defaultValue={language} className={inputCls}>{Object.entries(LANGUAGES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+          <button className={primaryBtn}>Save language</button>
         </ActionForm>
       </Card>
     </>

@@ -58,7 +58,7 @@ test('what earlier returns cover is counted, refused ones are not; stored lines 
 })
 
 test('the customer form: a reason is required, "other" needs words, text is cleaned', () => {
-  assert.equal(parseReturnAsk(null).ok, false); assert.equal(parseReturnAsk({ reason: 'FREE_MONEY' }).ok, false)
+  assert.equal(parseReturnAsk(null).ok, false); assert.equal(parseReturnAsk({ reason: 'FREE_MONEY' }).ok, false); assert.equal(parseReturnAsk({ reason: 'toString' }).ok, false); assert.equal(parseReturnAsk({ reason: '__proto__' }).ok, false)
   assert.equal(parseReturnAsk({ reason: 'OTHER', note: 'x' }).ok, false)
   const r = parseReturnAsk({ code: ' MP-1 ', last4: '0300-1234567', reason: 'DAMAGED', note: 'broken\u0000 glass  ' })
   assert.ok(r.ok); if (r.ok) { assert.equal(r.value.code, 'MP-1'); assert.equal(r.value.last4, '4567'); assert.equal(r.value.note, 'broken glass') }

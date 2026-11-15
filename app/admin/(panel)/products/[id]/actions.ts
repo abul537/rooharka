@@ -43,7 +43,7 @@ async function guarded(
 /** Which design of the product page this product shows: the normal one, or the theme's design B or C. */
 export async function productDesignAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const productId = str(fd, 'productId'), design = str(fd, 'design')
-  if (!(design in PRODUCT_DESIGNS)) return { error: 'Choose a design from the list.' }
+  if (!Object.hasOwn(PRODUCT_DESIGNS, design)) return { error: 'Choose a design from the list.' }
   return guarded('design', productId, async (admin) => {
     const res = await db.product.updateMany({ where: { id: productId, storeId: admin.storeId }, data: { pageDesign: design || null } })
     if (res.count === 0) throw new AdminError('Product not found.')

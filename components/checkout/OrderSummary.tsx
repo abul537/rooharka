@@ -1,5 +1,6 @@
 'use client';
 
+import { useT } from '@/components/shop/Lang'
 import { useState } from 'react';
 import { Minus, Plus, X } from 'lucide-react';
 import MediaImage from '@/components/media/MediaImage';
@@ -29,6 +30,7 @@ export default function OrderSummary({ entries, onQuantityChange, onRemove, disc
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const tr = useT()
 
   async function apply() {
     if (!code.trim() || busy) return;
@@ -36,14 +38,14 @@ export default function OrderSummary({ entries, onQuantityChange, onRemove, disc
     try {
       const r = await fetch('/api/discount', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, subtotal }) });
       const d = await r.json().catch(() => ({}));
-      if (r.ok) { onDiscount(d as AppliedDiscount); setCode(''); } else setProblem(d.error ?? 'That discount code is not valid.');
-    } catch { setProblem('Could not check the code. Please try again.'); }
+      if (r.ok) { onDiscount(d as AppliedDiscount); setCode(''); } else setProblem(d.error ?? tr('That discount code is not valid.'));
+    } catch { setProblem(tr('Could not check the code. Please try again.')); }
     setBusy(false);
   }
 
   return (
     <aside className="bg-white rounded-2xl shadow-xl p-6 lg:sticky lg:top-28" aria-label="Order summary">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-4">{tr('Order Summary')}</h2>
 
       <ul className="divide-y divide-gray-100 border-b border-gray-100">
         {entries.map(({ line, rule, quantity }) => (
@@ -83,7 +85,7 @@ export default function OrderSummary({ entries, onQuantityChange, onRemove, disc
           </div>
         ) : (
           <div>
-            <label htmlFor="discount-code" className="text-sm font-medium text-gray-700">Discount code</label>
+            <label htmlFor="discount-code" className="text-sm font-medium text-gray-700">{tr('Discount code')}</label>
             <div className="mt-1 flex gap-2">
               <input id="discount-code" value={code} onChange={(e) => { setCode(e.target.value); setProblem(null); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void apply(); } }} maxLength={24} autoCapitalize="characters" autoComplete="off" disabled={locked} className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase" />
               <button type="button" onClick={apply} disabled={locked || busy || !code.trim()} className="shrink-0 rounded-lg border border-brand-700 px-4 py-2 text-sm font-semibold text-brand-800 hover:bg-brand-50 disabled:opacity-40">{busy ? 'Checking…' : 'Apply'}</button>
@@ -94,14 +96,14 @@ export default function OrderSummary({ entries, onQuantityChange, onRemove, disc
       </div>
 
       <dl className="space-y-2 py-4 text-sm">
-        <div className="flex justify-between"><dt className="text-gray-600">Subtotal</dt><dd>{formatPrice(charges.subtotal, currency)}</dd></div>
-        {charges.discount > 0 && <div className="flex justify-between text-emerald-800"><dt>Discount</dt><dd>- {formatPrice(charges.discount, currency)}</dd></div>}
-        <div className="flex justify-between"><dt className="text-gray-600">Delivery</dt><dd>{charges.delivery === 0 ? 'Free' : formatPrice(charges.delivery, currency)}</dd></div>
-        <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-100"><dt>Total</dt><dd>{formatPrice(charges.total, currency)}</dd></div>
+        <div className="flex justify-between"><dt className="text-gray-600">{tr('Subtotal')}</dt><dd>{formatPrice(charges.subtotal, currency)}</dd></div>
+        {charges.discount > 0 && <div className="flex justify-between text-emerald-800"><dt>{tr('Discount')}</dt><dd>- {formatPrice(charges.discount, currency)}</dd></div>}
+        <div className="flex justify-between"><dt className="text-gray-600">{tr('Delivery')}</dt><dd>{charges.delivery === 0 ? tr('Free') : formatPrice(charges.delivery, currency)}</dd></div>
+        <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-100"><dt>{tr('Total')}</dt><dd>{formatPrice(charges.total, currency)}</dd></div>
         {charges.advance > 0 && (
           <>
-            <div className="flex justify-between text-brand-800"><dt>Pay now</dt><dd>{formatPrice(charges.advance, currency)}</dd></div>
-            {charges.dueOnDelivery > 0 && <div className="flex justify-between text-gray-600"><dt>Pay on delivery</dt><dd>{formatPrice(charges.dueOnDelivery, currency)}</dd></div>}
+            <div className="flex justify-between text-brand-800"><dt>{tr('Pay now')}</dt><dd>{formatPrice(charges.advance, currency)}</dd></div>
+            {charges.dueOnDelivery > 0 && <div className="flex justify-between text-gray-600"><dt>{tr('Pay on delivery')}</dt><dd>{formatPrice(charges.dueOnDelivery, currency)}</dd></div>}
           </>
         )}
       </dl>

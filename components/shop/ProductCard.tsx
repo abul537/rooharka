@@ -3,9 +3,10 @@ import Link from 'next/link'
 import { Package, Star } from 'lucide-react'
 import { discountPercent, type CatalogItem } from '@/lib/catalog'
 import { formatPrice } from '@/lib/format'
+import { t, type Lang } from '@/lib/i18n'
 
 /** One product tile in the shop grid. The whole card is a single link to the product page. */
-export default function ProductCard({ item, currency, priority = false }: { item: CatalogItem; currency: string; priority?: boolean }) {
+export default function ProductCard({ item, currency, priority = false, lang = 'en' }: { item: CatalogItem; currency: string; priority?: boolean; lang?: Lang }) {
   const off = discountPercent(item)
   const hasRange = item.maxPrice > item.minPrice
   return (
@@ -23,11 +24,11 @@ export default function ProductCard({ item, currency, priority = false }: { item
         ) : (
           <div className="flex h-full items-center justify-center text-brand-600/50" aria-hidden><Package className="h-14 w-14" /></div>
         )}
-        <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">
+        <div className="absolute start-3 top-3 flex flex-col items-start gap-1.5">
           {item.isDraft && <span className="rounded-full bg-amber-500 px-2.5 py-1 text-xs font-semibold text-white">Draft: only you see this</span>}
-          {item.soldOut && <span className="rounded-full bg-gray-900 px-2.5 py-1 text-xs font-semibold text-white">Sold out</span>}
+          {item.soldOut && <span className="rounded-full bg-gray-900 px-2.5 py-1 text-xs font-semibold text-white">{t(lang, 'Sold out')}</span>}
           {!item.soldOut && off && <span className="rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white">{off}% off</span>}
-          {item.isFeatured && !item.soldOut && <span className="rounded-full bg-brand-700 px-2.5 py-1 text-xs font-semibold text-white">Featured</span>}
+          {item.isFeatured && !item.soldOut && <span className="rounded-full bg-brand-700 px-2.5 py-1 text-xs font-semibold text-white">{t(lang, 'Featured')}</span>}
         </div>
       </div>
       <div className="flex flex-1 flex-col p-4">
@@ -40,7 +41,7 @@ export default function ProductCard({ item, currency, priority = false }: { item
           </p>
         )}
         <p className="mt-auto pt-3 text-lg font-bold text-gray-900">
-          {hasRange && <span className="mr-1 text-sm font-normal text-gray-500">From</span>}
+          {hasRange && <span className="me-1 text-sm font-normal text-gray-500">{t(lang, 'From')}</span>}
           {formatPrice(item.minPrice, currency)}{item.perUnit && <span className="ml-1 text-sm font-normal text-gray-500">{item.perUnit}</span>}
           {off && !hasRange && item.compareAt && <span className="ml-2 text-sm font-normal text-gray-400 line-through">{formatPrice(item.compareAt, currency)}</span>}
         </p>
