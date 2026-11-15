@@ -1,6 +1,7 @@
 'use client'
 
 import { useId, useMemo, useState } from 'react'
+import ReviewForm from '@/components/product/ReviewForm'
 import type { ProductPageData, SectionDTO } from '@/lib/data/product'
 import Reviews from './Reviews'
 import SectionBlock from './SectionBlock'
@@ -48,7 +49,7 @@ export default function ProductTabs({ data, layout = 'tabs', reviews = true }: {
 
   const panel = (current: Tab) => (
     current.key === 'reviews' ? (
-            <Reviews items={data.reviews.items} count={data.reviews.count} average={data.reviews.average} />
+            <><Reviews items={data.reviews.items} count={data.reviews.count} average={data.reviews.average} /><ReviewForm productSlug={data.product.slug} /></>
           ) : (
             <>
               {current.key === 'description' && data.product.description && (
