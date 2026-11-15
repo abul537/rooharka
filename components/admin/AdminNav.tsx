@@ -19,6 +19,7 @@ const ITEMS = [
   { href: '/admin/settings', label: 'Settings' },
   { href: '/admin/team', label: 'Team' },
   { href: '/admin/billing', label: 'Plan and billing' },
+  { href: '/admin/support', label: 'Help' },
   { href: '/admin/security', label: 'My security' },
 ]
 

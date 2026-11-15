@@ -4,13 +4,14 @@ import { can } from '@/lib/auth/permissions'
 import { listCollections } from '@/lib/admin/collections'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card, Field, inputCls, primaryBtn } from '@/components/admin/ui'
-import { createCollectionAction } from './actions'
+import { categoryAction, createCollectionAction } from './actions'
+import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 export default async function CollectionsPage() {
   const admin = await requireAdmin('products.view')
-  const rows = await listCollections(admin.storeId)
+  const [rows, categories] = await Promise.all([listCollections(admin.storeId), db.category.findMany({ where: { storeId: admin.storeId }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }], select: { id: true, name: true, _count: { select: { products: true } } } })])
   const editable = can(admin.role, 'products.edit')
   return (
     <div className="max-w-3xl space-y-6">
@@ -36,6 +37,34 @@ export default async function CollectionsPage() {
           </ActionForm>
         </Card>
       )}
+
+      <Card title="Shop categories" hint="The simple grouping customers filter by on your Shop page (one category per product). Choose a product’s category on the product’s own page. Deleting a category never deletes its products.">
+        <div className="divide-y divide-slate-100">
+          {categories.length === 0 && <p className="py-2 text-sm text-slate-500">No categories yet.</p>}
+          {categories.map((c) => (
+            <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+              {editable ? (
+                <ActionForm action={categoryAction} className="flex min-w-0 flex-1 items-center gap-2">
+                  <input type="hidden" name="what" value="rename" /><input type="hidden" name="id" value={c.id} />
+                  <input name="name" defaultValue={c.name} required maxLength={60} aria-label={`Name of category ${c.name}`} className={`${inputCls} max-w-xs`} />
+                  <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">Rename</button>
+                </ActionForm>
+              ) : <span className="font-medium">{c.name}</span>}
+              <span className="flex items-center gap-4 text-sm text-slate-500">
+                {c._count.products} product{c._count.products === 1 ? '' : 's'}
+                {editable && <ActionForm action={categoryAction} confirm={`Delete the category “${c.name}”? Its ${c._count.products} product${c._count.products === 1 ? '' : 's'} will be kept, without a category.`}><input type="hidden" name="what" value="delete" /><input type="hidden" name="id" value={c.id} /><button className="text-red-700 underline">Delete</button></ActionForm>}
+              </span>
+            </div>
+          ))}
+        </div>
+        {editable && (
+          <ActionForm action={categoryAction} className="mt-4 flex items-end gap-3 border-t border-slate-100 pt-4">
+            <input type="hidden" name="what" value="create" />
+            <Field label="New category"><input name="name" required maxLength={60} placeholder="Honey" className={inputCls} /></Field>
+            <button className={primaryBtn}>Add</button>
+          </ActionForm>
+        )}
+      </Card>
     </div>
   )
 }
