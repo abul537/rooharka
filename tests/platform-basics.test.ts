@@ -43,3 +43,16 @@ test('the safety net is in place: checks on every push, hardened headers, friend
   for (const f of ['app/(shop)/not-found.tsx', 'app/(shop)/error.tsx', 'app/(shop)/loading.tsx', 'app/not-found.tsx', 'docs/OPERATIONS.md']) assert.ok(existsSync(f), f)
   assert.doesNotMatch(readFileSync('app/(shop)/error.tsx', 'utf8'), /error\.stack|\{error\.message\}/, 'the customer never sees technical detail')
 })
+
+test('sharing previews: a title, a short text and only an https picture; every shop page has one', async () => {
+  const { sharePreview } = await import('../lib/seo.ts')
+  const a = sharePreview({ siteName: 'Ali Store', title: 'Sidr Honey', description: 'x '.repeat(300), image: 'https://res.cloudinary.com/a/b.jpg', url: 'https://ali.pk/product/honey' })
+  assert.equal(a.openGraph.title, 'Sidr Honey'); assert.equal(a.openGraph.siteName, 'Ali Store'); assert.deepEqual(a.openGraph.images, ['https://res.cloudinary.com/a/b.jpg'])
+  assert.ok(a.openGraph.description!.length <= 200); assert.equal(a.twitter.card, 'summary_large_image'); assert.equal(a.openGraph.url, 'https://ali.pk/product/honey')
+  for (const bad of ['http://x.com/a.jpg', 'javascript:alert(1)', '/local.jpg', 'https://x.com/a b.jpg', null]) {
+    const b = sharePreview({ siteName: 'S', title: 'T', image: bad })
+    assert.equal('images' in b.openGraph, false, String(bad)); assert.equal(b.twitter.card, 'summary')
+  }
+  const { readFileSync } = await import('node:fs')
+  for (const f of ['app/(shop)/layout.tsx', 'app/(shop)/product/[slug]/page.tsx', 'app/(shop)/collections/[handle]/page.tsx']) assert.match(readFileSync(f, 'utf8'), /\.\.\.sharePreview\(/, f)
+})

@@ -7,6 +7,7 @@ import { relatedItems } from '@/lib/catalog'
 import { getShopContext } from '@/lib/storefront/data'
 import { loadSectionData } from '@/lib/theme/page-data'
 import { productTemplate } from '@/lib/theme/schema'
+import { sharePreview } from '@/lib/seo'
 import { RenderSections } from '@/components/sections/registry'
 import { PixelEventOnce } from '@/components/shop/Pixels'
 
@@ -31,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description,
     // One official address per product, so search engines do not see copies (?utm=..., other hosts) as separate pages.
     alternates: host ? { canonical: `https://${host}/product/${product.slug}` } : undefined,
-    openGraph: { title, description, type: 'website', images: image ? [image] : undefined },
+    ...sharePreview({ siteName: store.name, title, description, image, url: host ? `https://${host}/product/${product.slug}` : null }),
   }
 }
 

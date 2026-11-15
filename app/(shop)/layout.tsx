@@ -11,6 +11,7 @@ import SpeedBeacon from '@/components/shop/SpeedBeacon'
 import { PixelPageViews } from '@/components/shop/Pixels'
 import { hasPixels, pixelScript } from '@/lib/pixels'
 import { getShopContext } from '@/lib/storefront/data'
+import { sharePreview } from '@/lib/seo'
 import { safeUrl } from '@/lib/storefront/rules'
 import type { CSSProperties } from 'react'
 import { themeVariables } from '@/lib/theme/settings'
@@ -19,13 +20,15 @@ import { themeVariables } from '@/lib/theme/settings'
 export async function generateMetadata(): Promise<Metadata> {
   const store = await getCurrentStore()
   if (!store) return { title: 'Store' }
-  const s = await db.storeSettings.findUnique({ where: { storeId: store.id }, select: { seoTitle: true, seoDescription: true, faviconUrl: true } }).catch(() => null)
+  const s = await db.storeSettings.findUnique({ where: { storeId: store.id }, select: { seoTitle: true, seoDescription: true, faviconUrl: true, logoUrl: true } }).catch(() => null)
   return {
     // A preview is private to the owner: tell search engines to keep out, in case a preview address is ever shared.
     ...((await isPreviewFor(store.id)) ? { robots: { index: false, follow: false } } : {}),
     title: { default: s?.seoTitle || store.name, template: `%s | ${store.name}` },
     description: s?.seoDescription ?? undefined,
     icons: s?.faviconUrl && safeUrl(s.faviconUrl, false) ? { icon: s.faviconUrl } : undefined,
+    // What WhatsApp and Facebook show when the shop's link is shared. A page with its own picture (a product) replaces it.
+    ...sharePreview({ siteName: store.name, title: s?.seoTitle || store.name, description: s?.seoDescription, image: s?.logoUrl }),
   }
 }
 

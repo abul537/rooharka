@@ -6,6 +6,7 @@ import { getPublicCollection } from '@/lib/admin/collections'
 import { isPreviewFor } from '@/lib/preview/server'
 import { getShopContext } from '@/lib/storefront/data'
 import { collectionItems, loadSectionData } from '@/lib/theme/page-data'
+import { sharePreview } from '@/lib/seo'
 import { RenderSections } from '@/components/sections/registry'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +15,11 @@ type Props = { params: Promise<{ handle: string }> }
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const [{ handle }, store] = await Promise.all([params, getCurrentStore()])
   const c = store ? await getPublicCollection(store.id, handle) : null
-  return c ? { title: `${c.title} | ${store!.name}`, description: c.description ?? `${c.title} from ${store!.name}.` } : { title: 'Collection not found' }
+  if (!c || !store) return { title: 'Collection not found' }
+  const title = `${c.title} | ${store.name}`, description = c.description ?? `${c.title} from ${store.name}.`
+  // The sharing picture is the first product of the collection (the catalogue is already remembered, so this costs nothing).
+  const image = collectionItems(c.products, (await getCatalog(store.id)).items).find((i) => i.imageUrl)?.imageUrl
+  return { title, description, ...sharePreview({ siteName: store.name, title: c.title, description, image }) }
 }
 
 /** A collection page: the owner's hand-picked products, in the owner's order. Only live products are shown. */

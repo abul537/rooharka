@@ -16,3 +16,17 @@ export function shopSitemap(origin: string, d: { products: { slug: string; updat
     ...d.policies.filter(safe).map((k) => at(`/policies/${k}`, 0.2)),
   ]
 }
+
+/**
+ * SHARING PREVIEW: the title, text and picture WhatsApp, Facebook and others show when a link is shared.
+ * Only an https picture is used; long text is cut so the card never looks broken.
+ */
+export function sharePreview(p: { siteName: string; title: string; description?: string | null; image?: string | null; url?: string | null }) {
+  const cut = (v: string, max: number) => { const t = v.replace(/\s+/g, ' ').trim(); return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t }
+  const title = cut(p.title, 90), description = p.description ? cut(p.description, 200) : undefined
+  const image = p.image && /^https:\/\/[^\s"'<>]+$/.test(p.image) ? p.image : undefined
+  return {
+    openGraph: { type: 'website' as const, siteName: cut(p.siteName, 60), title, description, ...(p.url ? { url: p.url } : {}), ...(image ? { images: [image] } : {}) },
+    twitter: { card: image ? ('summary_large_image' as const) : ('summary' as const), title, description, ...(image ? { images: [image] } : {}) },
+  }
+}
