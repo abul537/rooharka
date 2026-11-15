@@ -13,6 +13,7 @@ import { isHeld } from '@/lib/fraud/rules'
 import ActionForm from '@/components/admin/ActionForm'
 import { courierName, courierOptions, trackingLink } from '@/lib/couriers/config'
 import { loadCourierSetup } from '@/lib/couriers/store'
+import { startReturnAction } from '../../returns/actions'
 import { bookCourierAction, cancelAction, paymentAction, refreshCourierAction, shipmentAction, statusAction } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -200,6 +201,17 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   </ActionForm>
                 ))}
               </div>
+            </section>
+          )}
+
+          {canUpdate && order.status === 'DELIVERED' && (
+            <section className="rounded-xl bg-white border border-slate-200 p-5">
+              <h2 className="font-semibold mb-1">Return</h2>
+              <p className="text-sm text-slate-600 mb-3">The customer wants to send items back? Open a return, then follow it under <Link href="/admin/returns" className="underline">Returns</Link>.</p>
+              <ActionForm action={startReturnAction} confirm="Open a return for this order?">
+                <input type="hidden" name="orderId" value={order.id} />
+                <button className={`${btn} w-full border border-slate-300 bg-white`}>Start a return</button>
+              </ActionForm>
             </section>
           )}
 

@@ -8,6 +8,7 @@ const ITEMS = [
   { href: '/admin/pos', label: 'POS (counter sale)' },
   { href: '/admin/orders', label: 'Orders' },
   { href: '/admin/order-tracking', label: 'Order tracking' },
+  { href: '/admin/returns', label: 'Returns' },
   { href: '/admin/abandoned', label: 'Unfinished checkouts' },
   { href: '/admin/messages', label: 'Messages' },
   { href: '/admin/products', label: 'Products' },

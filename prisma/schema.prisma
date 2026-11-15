@@ -244,6 +244,7 @@ model Store {
   discounts     Discount[]
   checkoutLeads CheckoutLead[]
   stockMovements StockMovement[]
+  returnRequests ReturnRequest[]
   subscription  Subscription?
   invoices      Invoice[]
   tickets       SupportTicket[]
@@ -1131,6 +1132,7 @@ model Order {
   history   OrderStatusHistory[]
   payments  Payment[]
   shipments Shipment[]
+  returns   ReturnRequest[]
 
   @@unique([storeId, number])
   @@index([storeId, status, placedAt])
@@ -1596,4 +1598,40 @@ model ContactMessage {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([storeId, isRead, createdAt])
+}
+
+/// A RETURN: the customer (from the tracking page) or the owner asks to send items of a delivered order back.
+/// Steps: REQUESTED -> APPROVED -> RECEIVED -> COMPLETED (refund recorded), or REJECTED. See lib/returns.ts.
+model ReturnRequest {
+  id           String   @id @default(cuid())
+  storeId      String
+  orderId      String
+  status       String   @default("REQUESTED")
+  /// One of the fixed reasons in lib/returns.ts.
+  reason       String
+  /// What the customer wrote, in their own words.
+  note         String?
+  /// The lines being returned, as a snapshot: [{ itemId, productId, variantId, name, quantity, unitCode, unitPrice }]
+  items        Json
+  /// "CUSTOMER" (asked on the tracking page) or "OWNER" (started in the dashboard).
+  source       String   @default("CUSTOMER")
+  /// The owner's answer, shown to the customer when a request is refused.
+  answer       String?
+  /// Whether the items went back on the shelf when they arrived.
+  restocked    Boolean  @default(false)
+  refundAmount Decimal? @db.Decimal(12, 2)
+  /// How the money was sent back (JazzCash, bank transfer, cash...) and the transfer's reference.
+  refundMethod String?
+  refundRef    String?
+  decidedById  String?
+  receivedAt   DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status, createdAt])
+  @@index([orderId])
 }

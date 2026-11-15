@@ -8,6 +8,7 @@ import { lookupOrder, STATUS_LABEL, STATUS_STEPS, type TrackedOrder } from '@/li
 import { normalizeTrackingCode } from '@/lib/tracking-code';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
 import { formatPrice } from '@/lib/format';
+import ReturnForm from '@/components/shop/ReturnForm';
 
 export const metadata: Metadata = { title: 'Track your order', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -135,6 +136,16 @@ export default async function TrackPage({ searchParams }: Props) {
               </p>
               <p className="text-sm text-gray-600 mt-1">{order.paymentNote}</p>
             </div>
+
+            {order.returns.latest && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="font-medium">{order.returns.latest.text}</p>
+                {order.returns.latest.answer && <p className="mt-1">The shop wrote: {order.returns.latest.answer}</p>}
+              </div>
+            )}
+            {order.returns.canRequest && (
+              <ReturnForm code={normalizeTrackingCode(rawCode) ?? ''} last4={rawLast4.replace(/\D/g, '').slice(-4)} lines={order.returns.lines} daysLeft={order.returns.daysLeft} policy={order.returns.policy} />
+            )}
 
             {order.timeline.length > 0 && (
               <div>

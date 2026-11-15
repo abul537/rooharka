@@ -1,5 +1,7 @@
 import { db } from '@/lib/db'
 import { lastFour, maskedName } from '@/lib/phone'
+import { RETURN_CUSTOMER_LABEL, alreadyReturned, isOpen, readReturnPolicy, returnWindow, type ReturnStatus } from '@/lib/returns'
+import { isMeasured } from '@/lib/units/registry'
 import { courierName, readCourierConfig, trackingLink } from '@/lib/couriers/config'
 
 export const STATUS_STEPS = ['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'] as const
@@ -23,6 +25,8 @@ export interface TrackedOrder {
   status: string
   placedAt: string
   items: { name: string; variantLabel: string | null; quantity: number; unitCode: string | null }[]
+  /** Returns: what the customer may still send back, and how the latest return stands. */
+  returns: { canRequest: boolean; daysLeft: number; policy: string; lines: { id: string; name: string; max: number; whole: boolean }[]; latest: { text: string; answer: string | null } | null }
   total: number
   amountDue: number
   paymentNote: string
@@ -48,7 +52,8 @@ export async function lookupOrder(
   const [order, settings] = await Promise.all([db.order.findFirst({
     where: { storeId, trackingCode: code },
     include: {
-      items: { select: { name: true, variantLabel: true, quantity: true, unitCode: true } },
+      items: { select: { id: true, name: true, variantLabel: true, quantity: true, unitCode: true } },
+      returns: { select: { status: true, items: true, answer: true }, orderBy: { createdAt: 'desc' } },
       history: { where: { isPublic: true }, orderBy: { createdAt: 'asc' } },
       shipments: { orderBy: { bookedAt: 'desc' }, take: 1 },
       payments: { select: { method: true, purpose: true, status: true, amount: true }, orderBy: { createdAt: 'asc' } },
@@ -65,6 +70,13 @@ export async function lookupOrder(
   else if (order.paymentStatus === 'REFUNDED') paymentNote = 'Refunded'
   else paymentNote = 'Cash on delivery'
 
+  // Returns: allowed only inside the shop's window after delivery, and never for what already came back.
+  const policy = readReturnPolicy(settings?.extra), covered = alreadyReturned(order.returns)
+  const deliveredAt = [...order.history].reverse().find((h) => h.status === 'DELIVERED')?.createdAt ?? null
+  const window = returnWindow(policy, { status: order.status, deliveredAt }, order.returns.some((r) => isOpen(r.status)), new Date())
+  const lines = order.items.map((i) => ({ id: i.id, name: i.variantLabel ? `${i.name} (${i.variantLabel})` : i.name, max: i.quantity - (covered.get(i.id) ?? 0), whole: isMeasured(i.unitCode) })).filter((l) => l.max > 0)
+  const latest = order.returns[0]
+
   const shipment = order.shipments[0]
   const courierConfig = readCourierConfig(settings?.extra)
   return {
@@ -73,7 +85,8 @@ export async function lookupOrder(
     city: order.cityName,
     status: order.status,
     placedAt: fmt(order.placedAt, tz),
-    items: order.items,
+    items: order.items.map(({ name, variantLabel, quantity, unitCode }) => ({ name, variantLabel, quantity, unitCode })),
+    returns: { canRequest: window.allowed && lines.length > 0, daysLeft: window.daysLeft, policy: policy.text, lines, latest: latest ? { text: RETURN_CUSTOMER_LABEL[latest.status as ReturnStatus] ?? '', answer: latest.status === 'REJECTED' ? latest.answer : null } : null },
     total: order.total.toNumber(),
     amountDue: order.amountDue.toNumber(),
     paymentNote,
