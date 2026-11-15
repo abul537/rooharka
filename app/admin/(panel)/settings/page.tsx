@@ -170,7 +170,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     )
   } else if (tab === 'product' && pp) content = (
     <>
-      <Card title="Product page" hint="These switches and words apply to every product. To change the layout of the page (photo side, tabs, order of sections), use Storefront, Product page.">
+      <Card title="Product page options" hint="These switches and words apply to every product. To change the layout of the page (photo side, tabs, order of sections), use Storefront, Product page.">
         <ActionForm action={saveProductPageAction} className="space-y-5">
           <Group title="Show on every product page">
           <div className="grid sm:grid-cols-2 gap-3">

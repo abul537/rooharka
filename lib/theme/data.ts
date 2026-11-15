@@ -2,7 +2,7 @@
  * Reading and writing themes. Every statement names the store, so one store can never read or change another's theme.
  */
 import { db } from '@/lib/db'
-import { memoKeyed } from '@/lib/memo'
+import { storeCached } from '@/lib/cache'
 import type { StorefrontContent } from '@/lib/storefront/rules'
 import { TEMPLATE_TYPES, VIDEO_MAX_BYTES, VIDEO_MAX_SECONDS, legacyTemplate, parseTemplate, readTemplate, templateVideos, type Template, type TemplateType } from '@/lib/theme/schema'
 import { MAX_THEMES, readThemeSettings, type ThemeSettings } from '@/lib/theme/settings'
@@ -26,8 +26,11 @@ const pick = (t: { id: string; settings: unknown; templates: { type: string; sec
 }
 const WITH_PAGES = { id: true, settings: true, templates: { select: { type: true, sections: true } } } as const
 
-/** The store's live theme row (or null), remembered for 15 seconds: the shop asks for it on every page. */
-const loadLive = memoKeyed(15_000, (storeId: string) => db.shopTheme.findFirst({ where: { storeId, isActive: true }, select: WITH_PAGES }))
+/**
+ * The store's live theme row (or null). The shop asks for it on every page, so it is remembered (lib/cache.ts) and
+ * forgotten the moment anything is saved in the dashboard: a saved design shows on the shop at once.
+ */
+const loadLive = storeCached('theme', 15, (storeId) => db.shopTheme.findFirst({ where: { storeId, isActive: true }, select: WITH_PAGES }))
 
 /**
  * What the shop draws. A store that has not saved a theme yet gets one built from its old Storefront settings
@@ -73,7 +76,7 @@ async function owned(storeId: string, themeId: string) {
 }
 
 /**
- * Saves the pages of a theme (Home, About) together: either all are stored or none. Each template is checked
+ * Saves pages of a theme (any of home, About, product, collection) together: either all are stored or none. Each template is checked
  * again here against the section library, whatever the editor sent.
  */
 export async function saveTemplates(storeId: string, themeId: string, raw: Partial<Record<TemplateType, unknown>>): Promise<{ name: string; isActive: boolean; sections: number }> {

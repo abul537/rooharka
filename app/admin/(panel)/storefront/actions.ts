@@ -9,11 +9,12 @@ import { applyPart, safeUrl, type Part } from '@/lib/storefront/rules'
 import { loadStorefrontForEdit, saveStorefront } from '@/lib/storefront/data'
 import { ThemeError, createTheme, deleteTheme, publishTheme, saveTemplates, saveThemeSettings } from '@/lib/theme/data'
 import { parseCustomColor, parseThemeName, readThemeSettings } from '@/lib/theme/settings'
+import { TEMPLATE_LABEL, TEMPLATE_TYPES } from '@/lib/theme/schema'
 import { THEME_PRESETS, type ThemePresetKey } from '@/lib/theme/presets'
 import type { ActionState } from '@/components/admin/ActionForm'
 
-const PATHS = ['/admin/storefront', '/', '/shop', '/about', '/contact']
-const refresh = () => PATHS.forEach((p) => revalidatePath(p))
+/** Everything the shop draws depends on the theme (home, About, every product and collection page), so the whole shop is refreshed. */
+const refresh = () => { revalidatePath('/', 'layout'); revalidatePath('/admin/storefront') }
 const fail = (what: string, e: unknown): { error: string } => {
   if (e instanceof ThemeError) return { error: e.message }
   console.error(`[theme ${what}]`, e)
@@ -26,8 +27,9 @@ async function storeName(storeId: string) {
 
 // ------------------------------------------------------------------ the theme editor
 /**
- * "Save" in the editor: the theme's name, its colours and font, and corners, and its pages (Home and About: sections,
- * their settings and blocks) in one go. Everything the browser sent is checked again here against the section library; the first
+ * "Save" in the editor: the theme's name, its colours, font and corners, and the pages that were changed (ANY of
+ * the kinds of page in TEMPLATE_TYPES: home, About, product, collection; each with its sections, settings and blocks)
+ * in one go. Each page is saved under its own kind only: saving one page can never touch another. Everything the browser sent is checked again here against the section library; the first
  * problem is returned in plain words and nothing is saved.
  */
 export async function saveThemeAction(input: { themeId: string; name: string; settings: unknown; pages: unknown }): Promise<{ ok: string; live: boolean } | { error: string }> {
@@ -38,11 +40,15 @@ export async function saveThemeAction(input: { themeId: string; name: string; se
   try {
     const themeId = String(input?.themeId ?? '')
     const pages = (input?.pages && typeof input.pages === 'object' ? input.pages : {}) as Record<string, unknown>
-    const saved = await saveTemplates(g.admin.storeId, themeId, { home: pages.home, about: pages.about })
+    // Every kind of page the editor sent, by its own name. (This line once named only Home and About, so Product
+    // and Collection pages were silently dropped; a test now fails if a kind of page is left out.)
+    const changed = TEMPLATE_TYPES.filter((t) => pages[t] !== undefined)
+    const saved = await saveTemplates(g.admin.storeId, themeId, Object.fromEntries(changed.map((t) => [t, pages[t]])))
     await saveThemeSettings(g.admin.storeId, themeId, readThemeSettings({ ...s, customColor: custom.value }), name.value)
-    await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'theme.save', entity: 'Theme', entityId: themeId, after: { name: name.value, sections: saved.sections, live: saved.isActive } })
+    await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'theme.save', entity: 'Theme', entityId: themeId, after: { name: name.value, pages: changed, sections: saved.sections, live: saved.isActive } })
     refresh()
-    return { ok: saved.isActive ? 'Saved. Your shop shows the changes within 15 seconds.' : 'Draft saved. Customers still see your live theme until you publish this one.', live: saved.isActive }
+    const what = changed.length ? `Saved: ${changed.map((t) => TEMPLATE_LABEL[t]).join(', ')}.` : 'Saved.'
+    return { ok: saved.isActive ? `${what} Your shop shows the changes now.` : `${what} This is a draft: customers still see your live theme until you publish this one.`, live: saved.isActive }
   } catch (e) { return fail('save', e) }
 }
 

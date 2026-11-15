@@ -377,3 +377,36 @@ test('starter designs set up the product and collection pages, and the shop page
   assert.match(pd, /loadProductPage\(\{ id: store\.id,[^)]*\}, pickP\.slug, false\)/)
   assert.match(readFileSync('lib/data/product.ts', 'utf8'), /db\.product\.findFirst\(\{\s*where: \{ storeId: store\.id, slug, status \}/)
 })
+
+// ------------------------------------------------------------------ editor <-> shop: every page saves and shows
+test('Save stores EVERY kind of page under its own name (product and collection pages were once dropped here)', () => {
+  const actions = readFileSync('app/admin/(panel)/storefront/actions.ts', 'utf8')
+  const fn = actions.slice(actions.indexOf('export async function saveThemeAction'), actions.indexOf('export async function createThemeAction'))
+  assert.match(fn, /const changed = TEMPLATE_TYPES\.filter\(\(t\) => pages\[t\] !== undefined\)/)
+  assert.match(fn, /saveTemplates\(g\.admin\.storeId, themeId, Object\.fromEntries\(changed\.map\(\(t\) => \[t, pages\[t\]\]\)\)\)/)
+  assert.doesNotMatch(fn, /pages\.(home|about|product|collection)\b/, 'no kind of page is named by hand, so none can be forgotten')
+  assert.ok(fn.indexOf('saveTemplates(') < fn.indexOf('await audit('), 'the shop’s cache is cleared after the save, not before')
+  assert.match(actions, /revalidatePath\('\/', 'layout'\)/, 'every shop page is refreshed, product and collection pages included')
+  // The data layer writes each page to the row of its own kind and checks it against that kind's rules.
+  const data = readFileSync('lib/theme/data.ts', 'utf8')
+  assert.match(data, /where: \{ themeId_type: \{ themeId: t\.id, type \} \}, create: \{ themeId: t\.id, type, sections: json\(tpl\.sections\) \}/)
+  assert.match(data, /const loadLive = storeCached\('theme', 15,/, 'the live theme is forgotten the moment anything is saved')
+  // The shop draws each kind of page from the template of the same name.
+  for (const [file, page] of [['app/(shop)/page.tsx', 'home'], ['app/(shop)/about/page.tsx', 'about'], ['app/(shop)/product/[slug]/page.tsx', 'product'], ['app/(shop)/collections/[handle]/page.tsx', 'collection']] as const) {
+    const src = readFileSync(file, 'utf8')
+    assert.match(src, new RegExp(`\\.pages\\.${page}\\b`), file)
+    for (const other of TEMPLATE_TYPES) if (other !== page) assert.doesNotMatch(src, new RegExp(`\\.pages\\.${other}\\b`), `${file} must not read the ${other} template`)
+  }
+  // The editor sends only the pages that changed, each under its own name.
+  const editor = readFileSync('components/admin/ThemeEditor.tsx', 'utf8')
+  assert.match(editor, /pages: Object\.fromEntries\(sending\.map\(\(t\) => \[t, pages\[t\]\]\)\)/)
+  assert.match(editor, /setChanged\(\(c\) => \(c\.includes\(tab\) \? c : \[\.\.\.c, tab\]\)\)/)
+})
+
+test('a page sent under another page’s name is refused, so one page can never overwrite another', () => {
+  const p = themePreset('minimal', 'S')
+  for (const [as, tpl] of [['about', p.collection], ['home', p.product], ['collection', p.about], ['product', p.home], ['product', p.collection], ['collection', p.product]] as const) {
+    assert.equal(parseTemplate(tpl, as).ok, false, `a ${as} page cannot be saved with another page’s content`)
+  }
+  for (const t of TEMPLATE_TYPES) assert.equal(parseTemplate(p[t], t).ok, true, t)
+})

@@ -5,7 +5,7 @@ import { isPreviewFor } from '@/lib/preview/server'
 import { PREVIEW_THEME_COOKIE } from '@/lib/preview/rules'
 import { getLiveTheme, getThemeById, type Pages } from '@/lib/theme/data'
 import type { ThemeSettings } from '@/lib/theme/settings'
-import { memoKeyed } from '@/lib/memo'
+import { storeCached } from '@/lib/cache'
 import { readStorefront, type StorefrontContent } from '@/lib/storefront/rules'
 
 /** What every storefront page needs to draw itself: the owner's content plus the store's contact and branding settings. */
@@ -16,9 +16,8 @@ export interface ShopContext {
   trackingEnabled: boolean
 }
 
-/** One light query pair per 15 seconds per store; dashboard edits show on the shop within that time. */
-const load = memoKeyed(15_000, async (key: string): Promise<ShopContext> => {
-  const [storeId, name] = [key.slice(0, key.indexOf('|')), key.slice(key.indexOf('|') + 1)]
+/** Remembered per store (lib/cache.ts) and forgotten the moment anything is saved in the dashboard. */
+const load = storeCached('context', 15, async (storeId, name): Promise<ShopContext> => {
   const [row, s] = await Promise.all([
     db.storefront.findUnique({ where: { storeId }, select: { content: true } }),
     db.storeSettings.findUnique({ where: { storeId }, select: { logoUrl: true, supportPhone: true, supportWhatsapp: true, supportEmail: true, orderTrackingEnabled: true } }),
@@ -36,7 +35,7 @@ const load = memoKeyed(15_000, async (key: string): Promise<ShopContext> => {
  * Worked out once per request.
  */
 export const getShopContext = cache(async (store: { id: string; name: string }): Promise<ShopContext & { theme: ThemeSettings; pages: Pages; draftTheme: boolean }> => {
-  const base = await load(`${store.id}|${store.name}`)
+  const base = await load(store.id, store.name)
   if (await isPreviewFor(store.id)) {
     const wanted = (await cookies()).get(PREVIEW_THEME_COOKIE)?.value
     const draft = wanted ? await getThemeById(store.id, wanted, base.content, store.name) : null

@@ -23,7 +23,7 @@ test('the settings page shows each card once, in its group, and loads only that 
   const src = readFileSync('app/admin/(panel)/settings/page.tsx', 'utf8')
   assert.match(src, /await requireAdmin\('settings\.edit'\)/)
   // Each card (by its title or component) appears exactly once in the page.
-  for (const mark of ['title="Store details"', 'title="Payments and delivery"', 'title="Checkout form"', '<OtpSettings ', 'title="Order tracking"', '<PostexConnect ', '<CourierSettings ', 'title="Product page"', 'title="Photos and videos"', 'title="AI writing assistant"', 'title="Fake-order check"', 'title="IP risk score"']) {
+  for (const mark of ['title="Store details"', 'title="Payments and delivery"', 'title="Checkout form"', '<OtpSettings ', 'title="Order tracking"', '<PostexConnect ', '<CourierSettings ', 'title="Product page options"', 'title="Photos and videos"', 'title="AI writing assistant"', 'title="Fake-order check"', 'title="IP risk score"']) {
     assert.equal(src.split(mark).length - 1, 1, mark)
   }
   // Every save action is still wired to a form.

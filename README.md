@@ -326,6 +326,15 @@ Highlights, Benefits and Collections remain as "classic" sections so existing sh
 
 Run `pnpm db:push` and `pnpm exec prisma generate` (new table `NewsletterSubscriber`, new column `MediaAsset.durationSec`).
 
+### Fix: product and collection page designs were not saved (Nov 2026)
+
+- **Cause:** `saveThemeAction` passed only `home` and `about` to `saveTemplates`; it was written before the product and collection templates existed and was not extended with them. The editor sent all four pages; the server silently dropped two. The editor still said "Saved".
+- **Fix:** the action now saves every kind of page in `TEMPLATE_TYPES` by its own name (no page is named by hand). The editor sends only the pages that changed (marked with a dot on their tab), and the answer names them ("Saved: Product page.").
+- **Isolation:** each page is written to the row of its own kind and checked against that kind's rules, so a page sent under another page's name is refused.
+- **Immediate effect:** the live theme and the shop's header/footer content are now in the store cache, which every save clears, and the whole shop is revalidated (not only `/` and `/about`).
+- **Naming:** Settings, "Product page" is now "Product page options" (switches); the layout lives in Storefront, "Product page".
+- **Tests:** `tests/theme.test.ts` (static guards), plus an end-to-end run of the real action against an in-memory database and a real-browser run of the editor.
+
 ### Speed: caching, pictures, per-shop limits and real measurements (Nov 2026)
 
 Performance is treated as a feature with tests (`tests/cache.test.ts`, `tests/performance.test.ts`).

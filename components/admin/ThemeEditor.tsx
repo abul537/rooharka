@@ -135,6 +135,8 @@ export default function ThemeEditor({ theme, collections, data, sizes, paths }: 
   const [adding, setAdding] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
+  /** The pages changed since the last save. Only these are sent, each under its own name, so saving one page cannot touch another. */
+  const [changed, setChanged] = useState<TemplateType[]>([])
   const [note, setNote] = useState<{ bad: boolean; text: string } | null>(null)
   const [bytes, setBytes] = useState(sizes)
   const [picker, setPicker] = useState<{ kind: 'image' | 'video'; done: (url: string) => void } | null>(null)
@@ -142,7 +144,7 @@ export default function ThemeEditor({ theme, collections, data, sizes, paths }: 
 
   const sections = pages[tab].sections
   const touch = () => { setDirty(true); setNote(null) }
-  const change = (fn: (all: Section[]) => Section[]) => { setPages((p) => ({ ...p, [tab]: { sections: fn(p[tab].sections) } })); touch() }
+  const change = (fn: (all: Section[]) => Section[]) => { setPages((p) => ({ ...p, [tab]: { sections: fn(p[tab].sections) } })); setChanged((c) => (c.includes(tab) ? c : [...c, tab])); touch() }
   const look = (p: Partial<ThemeSettings>) => { setSettings((s) => ({ ...s, ...p })); touch() }
   const current = sections.find((s) => s.id === picked) ?? null
   const def = current ? SECTION_BY_TYPE.get(current.type) ?? null : null
@@ -169,14 +171,15 @@ export default function ThemeEditor({ theme, collections, data, sizes, paths }: 
   const shown: ThemeSettings = customProblem ? { ...settings, customColor: '' } : settings
 
   const send = async () => {
-    const r = await saveThemeAction({ themeId: theme.id, name, settings, pages }).catch(() => ({ error: 'Could not reach the server. Your changes are still on this screen; try again.' }))
+    const sending = changed
+    const r = await saveThemeAction({ themeId: theme.id, name, settings, pages: Object.fromEntries(sending.map((t) => [t, pages[t]])) }).catch(() => ({ error: 'Could not reach the server. Your changes are still on this screen; try again.' }))
     if ('error' in r) { setNote({ bad: true, text: r.error }); return false }
-    setNote({ bad: false, text: r.ok }); setDirty(false)
+    setNote({ bad: false, text: r.ok }); setDirty(false); setChanged((c) => c.filter((t) => !sending.includes(t)))
     return true
   }
   const save = () => startSave(async () => { if (await send()) router.refresh() })
   const publish = () => {
-    if (!window.confirm(`Make “${name}” your live theme? Customers will see it within 15 seconds.`)) return
+    if (!window.confirm(`Make “${name}” your live theme? Customers will see it at once.`)) return
     startSave(async () => {
       if (dirty && !(await send())) return
       const fd = new FormData(); fd.set('themeId', theme.id)
@@ -225,15 +228,15 @@ export default function ThemeEditor({ theme, collections, data, sizes, paths }: 
             : <span className="text-slate-500">Add a {tab} to preview this page.</span>}
           <span className="flex items-center gap-1" aria-hidden>{[shades.c50, shades.c100, shades.c200, shades.c600, shades.c700, shades.c800].map((c) => <span key={c} className="h-5 w-5 rounded border border-slate-200" style={{ background: c }} />)}</span>
           {customProblem ? <span className="text-red-700" role="alert">{customProblem}</span> : settings.customColor ? <button type="button" className="underline" onClick={() => look({ customColor: '' })}>Use a ready colour instead</button> : null}
-          {dirty && <span className="text-amber-700">You have changes that are not saved.</span>}
+          {dirty && <span className="text-amber-700">Not saved yet{changed.length > 0 && `: ${changed.map((t) => TEMPLATE_LABEL[t]).join(', ')}`}.</span>}
           {note && <span role={note.bad ? 'alert' : 'status'} className={note.bad ? 'text-red-700' : 'text-emerald-700'}>{note.text}</span>}
         </div>
       </div>
 
       <nav aria-label="Page to edit" className="flex flex-wrap gap-2">
-        {TEMPLATE_TYPES.map((t) => <button key={t} type="button" onClick={() => openTab(t)} aria-pressed={tab === t} className={`rounded-full px-4 py-1.5 text-sm font-medium ${tab === t ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>{TEMPLATE_LABEL[t]}</button>)}
+        {TEMPLATE_TYPES.map((t) => <button key={t} type="button" onClick={() => openTab(t)} aria-pressed={tab === t} className={`rounded-full px-4 py-1.5 text-sm font-medium ${tab === t ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>{TEMPLATE_LABEL[t]}{changed.includes(t) && <span className="ml-1.5 text-amber-500" title="Has changes that are not saved yet">●</span>}</button>)}
       </nav>
-      {(tab === 'product' || tab === 'collection') && <p className="-mt-1 text-xs text-slate-600">This design is used for <strong>every {tab} page</strong> of your shop. The preview shows one of your own {tab}s as an example; each {tab}’s name, photos, price and text still come from the {tab} itself.</p>}
+      {(tab === 'product' || tab === 'collection') && <p className="-mt-1 text-xs text-slate-600">This is the page a customer lands on when they open a {tab}. The design is used for <strong>every {tab}</strong> of your shop; the preview shows one of your own as an example. Each {tab}’s name, photos, price and text still come from the {tab} itself. To add a banner, pictures, a video or text above or below, press <strong>+ Add section</strong>, then move it with the arrows.</p>}
 
       <div className="grid items-start gap-4 xl:grid-cols-[17rem_minmax(0,1fr)_22rem]">
         <section className="rounded-xl border border-slate-200 bg-white p-4" aria-label={`Sections on the ${TEMPLATE_LABEL[tab].toLowerCase()}`}>
