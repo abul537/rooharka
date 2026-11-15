@@ -17,7 +17,9 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { Card, Check, Field, Group, inputCls, primaryBtn } from '@/components/admin/ui'
 import { SETTINGS_TABS, settingsHref, settingsTab } from '@/lib/admin/settings-tabs'
-import { saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveTrackingAction } from './actions'
+import { FRAUD_LIMITS } from '@/lib/fraud/rules'
+import { loadFraudSettings } from '@/lib/fraud/store'
+import { saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveFraudAction, saveTrackingAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,7 +109,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     </>
   )
   else if (tab === 'checkout' && s && fields && services) {
-    const otp = await loadOtpSettings(admin.storeId)
+    const [otp, fraud] = await Promise.all([loadOtpSettings(admin.storeId), loadFraudSettings(admin.storeId)])
+    const ipqsOn = !!services.get('ipqs')?.enabled
     content = (
       <>
       <Card title="Checkout form" hint="Choose what customers must fill in. Name, mobile number and address are always required so you can deliver and call.">
@@ -130,6 +133,21 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <button className={primaryBtn}>Save checkout form</button>
         </ActionForm>
       </Card>
+      <Card title="Fake-order check" hint="Every cash-on-delivery order is checked within seconds, without asking the customer for a code: the phone number, this buyer’s delivered and refused parcels at every shop on the platform, and how many orders they placed today. You see one result on the order: Clear, Review or Blocked, with the reasons. Held orders get no courier until you approve them.">
+        <ActionForm action={saveFraudAction} className="space-y-5">
+          <Check name="enabled" label="Check every cash-on-delivery order" defaultChecked={fraud.enabled} />
+          <Group title="Limits">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Orders per day from one phone" hint={`More than this in 24 hours (all shops together) is blocked. ${FRAUD_LIMITS.velocityLimit[0]} to ${FRAUD_LIMITS.velocityLimit[1]}.`}><input name="velocityLimit" inputMode="numeric" defaultValue={fraud.velocityLimit} className={inputCls} /></Field>
+              <Field label="Large first order (times your usual)" hint="A first-time buyer ordering more than this many times your average first order is held for review."><input name="firstOrderMultiple" inputMode="numeric" defaultValue={fraud.firstOrderMultiple} className={inputCls} /></Field>
+              <Field label="IP risk score for orders above (Rs.)" hint={ipqsOn ? 'Uses your IPQualityScore account.' : 'Only used after you connect IPQualityScore under Connected services.'}><input name="ipCheckOver" inputMode="numeric" defaultValue={fraud.ipCheckOver} className={inputCls} /></Field>
+            </div>
+          </Group>
+          <p className="text-xs text-slate-500">No automatic check catches every fake order. It stops the obvious ones and shows you where to look; for expensive orders, the “Ask the buyer to confirm on WhatsApp” button on a held order is the surest step.</p>
+          <button className={primaryBtn}>Save fake-order check</button>
+        </ActionForm>
+      </Card>
+
       <OtpSettings otp={otp ?? DEFAULT_OTP_SETTINGS} views={services} />
 
       <Card title="Order tracking" hint="Customers track orders at /track with their tracking code.">
@@ -203,6 +221,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <Card title="AI writing assistant" hint="Adds a “Generate with AI” button to the product description. It uses your own Anthropic account, so you control the cost (a description costs a tiny fraction of a rupee). Limit: 10 descriptions an hour.">
         <div className="space-y-4">
           {SERVICES.filter((d) => d.key === 'ai').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
+        </div>
+      </Card>
+      <Card title="IP risk score" hint="Optional. Adds one more signal to the fake-order check for larger cash-on-delivery orders: whether the buyer hides behind a VPN or proxy, orders from abroad, or uses a connection known for abuse. It uses your own IPQualityScore account, so you control the cost. The order-value limit is under Checkout and orders.">
+        <div className="space-y-4">
+          {SERVICES.filter((d) => d.key === 'ipqs').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
         </div>
       </Card>
       <p className="text-sm text-slate-600">Looking for something else? Your SMS and WhatsApp provider is under <Link href={settingsHref('checkout')} className="underline">Checkout and orders</Link>, and courier accounts are under <Link href={settingsHref('couriers')} className="underline">Couriers</Link>.</p>

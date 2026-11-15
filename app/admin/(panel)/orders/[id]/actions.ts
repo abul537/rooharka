@@ -8,6 +8,9 @@ import { audit } from '@/lib/audit'
 import { AdminError, addShipment, bookShipment, cancelOrder, changeOrderStatus, confirmPayment, rejectPayment } from '@/lib/admin/orders'
 import type { OrderStatus } from '@/lib/admin/order-rules'
 import { syncOrder } from '@/lib/couriers/sync'
+import { approveHeldOrder, verifyOrder } from '@/lib/fraud/verify'
+import { VERDICT_TEXT } from '@/lib/fraud/rules'
+import { rateLimit } from '@/lib/rate-limit'
 import type { ActionState } from '@/components/admin/ActionForm'
 
 const STATUSES = ['CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'RETURNED']
@@ -67,6 +70,31 @@ export async function shipmentAction(_: ActionState, fd: FormData): Promise<Acti
     const r = await addShipment(g.admin, orderId, str(fd, 'courier'), str(fd, 'trackingNo'))
     await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'order.shipment', entity: 'Order', entityId: orderId, after: { courier: r.courier, trackingNo: r.trackingNo } })
     return done(orderId, 'Shipment added; the customer can now see it when tracking.')
+  } catch (e) { return fail(e) }
+}
+
+/**
+ * The fake-order check on one order: "approve" lifts a hold after the owner checked the order themselves (then
+ * the parcel is booked, as it would have been); "recheck" runs the check again with today's history.
+ */
+export async function verificationAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const g = await adminOrError('orders.update'); if ('error' in g) return g
+  const orderId = str(fd, 'orderId'), decision = str(fd, 'decision')
+  try {
+    if (decision === 'approve') {
+      const r = await approveHeldOrder(g.admin, orderId)
+      if (!r) return { error: 'This order is not on hold any more. Refresh the page.' }
+      await audit({ storeId: g.admin.storeId, userId: g.admin.id, action: 'order.verification.approve', entity: 'Order', entityId: orderId, after: { status: 'CLEAR', by: 'owner' } })
+      after(() => autoBookOrder(g.admin.storeId, orderId).catch((e) => console.error('[auto booking] after approval failed', e instanceof Error ? e.message : e)))
+      return done(orderId, `Order #${r.number} is approved and can be fulfilled.`)
+    }
+    if (decision === 'recheck') {
+      if (!rateLimit(`fraud-recheck:${g.admin.id}`, 30, 60_000).ok) return { error: 'Too many checks at once. Please wait a minute.' }
+      const d = await verifyOrder(g.admin.storeId, orderId, { again: true, userId: g.admin.id })
+      if (!d) return { error: 'This order is not checked: only cash-on-delivery orders placed online are, and only while the check is switched on in Settings.' }
+      return done(orderId, `Checked again: ${VERDICT_TEXT[d.status].label}.`)
+    }
+    return { error: 'Invalid choice.' }
   } catch (e) { return fail(e) }
 }
 

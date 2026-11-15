@@ -8,6 +8,8 @@ import { formatPrice } from '@/lib/format'
 import { formatPkt } from '@/lib/admin/dates'
 import { NEXT_STATUSES, label, type OrderStatus } from '@/lib/admin/order-rules'
 import StatusBadge from '@/components/admin/StatusBadge'
+import VerificationCard, { VerificationBadge } from '@/components/admin/VerificationCard'
+import { isHeld } from '@/lib/fraud/rules'
 import ActionForm from '@/components/admin/ActionForm'
 import { courierName, courierOptions, trackingLink } from '@/lib/couriers/config'
 import { loadCourierSetup } from '@/lib/couriers/store'
@@ -20,6 +22,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const admin = await requireAdmin('orders.view')
   const { id } = await params
   const setupPromise = loadCourierSetup(admin.storeId)
+  const shopPromise = db.storeSettings.findUnique({ where: { storeId: admin.storeId }, select: { displayName: true } })
   // Scoped by storeId: another store's order id simply "does not exist".
   const order = await db.order.findFirst({
     where: { id, storeId: admin.storeId },
@@ -30,6 +33,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   })
   if (!order) notFound()
   const { config: courierConfig, connected } = await setupPromise
+  const shop = (await shopPromise)?.displayName ?? 'our shop'
+  const held = isHeld(order)
   const couriers = courierOptions(courierConfig, connected)
 
   const canUpdate = can(admin.role, 'orders.update')
@@ -37,19 +42,20 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const canPay = can(admin.role, 'payments.confirm')
   const pending = order.payments.filter((p) => p.method !== 'COD' && p.status === 'PENDING')
   const next = NEXT_STATUSES[order.status as OrderStatus].filter((s) => s !== 'CANCELLED')
-  const canShip = canUpdate && (order.status === 'PACKED' || order.status === 'SHIPPED') && pending.length === 0
+  const canShip = canUpdate && (order.status === 'PACKED' || order.status === 'SHIPPED') && pending.length === 0 && !held
 
   return (
     <div className="max-w-5xl">
       <Link href="/admin/orders" className="text-sm text-slate-600 underline">← All orders</Link>
       <div className="flex flex-wrap items-center gap-3 mt-2 mb-6">
         <h1 className="text-2xl font-bold">Order #{order.number}</h1>
-        <StatusBadge status={order.status} /><StatusBadge status={order.paymentStatus} />
+        <StatusBadge status={order.status} /><StatusBadge status={order.paymentStatus} /><VerificationBadge status={order.verificationStatus} />
         <span className="text-sm text-slate-500">{formatPkt(order.placedAt)} · Tracking {order.trackingCode}</span>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          <VerificationCard order={{ ...order, total: order.total.toNumber() }} shop={shop} canUpdate={canUpdate} open={['PLACED', 'CONFIRMED', 'PACKED'].includes(order.status)} />
           <section className="rounded-xl bg-white border border-slate-200 p-5">
             <h2 className="font-semibold mb-3">Items</h2>
             <ul className="divide-y divide-slate-100 text-sm">
@@ -182,12 +188,13 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <section className="rounded-xl bg-white border border-slate-200 p-5">
               <h2 className="font-semibold mb-3">Update status</h2>
               {pending.length > 0 && <p className="mb-3 text-sm text-amber-800">Check the advance payment first.</p>}
+              {held && <p className="mb-3 text-sm text-amber-800">Held by the fake-order check. Approve it above first, or cancel it.</p>}
               <div className="space-y-2">
                 {next.map((s) => (
                   <ActionForm key={s} action={statusAction} confirm={s === 'RETURNED' ? 'Mark this order as returned?' : undefined}>
                     <input type="hidden" name="orderId" value={order.id} />
                     <input type="hidden" name="to" value={s} />
-                    <button disabled={pending.length > 0} className={`${btn} w-full bg-slate-900 text-white`}>Mark {label(s).toLowerCase()}</button>
+                    <button disabled={pending.length > 0 || (held && s !== 'RETURNED')} className={`${btn} w-full bg-slate-900 text-white`}>Mark {label(s).toLowerCase()}</button>
                   </ActionForm>
                 ))}
               </div>

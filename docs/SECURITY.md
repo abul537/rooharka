@@ -86,3 +86,11 @@ The rules this platform keeps. Read this before changing sign-in, sign-up, billi
 - Type, unit, minimum and step are read from the database on every save, order and sale, never from the browser; the unit of a measured product cannot be changed after creation (it would silently reprice stock).
 - The server re-checks every quantity (minimum, whole steps, stock, store limit) and re-computes every line total; stock moves in whole base units under a guarded decrement, so overselling is impossible even with two simultaneous buyers.
 - Option text is parsed with strict limits (3 options, 30 values, 100 combinations); generated SKUs use letters and digits only and are made unique per product.
+
+## Fake-order check (cash on delivery)
+
+- Runs on the server after checkout; the browser cannot skip or influence it. Held orders are refused by the courier booking and status functions themselves, not only hidden in the page.
+- The only cross-store queries in the product live in `lib/fraud/network.ts` and return counts and statuses; no names, addresses, totals or items leave a store.
+- The buyer's IP address is used once for the optional risk score and is not stored; only the score, a proxy flag and a country code are kept.
+- The IPQualityScore key is the store's own, encrypted like every other service key, and never logged (the request URL contains it, so the URL is never logged either).
+- An owner's approval of a held order is compare-and-set, written to the order's private history and the audit log.

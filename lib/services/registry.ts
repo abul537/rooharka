@@ -33,6 +33,12 @@ export const SERVICES: ServiceDef[] = [
     config: [],
   },
   {
+    key: 'ipqs', name: 'IPQualityScore (IP risk score)', type: 'FEATURE',
+    description: 'Optional extra for the fake-order check: scores the buyer’s internet connection (VPN, proxy, known abuse, placed from abroad) for larger cash-on-delivery orders. Uses your own IPQualityScore account: create a key at ipqualityscore.com. It has a free monthly allowance; beyond that IPQualityScore bills you.',
+    credentials: [{ name: 'apiKey', label: 'IPQualityScore API key', secret: true, required: true, pattern: /^[A-Za-z0-9]{24,64}$/, patternHint: '24 to 64 letters and digits' }],
+    config: [],
+  },
+  {
     key: 'twilio', name: 'Twilio (SMS and WhatsApp)', type: 'MESSAGING',
     description: 'Sends OTP codes by SMS or WhatsApp from your own Twilio account. Twilio bills you per message.',
     credentials: [

@@ -326,6 +326,27 @@ Highlights, Benefits and Collections remain as "classic" sections so existing sh
 
 Run `pnpm db:push` and `pnpm exec prisma generate` (new table `NewsletterSubscriber`, new column `MediaAsset.durationSec`).
 
+### Fake-order check: automatic verification of cash-on-delivery orders (Nov 2026)
+
+Every online cash-on-delivery order is scored within seconds of checkout, with no code sent to the customer. Code in `lib/fraud/`, tests in `tests/fraud.test.ts`.
+
+| Step | What | Where |
+| --- | --- | --- |
+| 1 | **Phone**: a real Pakistani mobile number, a live network code, not a made-up pattern (0300-0000000, 0300-1234567). No outside service. | `phoneProblem` in `rules.ts` |
+| 2 | **Trust network**: this number's delivered and returned parcels and block-list entries across EVERY store on the platform give a label: trusted / neutral / risky (`Order.fraudRiskLabel`). Counts only; a store never learns which other shop. | `network.ts`, `networkLabel` |
+| 3 | **IP risk score** (optional): for orders above the store's limit (default Rs. 5,000), through the store's OWN IPQualityScore account (`ipqs` service). Stores `riskScore` and `recommendedAction`. | `ip-risk.ts` |
+| 4 | **Speed and history**: more than N cash-on-delivery orders from one phone in 24 hours across the platform; a refused parcel before; the same address returning parcels under another number; a first-time buyer ordering more than 3 times the store's average first order. | `summariseHistory`, `network.ts` |
+| 5 | **One decision** (`Order.verificationStatus`): CLEAR, REVIEW or BLOCK, with reasons in plain words. | `decide` |
+
+- **When:** `app/api/orders/route.ts` runs the check after the customer has their answer, then the courier booking. Prepaid orders and counter sales are not checked.
+- **What a hold does:** REVIEW and BLOCK orders are not booked with a courier (automatic, retry job or button) and cannot be confirmed, packed or shipped (`isHeld` in `lib/couriers/booking.ts` and `lib/admin/orders.ts`) until the owner presses "I checked it: approve" or cancels. A BLOCK also emails the owner (at most 5 an hour per store, when platform email is set up).
+- **Merchant view:** a card on the order page (badge, reasons, approve, check again, "Ask the buyer to confirm on WhatsApp"), a badge and a "Fake-order check" filter on Orders, a banner counting held orders, and the hold shown on Order tracking.
+- **Settings:** Settings, Checkout and orders, "Fake-order check" (on/off, orders per day, first-order multiple, IP check value). IPQualityScore key under Connected services. Stored in `StoreSettings.extra.fraud`.
+- **Partner networks:** SafeShip Pakistan and Munshi Trust Network publish no API for outside platforms (WooCommerce plugin / Shopify app only), so none is connected; `PartnerNetwork` in `network.ts` is the place to add one.
+- **Failure rules:** any part that cannot answer means "no signal", never an error for the customer; an unchecked order is simply not held.
+
+Run `pnpm db:push` and `pnpm exec prisma generate` (new columns on `Order`, two enums, two indexes).
+
 ### Order tracking page (Nov 2026)
 
 `/admin/order-tracking` (menu: "Order tracking", for everyone who may see orders) is the owner's side of the customer's `/track` page.

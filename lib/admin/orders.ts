@@ -1,6 +1,7 @@
 import { formatQuantity, isMeasured } from '@/lib/units/registry'
 import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
+import { HELD_MESSAGE, isHeld } from '@/lib/fraud/rules'
 import { afterPaymentReceived, checkTransition, isValidTrackingNo, label, type OrderStatus } from './order-rules'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { ADAPTERS, type BookingInput } from '@/lib/couriers/adapters'
@@ -34,6 +35,8 @@ export async function changeOrderStatus(admin: Actor, orderId: string, to: Order
   return db.$transaction(async (tx) => {
     const order = await loadOrder(tx, admin, orderId)
     if (to === 'CANCELLED') throw new AdminError('Use “Cancel order” to cancel.')
+    // Held by the fake-order check: it does not move towards the customer until the owner has approved it.
+    if (isHeld(order) && to !== 'RETURNED') throw new AdminError(HELD_MESSAGE)
     const pendingAdvance = order.payments.some((p) => p.method !== 'COD' && p.status === 'PENDING')
     const check = checkTransition(order.status as OrderStatus, to, pendingAdvance)
     if (!check.ok) throw new AdminError(check.reason!)
@@ -165,6 +168,7 @@ export async function addShipment(admin: StoreAdmin, orderId: string, courier: s
       loadOrder(tx, admin, orderId),
       tx.storeSettings.findUnique({ where: { storeId: admin.storeId }, select: { extra: true } }),
     ])
+    if (isHeld(order)) throw new AdminError(HELD_MESSAGE)
     const config = readCourierConfig(settings?.extra)
     // Any courier the store has switched on, or one it used before (so old data keeps working).
     if (!isKnownCourier(config, courier)) throw new AdminError('Choose a courier.')
@@ -208,6 +212,7 @@ export async function bookShipment(admin: StoreAdmin, orderId: string, courier: 
       getServiceSecrets(admin.storeId, courier),
     ])
     if (!order) throw new AdminError('Order not found.')
+    if (isHeld(order)) throw new AdminError(HELD_MESSAGE)
     const config = readCourierConfig(settings?.extra)
     const name = courierName(config, courier)
     if (!config.enabled.includes(courier)) throw new AdminError(`${name} is switched off in Settings.`)

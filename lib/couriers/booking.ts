@@ -6,6 +6,7 @@
  * All three go through `bookOnce`, so none of them can create a second parcel.
  */
 import { db } from '@/lib/db'
+import { HELD_MESSAGE, isHeld } from '@/lib/fraud/rules'
 import { audit } from '@/lib/audit'
 import { toShipmentOrder, type OrderRow } from '@/lib/couriers/shipment-order'
 import { bookOnce, type BookingLedger, type BookOutcome, type Claim } from '@/lib/couriers/idempotent'
@@ -13,7 +14,7 @@ import { getCourierAdapter } from '@/lib/couriers/factory'
 import { STATUS_TEXT } from '@/lib/couriers/contract'
 import { recordCourierResult, withCredentials, isConnected } from '@/lib/couriers/vault'
 
-const orderSelect = { id: true, storeId: true, number: true, status: true, source: true, total: true, amountPaid: true, customerName: true, customerEmail: true, customerPhone: true, cityName: true, landmark: true, localityName: true, payments: { select: { method: true, status: true } }, items: { select: { name: true, variantLabel: true, quantity: true, unitCode: true } } } as const
+const orderSelect = { id: true, storeId: true, number: true, status: true, verificationStatus: true, source: true, total: true, amountPaid: true, customerName: true, customerEmail: true, customerPhone: true, cityName: true, landmark: true, localityName: true, payments: { select: { method: true, status: true } }, items: { select: { name: true, variantLabel: true, quantity: true, unitCode: true } } } as const
 
 function ledgerFor(order: OrderRow, provider: string): BookingLedger {
   return {
@@ -47,6 +48,8 @@ export async function bookOrderWithCourier(storeId: string, orderId: string, pro
   const order = await db.order.findFirst({ where: { id: orderId, storeId }, select: orderSelect })
   if (!order) return { status: 'failed', kind: 'rejected', message: 'Order not found.' }
   if (['CANCELLED', 'RETURNED', 'DELIVERED'].includes(order.status)) return { status: 'skipped', reason: 'This order is closed.' }
+  // Held by the fake-order check: no parcel is booked (automatically, by the retry job or by a button) until the owner approves it.
+  if (isHeld(order)) return { status: 'skipped', reason: HELD_MESSAGE }
   if (order.payments.some((p: { method: string; status: string }) => p.method !== 'COD' && p.status === 'PENDING')) return { status: 'skipped', reason: 'Waiting for the advance payment to be confirmed.' }
 
   const adapter = getCourierAdapter(provider)

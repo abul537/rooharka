@@ -11,12 +11,17 @@ export const ORDER_STATUSES = ['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_
 export const PAY_FILTERS = ['pending', 'unpaid', 'partly', 'paid'] as const
 export const PAY_LABEL: Record<(typeof PAY_FILTERS)[number], string> = { pending: 'Advance to check', unpaid: 'Unpaid', partly: 'Partly paid', paid: 'Paid' }
 export const SOURCE_FILTERS = ['online', 'counter'] as const
+/** The fake-order check: held = review or blocked (everything waiting for the owner). */
+export const CHECK_FILTERS = ['held', 'review', 'block', 'clear'] as const
+export const CHECK_LABEL: Record<(typeof CHECK_FILTERS)[number], string> = { held: 'Held (review or blocked)', review: 'Review', block: 'Blocked', clear: 'Clear' }
+export const CHECK_WHERE: Record<(typeof CHECK_FILTERS)[number], { in: string[] }> = { held: { in: ['REVIEW', 'BLOCK'] }, review: { in: ['REVIEW'] }, block: { in: ['BLOCK'] }, clear: { in: ['CLEAR'] } }
 export const WHEN_FILTERS = ['today', '7d', '30d'] as const
 export const WHEN_LABEL: Record<(typeof WHEN_FILTERS)[number], string> = { today: 'Today', '7d': 'Last 7 days', '30d': 'Last 30 days' }
 
 export interface OrderQuery {
   q: string; status: OrderStatus | null; pay: (typeof PAY_FILTERS)[number] | null; source: (typeof SOURCE_FILTERS)[number] | null
   when: (typeof WHEN_FILTERS)[number] | null; from: string | null; to: string | null; page: number
+  check: (typeof CHECK_FILTERS)[number] | null
 }
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v ?? '').trim()
 const pick = <T extends string>(list: readonly T[], v: string): T | null => list.find((x) => x === v) ?? null
@@ -35,7 +40,7 @@ export function parseOrderQuery(sp: Record<string, string | string[] | undefined
   const when = from || to ? null : pick(WHEN_FILTERS, one(sp.when)) // exact dates win over a shortcut
   return {
     q: one(sp.q).slice(0, 60), status: pick(ORDER_STATUSES, one(sp.status).toUpperCase()), pay: pick(PAY_FILTERS, one(sp.pay)), source: pick(SOURCE_FILTERS, one(sp.source)),
-    when, from, to, page: Number.isInteger(page) && page >= 1 && page <= 10_000 ? page : 1,
+    when, from, to, page: Number.isInteger(page) && page >= 1 && page <= 10_000 ? page : 1, check: pick(CHECK_FILTERS, one(sp.check)),
   }
 }
 
@@ -47,11 +52,11 @@ export function orderDates(q: OrderQuery, now = new Date()): { gte?: Date; lt?: 
   return { ...(q.from ? { gte: start(q.from) } : {}), ...(q.to ? { lt: new Date(start(q.to).getTime() + 86_400_000) } : {}) }
 }
 
-export const hasOrderFilters = (q: OrderQuery) => !!(q.q || q.status || q.pay || q.source || q.when || q.from || q.to)
+export const hasOrderFilters = (q: OrderQuery) => !!(q.q || q.status || q.pay || q.source || q.when || q.from || q.to || q.check)
 
 /** The same filters as an address, with some changed. Changing a filter returns to page 1. */
-export function orderHref(q: OrderQuery, change: Partial<Record<'q' | 'status' | 'pay' | 'source' | 'when' | 'from' | 'to' | 'page', string | number | null>> = {}): string {
-  const base: Record<string, string | number | null> = { q: q.q || null, status: q.status, pay: q.pay, source: q.source, when: q.when, from: q.from, to: q.to, page: q.page }
+export function orderHref(q: OrderQuery, change: Partial<Record<'q' | 'status' | 'pay' | 'source' | 'when' | 'from' | 'to' | 'page' | 'check', string | number | null>> = {}): string {
+  const base: Record<string, string | number | null> = { q: q.q || null, status: q.status, pay: q.pay, source: q.source, when: q.when, from: q.from, to: q.to, check: q.check, page: q.page }
   const merged = { ...base, ...('page' in change ? {} : { page: null }), ...change }
   const sp = new URLSearchParams()
   for (const [k, v] of Object.entries(merged)) if (v !== null && v !== '' && !(k === 'page' && Number(v) === 1)) sp.set(k, String(v))

@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { after, NextResponse } from 'next/server'
 import { autoBookByNumber } from '@/lib/couriers/booking'
+import { verifyByNumber } from '@/lib/fraud/verify'
 import { isPhoneVerified, otpCookieName, otpCookieOptions } from '@/lib/otp/service'
 import { getCurrentStore } from '@/lib/store'
 import { isPreviewFor } from '@/lib/preview/server'
@@ -58,7 +59,8 @@ export async function POST(request: Request) {
 
     const order = await createOrder(config, parsed.value, { ip })
     // Courier booking happens AFTER the customer has their answer, so a slow courier never delays or breaks checkout.
-    after(() => autoBookByNumber(store.id, order.number))
+    // FIRST the fake-order check (it decides whether the parcel may be booked at all), THEN the booking.
+    after(async () => { await verifyByNumber(store.id, order.number, ip); await autoBookByNumber(store.id, order.number) })
     const res = NextResponse.json(order, { status: 201 })
     // One verification covers one order: the next purchase asks again.
     if (config.phoneVerification) res.cookies.set(otpCookieName(), '', { ...otpCookieOptions(), maxAge: 0 })

@@ -26,6 +26,14 @@ export async function testConnection(key: string, c: SavedFields, config: SavedF
       if (r.ok) return { ok: true, message: 'Connected to Twilio.' }
       return { ok: false, error: r.status === 401 ? 'Twilio rejected the Account SID or Auth token.' : `Twilio answered with an error (${r.status}).` }
     }
+    case 'ipqs': {
+      // A well-known public address (Google DNS): one lookup, to prove the key is accepted.
+      const r = await call(f, `https://www.ipqualityscore.com/api/json/ip/${encodeURIComponent(c.apiKey)}/8.8.8.8?strictness=0`, {})
+      if (isResult(r)) return r
+      const body = (await r.json().catch(() => null)) as { success?: unknown; message?: unknown } | null
+      if (r.ok && body?.success === true) return { ok: true, message: 'Connected to IPQualityScore.' }
+      return { ok: false, error: 'IPQualityScore did not accept this key. Copy it again from your IPQualityScore dashboard.' }
+    }
     case 'leopards':
       return ADAPTERS[key].check(c, config, f) // read-only: nothing is booked
     default:

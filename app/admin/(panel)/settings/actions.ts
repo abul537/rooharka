@@ -11,6 +11,8 @@ import { parseOtpSettings, resolveProvider } from '@/lib/otp/rules'
 import { saveOtpSettings, sendTestMessage } from '@/lib/otp/service'
 import { loadServiceViews } from '@/lib/services/store-services'
 import { rateLimit } from '@/lib/rate-limit'
+import { parseFraudForm } from '@/lib/fraud/rules'
+import { saveFraudSettings } from '@/lib/fraud/store'
 import type { ActionState } from '@/components/admin/ActionForm'
 
 /** Same pipeline for every section: permission -> validate -> save -> audit -> refresh pages. */
@@ -54,6 +56,9 @@ export async function saveTrackingAction(_: ActionState, fd: FormData): Promise<
 }
 export async function saveProductPageAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run('product-page', fd, rules.parseProductPage, svc.saveProductPage, ['/admin/settings', '/product'], 'Product page saved.')
+}
+export async function saveFraudAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('fraud', fd, (f) => parseFraudForm((k) => f.get(k)), saveFraudSettings, ['/admin/settings'], 'Fake-order check saved. It applies to the next order.')
 }
 export async function saveCouriersAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run('couriers', fd, parseCourierForm, saveCourierConfig, ['/admin/settings', '/admin/orders'], 'Couriers saved. They are available on the order page now.')

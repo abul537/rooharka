@@ -6,9 +6,9 @@ import {
 import { NEXT_STATUSES } from '@/lib/admin/order-rules'
 
 test('order filters: read from the address, strange values dropped', () => {
-  assert.deepEqual(parseOrderQuery({}), { q: '', status: null, pay: null, source: null, when: null, from: null, to: null, page: 1 })
+  assert.deepEqual(parseOrderQuery({}), { q: '', status: null, pay: null, source: null, when: null, from: null, to: null, page: 1, check: null })
   const q = parseOrderQuery({ q: ' 0300 ', status: 'placed', pay: 'paid', source: 'counter', when: '7d', page: '2' })
-  assert.deepEqual(q, { q: '0300', status: 'PLACED', pay: 'paid', source: 'counter', when: '7d', from: null, to: null, page: 2 })
+  assert.deepEqual(q, { q: '0300', status: 'PLACED', pay: 'paid', source: 'counter', when: '7d', from: null, to: null, page: 2, check: null })
   assert.deepEqual(parseOrderQuery({ status: 'HACK', pay: "x' OR 1=1", source: 'web', when: 'year', from: '2026-13-40', to: 'yesterday', page: '0' }), parseOrderQuery({}))
   assert.ok(hasOrderFilters(q)); assert.ok(!hasOrderFilters(parseOrderQuery({ page: '3' })))
 })

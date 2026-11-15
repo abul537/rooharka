@@ -6,6 +6,8 @@ import { NEXT_STATUSES, label, type OrderStatus } from '@/lib/admin/order-rules'
 import { STAGE_TODO, TRACK_ACTIVE, stageSince, TRACK_DONE, TRACK_PAGE_SIZE, isLate, trackHref, trackSearch, trackStage, waited, whatsappUpdate, type TrackStage } from '@/lib/admin/order-tracking'
 import { formatPkt } from '@/lib/admin/dates'
 import StatusBadge from '@/components/admin/StatusBadge'
+import { VerificationBadge } from '@/components/admin/VerificationCard'
+import { isHeld } from '@/lib/fraud/rules'
 import TrackingActions from '@/components/admin/TrackingActions'
 import { inputCls } from '@/components/admin/ui'
 
@@ -36,7 +38,7 @@ export default async function OrderTrackingPage({ searchParams }: { searchParams
       // Work in progress: the order that has waited longest comes first. Finished orders: the newest first.
       orderBy: { updatedAt: done || q ? 'desc' : 'asc' }, take: TRACK_PAGE_SIZE,
       select: {
-        id: true, number: true, trackingCode: true, status: true, paymentStatus: true, customerName: true, customerPhone: true, cityName: true, total: true, amountDue: true, placedAt: true,
+        id: true, number: true, trackingCode: true, status: true, paymentStatus: true, verificationStatus: true, customerName: true, customerPhone: true, cityName: true, total: true, amountDue: true, placedAt: true,
         payments: { where: { method: { not: 'COD' }, status: 'PENDING' }, select: { id: true }, take: 1 },
         shipments: { orderBy: { bookedAt: 'desc' }, take: 1, select: { courier: true, courierTrackingNo: true } },
         history: { where: { isPublic: true }, orderBy: { createdAt: 'desc' }, take: 6, select: { note: true, status: true, createdAt: true } },
@@ -90,7 +92,7 @@ export default async function OrderTrackingPage({ searchParams }: { searchParams
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Link href={`/admin/orders/${o.id}`} className="text-lg font-semibold underline-offset-2 hover:underline">#{o.number}</Link>
-                    <StatusBadge status={o.status} /><StatusBadge status={o.paymentStatus} />
+                    <StatusBadge status={o.status} /><StatusBadge status={o.paymentStatus} />{o.verificationStatus !== 'CLEAR' && <VerificationBadge status={o.verificationStatus} />}
                     {late && <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900">Waiting {waited(since, now)}</span>}
                   </div>
                   <p className="text-sm text-slate-700">{o.customerName} · {o.cityName} · <a href={`tel:${o.customerPhone}`} className="underline">{o.customerPhone}</a></p>
@@ -104,7 +106,7 @@ export default async function OrderTrackingPage({ searchParams }: { searchParams
                 </div>
                 <div className="min-w-0 space-y-3">
                   {canUpdate && !(next.length === 0)
-                    ? <TrackingActions orderId={o.id} number={o.number} next={next} blocked={o.payments.length > 0 ? 'The customer’s advance payment is waiting to be checked. Open the order to confirm or reject it first.' : null} />
+                    ? <TrackingActions orderId={o.id} number={o.number} next={next} blocked={isHeld(o) && o.status !== 'DELIVERED' ? 'Held by the fake-order check. Open the order, read the reasons, then approve or cancel it.' : o.payments.length > 0 ? 'The customer’s advance payment is waiting to be checked. Open the order to confirm or reject it first.' : null} />
                     : next.length === 0 ? <p className="text-sm text-slate-500">This order is finished; its step cannot change any more.</p> : <p className="text-sm text-slate-500">You can view orders but not change them.</p>}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
                     <Link href={`/admin/orders/${o.id}`} className="underline">Open order{NEXT_STATUSES[o.status as OrderStatus].includes('CANCELLED') ? ' (or cancel)' : ''}</Link>

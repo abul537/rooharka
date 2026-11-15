@@ -6,8 +6,9 @@ import { db } from '@/lib/db'
 import { formatPrice } from '@/lib/format'
 import { formatPkt } from '@/lib/admin/dates'
 import { label } from '@/lib/admin/order-rules'
-import { ORDER_PAGE_SIZE, ORDER_STATUSES, PAY_FILTERS, PAY_LABEL, WHEN_FILTERS, WHEN_LABEL, hasOrderFilters, orderDates, orderHref, parseOrderQuery } from '@/lib/admin/order-list'
+import { CHECK_FILTERS, CHECK_LABEL, CHECK_WHERE, ORDER_PAGE_SIZE, ORDER_STATUSES, PAY_FILTERS, PAY_LABEL, WHEN_FILTERS, WHEN_LABEL, hasOrderFilters, orderDates, orderHref, parseOrderQuery } from '@/lib/admin/order-list'
 import StatusBadge from '@/components/admin/StatusBadge'
+import { VerificationBadge } from '@/components/admin/VerificationCard'
 import OrderBulkBar from '@/components/admin/OrderBulkBar'
 import { inputCls } from '@/components/admin/ui'
 
@@ -25,6 +26,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   if (q.pay === 'pending') where.payments = { some: { status: 'PENDING', method: { not: 'COD' } } }
   else if (q.pay) where.paymentStatus = PAY_WHERE[q.pay]
   if (q.source) where.source = q.source === 'counter' ? 'POS' : 'ONLINE'
+  if (q.check) where.verificationStatus = CHECK_WHERE[q.check]
   const dates = orderDates(q)
   if (dates) where.placedAt = dates
   if (q.q) where.OR = [
@@ -32,11 +34,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     { customerName: { contains: q.q, mode: 'insensitive' } }, { customerPhone: { contains: q.q.replace(/[^\d+]/g, '') || q.q } },
   ]
 
-  const [total, orders, counts] = await Promise.all([
+  const [total, orders, counts, heldCount] = await Promise.all([
     db.order.count({ where }),
     db.order.findMany({ where, orderBy: { placedAt: 'desc' }, skip: (q.page - 1) * ORDER_PAGE_SIZE, take: ORDER_PAGE_SIZE,
-      select: { id: true, number: true, customerName: true, cityName: true, total: true, status: true, paymentStatus: true, placedAt: true, source: true, _count: { select: { items: true } } } }),
+      select: { id: true, number: true, customerName: true, cityName: true, total: true, status: true, paymentStatus: true, placedAt: true, source: true, verificationStatus: true, _count: { select: { items: true } } } }),
     db.order.groupBy({ by: ['status'], where: { storeId: admin.storeId }, _count: { _all: true } }),
+    // Orders the fake-order check is holding and that still wait for the owner's decision.
+    db.order.count({ where: { storeId: admin.storeId, verificationStatus: { in: ['REVIEW', 'BLOCK'] }, status: { in: ['PLACED', 'CONFIRMED', 'PACKED'] } } }),
   ])
   const pages = Math.max(1, Math.ceil(total / ORDER_PAGE_SIZE))
   const byStatus = new Map((counts as { status: string; _count: { _all: number } }[]).map((c) => [c.status, c._count._all]))
@@ -44,6 +48,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   return (
     <div className="max-w-6xl">
       <h1 className="text-2xl font-bold mb-4">Orders</h1>
+      {heldCount > 0 && q.check !== 'held' && (
+        <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span aria-hidden>⚠️ </span>{heldCount} order{heldCount === 1 ? ' is' : 's are'} held by the fake-order check and waiting for you. <Link href="/admin/orders?check=held" className="font-medium underline">Show {heldCount === 1 ? 'it' : 'them'}</Link></p>
+      )}
 
       <div className="flex gap-2 overflow-x-auto mb-3 text-sm">
         <Link href={orderHref(q, { status: null })} className={pill(!q.status)}>All</Link>
@@ -51,9 +58,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       </div>
 
       {/* A plain GET form: the filters live in the address, so a filtered list can be bookmarked or sent to a colleague. */}
-      <form method="get" action="/admin/orders" role="search" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] mb-3 items-end">
+      <form method="get" action="/admin/orders" role="search" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] mb-3 items-end">
         {q.status && <input type="hidden" name="status" value={q.status} />}
         <label className="text-xs text-slate-500">Search<input name="q" defaultValue={q.q} maxLength={60} placeholder="Order no., name, phone, tracking code" className={`${inputCls} mt-1`} /></label>
+        <label className="text-xs text-slate-500">Fake-order check<select name="check" defaultValue={q.check ?? ''} className={`${inputCls} mt-1`}><option value="">Any</option>{CHECK_FILTERS.map((c) => <option key={c} value={c}>{CHECK_LABEL[c]}</option>)}</select></label>
         <label className="text-xs text-slate-500">Payment<select name="pay" defaultValue={q.pay ?? ''} className={`${inputCls} mt-1`}><option value="">Any</option>{PAY_FILTERS.map((p) => <option key={p} value={p}>{PAY_LABEL[p]}</option>)}</select></label>
         <label className="text-xs text-slate-500">Sold<select name="source" defaultValue={q.source ?? ''} className={`${inputCls} mt-1`}><option value="">Online and counter</option><option value="online">Online</option><option value="counter">At the counter (POS)</option></select></label>
         <label className="text-xs text-slate-500">When<select name="when" defaultValue={q.when ?? ''} className={`${inputCls} mt-1`}><option value="">Any time</option>{WHEN_FILTERS.map((w) => <option key={w} value={w}>{WHEN_LABEL[w]}</option>)}</select></label>
@@ -79,7 +87,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   <td className="p-3">{o.customerName}<span className="block text-xs text-slate-500">{o.cityName}</span></td>
                   <td className="p-3">{o._count.items}</td>
                   <td className="p-3 whitespace-nowrap">{formatPrice(o.total.toNumber())}</td>
-                  <td className="p-3"><StatusBadge status={o.status} /></td>
+                  <td className="p-3"><StatusBadge status={o.status} />{o.verificationStatus && o.verificationStatus !== 'CLEAR' && <span className="mt-1 block"><VerificationBadge status={o.verificationStatus} /></span>}</td>
                   <td className="p-3"><StatusBadge status={o.paymentStatus} /></td>
                   <td className="p-3 whitespace-nowrap text-slate-600">{formatPkt(o.placedAt)}</td>
                 </tr>

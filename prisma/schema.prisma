@@ -92,6 +92,20 @@ enum MediaKind {
   VIDEO
 }
 
+/// What the trust network knows about a buyer's phone number (delivered / refused history across the platform).
+enum FraudRiskLabel {
+  TRUSTED
+  NEUTRAL
+  RISKY
+}
+
+/// The automatic decision on a cash-on-delivery order before dispatch.
+enum VerificationStatus {
+  CLEAR
+  REVIEW
+  BLOCK
+}
+
 enum OrderStatus {
   PLACED
   CONFIRMED
@@ -1086,6 +1100,20 @@ model Order {
   cancelledReason String?
   source        OrderSource @default(ONLINE)
   soldById      String?     // the staff member who rang up a POS sale
+
+  // Fake-order check (cash-on-delivery orders only; empty for prepaid and counter sales)
+  fraudRiskLabel       FraudRiskLabel?
+  verificationStatus   VerificationStatus?
+  /// 0 to 100 from the IP risk service, when it was asked (orders above the store's value limit).
+  riskScore            Int?
+  /// What that score means: allow / review / block.
+  recommendedAction    String?
+  /// The reasons and the numbers behind the decision, shown to the store owner.
+  verification         Json?
+  verifiedAt           DateTime?
+  /// Set when the owner approved a held order after checking it themselves.
+  verificationOverrideBy String?
+  verificationOverrideAt DateTime?
   placedAt      DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1100,6 +1128,8 @@ model Order {
   @@index([storeId, status, placedAt])
   @@index([storeId, source, placedAt])
   @@index([customerId])
+  @@index([customerPhone, placedAt])
+  @@index([storeId, verificationStatus])
 }
 
 model OrderItem {
