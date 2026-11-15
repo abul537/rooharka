@@ -99,3 +99,15 @@ test('photos are made light in the browser before upload', () => {
   const src = readFileSync('lib/media/shrink.ts', 'utf8')
   assert.match(src, /catch \{ return file \}/, 'any failure means: upload the original'); assert.match(src, /blob\.size >= file\.size \* 0\.9\) return file/)
 })
+
+test('bundle-size gate: growth past the budget fails, in plain words', async () => {
+  const { checkBudget } = await import('../lib/bundle-budget.ts')
+  const f = (file: string, kb: number) => ({ file, gzipBytes: kb * 1024 })
+  assert.deepEqual(checkBudget([f('a.js', 100), f('b.js', 50)]), { ok: true, totalKb: 150, largest: { file: 'a.js', kb: 100 }, problems: [] })
+  const big = checkBudget([f('a.js', 300), f('b.js', 50)])
+  assert.equal(big.ok, false); assert.match(big.problems[0], /largest file, a\.js, is 300 KB/)
+  const many = checkBudget(Array.from({ length: 20 }, (_, i) => f(`c${i}.js`, 100)))
+  assert.equal(many.ok, false); assert.match(many.problems[0], /together is 2000 KB/)
+  assert.equal(checkBudget([]).ok, false)
+  assert.match(readFileSync('.github/workflows/ci.yml', 'utf8'), /pnpm bundle:check/)
+})

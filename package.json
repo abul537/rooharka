@@ -19,6 +19,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:new": "prisma migrate dev --create-only",
     "typecheck": "tsc --noEmit",
+    "bundle:check": "node --experimental-strip-types scripts/bundle-budget.mjs",
     "check": "prisma validate && tsc --noEmit && pnpm test"
   },
   "dependencies": {

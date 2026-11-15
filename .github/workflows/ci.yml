@@ -34,5 +34,9 @@ jobs:
       - name: Build
         # Building needs no live database for the shop pages, but if a page ever does, this step shows it
         # without blocking the checks above. Remove "continue-on-error" once the first run is green.
+        id: build
         continue-on-error: true
         run: pnpm build
+      - name: Bundle size (fails when the JavaScript customers download grows past the budget)
+        if: steps.build.outcome == 'success'
+        run: pnpm bundle:check
