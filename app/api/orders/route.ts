@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { after, NextResponse } from 'next/server'
 import { autoBookByNumber } from '@/lib/couriers/booking'
 import { verifyByNumber } from '@/lib/fraud/verify'
+import { invalidateStore } from '@/lib/cache'
 import { isPhoneVerified, otpCookieName, otpCookieOptions } from '@/lib/otp/service'
 import { getCurrentStore } from '@/lib/store'
 import { isPreviewFor } from '@/lib/preview/server'
@@ -9,7 +10,7 @@ import { PREVIEW_NO_ORDERS } from '@/lib/preview/rules'
 import { getCheckoutConfig } from '@/lib/data/checkout'
 import { validateOrderRequest } from '@/lib/orders/validate'
 import { createOrder, OrderError } from '@/lib/orders/create-order'
-import { clientIp, rateLimit } from '@/lib/rate-limit'
+import { clientIp, rateLimit, storeLimit } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +43,8 @@ export async function POST(request: Request) {
     if (!store) return NextResponse.json({ error: 'This store is not available.' }, { status: 404 })
     // A preview is for LOOKING: it never creates a real order (it may show drafts, or a shop that is not open yet).
     if (await isPreviewFor(store.id)) return NextResponse.json({ error: PREVIEW_NO_ORDERS }, { status: 403 })
+    // One shop's flood must not take the checkout of every other shop down with it.
+    if (!storeLimit(store.id, 'orders').ok) return NextResponse.json({ error: 'The shop is very busy right now. Please try again in a minute.' }, { status: 429, headers: { 'Retry-After': '60' } })
 
     const config = await getCheckoutConfig(store)
     const parsed = validateOrderRequest(body, config.fields)
@@ -60,7 +63,8 @@ export async function POST(request: Request) {
     const order = await createOrder(config, parsed.value, { ip })
     // Courier booking happens AFTER the customer has their answer, so a slow courier never delays or breaks checkout.
     // FIRST the fake-order check (it decides whether the parcel may be booked at all), THEN the booking.
-    after(async () => { await verifyByNumber(store.id, order.number, ip); await autoBookByNumber(store.id, order.number) })
+    // The order changed the stock, so the shop's remembered pages are refreshed.
+    after(async () => { await invalidateStore(store.id); await verifyByNumber(store.id, order.number, ip); await autoBookByNumber(store.id, order.number) })
     const res = NextResponse.json(order, { status: 201 })
     // One verification covers one order: the next purchase asks again.
     if (config.phoneVerification) res.cookies.set(otpCookieName(), '', { ...otpCookieOptions(), maxAge: 0 })

@@ -3,6 +3,7 @@ import { isPreviewFor } from '@/lib/preview/server'
 import { visibleStatuses } from '@/lib/preview/rules'
 import { readOptionGroups, readOptionValues } from '@/lib/variants/rules'
 import { cache } from 'react'
+import { storeCached } from '@/lib/cache'
 import { db } from '@/lib/db'
 import { getCurrentStore } from '@/lib/store'
 
@@ -173,9 +174,21 @@ const dec = (d: { toNumber(): number }) => d.toNumber()
 /** Loads one ACTIVE product of the current store with everything the page shows. */
 export const getProductPageData = cache(async (slug: string): Promise<ProductPageData | null> => {
   const store = await getCurrentStore()
-  if (!store) return null
-  return loadProductPage(store, slug, await isPreviewFor(store.id))
+  if (!store || !/^[a-z0-9-]{1,120}$/.test(slug)) return null
+  // The owner's preview (drafts included) is always loaded fresh and never stored.
+  if (await isPreviewFor(store.id)) return loadProductPage(store, slug, true)
+  const page = await cachedProductPage(store.id, slug)
+  // The shop's name and currency come from the request, not the cache, so a rename shows at once.
+  return page && { ...page, store: { id: store.id, name: store.name, slug: store.slug, currency: store.currency } }
 })
+
+/**
+ * What customers see of one product, remembered for five minutes per store and slug (lib/cache.ts) and cleared
+ * the moment the owner changes anything or an order changes the stock. A product that does not exist is
+ * remembered too (as null), so a flood of made-up addresses cannot hammer the database.
+ */
+const cachedProductPage = storeCached('product', 300, (storeId, slug): Promise<ProductPageData | null> =>
+  loadProductPage({ id: storeId, name: '', slug: '', currency: 'PKR' }, slug, false)) // the caller fills in the shop's name and currency
 
 /**
  * One product of the store GIVEN, with everything its page shows. The shop uses it for the store of the address

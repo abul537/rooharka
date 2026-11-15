@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import ActionForm from '@/components/admin/ActionForm'
 import { inputCls } from '@/components/admin/ui'
 import { classifyFile } from '@/lib/media/constants'
+import { shrinkImage } from '@/lib/media/shrink'
 import { imageVariant, videoPoster } from '@/lib/media/urls'
 import {
   addExternalMediaAction, altMediaAction, attachUploadedMediaAction, moveMediaAction, primaryMediaAction, removeMediaAction, reorderMediaAction, signMediaUploadAction,
@@ -58,7 +59,8 @@ export default function MediaManager({ productId, items, cloudReady, maxItems, v
   }
   const patch = (i: number, j: Partial<Job>) => setJobs((all) => all.map((x, k) => (k === i ? { ...x, ...j } : x)))
 
-  async function uploadOne(file: File, i: number) {
+  async function uploadOne(original: File, i: number) {
+    const file = await shrinkImage(original) // a big photo is made light first; anything else passes through unchanged
     const check = classifyFile(file.name, file.size)
     if (!check.ok) return patch(i, { error: check.error })
     if (check.type === 'video' && file.size > videoMaxMb * 1024 * 1024) return patch(i, { error: `${file.name}: videos can be at most ${videoMaxMb} MB on your plan.` })

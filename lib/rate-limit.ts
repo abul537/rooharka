@@ -25,3 +25,11 @@ export function rateLimit(key: string, limit: number, windowMs: number) {
 export function clientIp(headers: Headers): string {
   return headers.get('x-forwarded-for')?.split(',')[0]?.trim() || headers.get('x-real-ip') || 'unknown'
 }
+
+/**
+ * A limit PER SHOP, on top of the per-visitor ones. It is there for the other shops: if one shop's traffic (or a
+ * script pointed at it) goes wild, it runs into its own ceiling instead of using up the server and the database
+ * that every shop shares. The ceilings are far above anything a real shop does in a minute.
+ */
+export const STORE_LIMITS = { orders: 300, visits: 3000, speed: 600, newsletter: 60, export: 6 } as const
+export const storeLimit = (storeId: string, what: keyof typeof STORE_LIMITS) => rateLimit(`store:${what}:${storeId}`, STORE_LIMITS[what], 60_000)

@@ -2,16 +2,16 @@ import { cache } from 'react'
 import { db } from '@/lib/db'
 import { isPreviewFor } from '@/lib/preview/server'
 import { visibleStatuses } from '@/lib/preview/rules'
-import { memoKeyed } from '@/lib/memo'
+import { storeCached } from '@/lib/cache'
 import type { CatalogItem } from '@/lib/catalog'
 import { perUnit } from '@/lib/units/registry'
 
 export interface CatalogCategory { slug: string; name: string; count: number }
 
 /**
- * Every live product of a store as light plain objects, remembered for 15 seconds. Search, filtering, sorting and
- * paging then happen in memory (instant, no database trip per click). New products and price changes show within
- * 15 seconds; the product page itself is always live.
+ * Every live product of a store as light plain objects, remembered for a minute (lib/cache.ts). Search, filtering,
+ * sorting and paging then happen in memory (instant, no database trip per click). A change in the dashboard or a
+ * new order clears it at once; otherwise it is at most a minute old.
  */
 async function buildCatalog(storeId: string, preview: boolean) {
   const [products, ratings, cats] = await Promise.all([
@@ -53,8 +53,8 @@ async function buildCatalog(storeId: string, preview: boolean) {
   return { items, categories }
 }
 
-// The PUBLIC catalogue (live products only) is remembered for 15 seconds and shared by all visitors.
-const loadCatalog = memoKeyed(15_000, (storeId: string) => buildCatalog(storeId, false))
+// The PUBLIC catalogue (live products only) is remembered for a minute and shared by all visitors.
+const loadCatalog = storeCached('catalog', 60, (storeId) => buildCatalog(storeId, false))
 // A PREVIEW catalogue (live + draft) is built fresh for the owner's own request and is never put in the shared memory,
 // so a draft can never leak to a customer through a cache.
 const loadPreviewCatalog = cache((storeId: string) => buildCatalog(storeId, true))

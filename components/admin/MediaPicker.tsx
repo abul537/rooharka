@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { themeMediaListAction, themeMediaSaveAction, themeMediaSignAction, themeVideoApproveAction } from '@/app/admin/(panel)/storefront/media-actions'
 import type { LibraryItem } from '@/lib/theme/media'
 import { classifyFile } from '@/lib/media/constants'
+import { shrinkImage } from '@/lib/media/shrink'
 import { imageVariant, videoPoster } from '@/lib/media/urls'
 import { VIDEO_MAX_BYTES, VIDEO_MAX_SECONDS } from '@/lib/theme/schema'
 import { inputCls, primaryBtn } from '@/components/admin/ui'
@@ -57,9 +58,10 @@ export default function MediaPicker({ kind, onPick, onClose }: { kind: 'image' |
     return () => { live = false; window.removeEventListener('keydown', esc) }
   }, [video]) // the library is fetched once per opening
 
-  async function upload(file: File | undefined) {
-    if (!file) return
+  async function upload(original: File | undefined) {
+    if (!original) return
     setNote(null)
+    const file = await shrinkImage(original) // a big photo is made light first; videos pass through unchanged
     const check = classifyFile(file.name, file.size)
     if (!check.ok) return setNote(check.error)
     if (check.type !== kind) return setNote(video ? 'Choose a video file (MP4 or WebM).' : 'Choose a picture file (JPG, PNG or WebP).')

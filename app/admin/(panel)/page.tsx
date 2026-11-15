@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth/guard'
 import { getOverview } from '@/lib/admin/stats'
+import SpeedCard from '@/components/admin/SpeedCard'
 import { PERIODS, PERIOD_LABEL, PREVIOUS_LABEL, chartBars, parsePeriod, shortDay } from '@/lib/admin/insights'
 import { formatPrice } from '@/lib/format'
 import { formatPkt } from '@/lib/admin/dates'
@@ -86,6 +87,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
             <p className="text-4xl font-bold mt-2">{o.live}</p>
             <p className="text-sm text-slate-500">visitor{o.live === 1 ? '' : 's'} in the last 5 minutes</p>
           </section>
+          <SpeedCard storeId={admin.storeId} />
           <section className="rounded-xl bg-white border border-slate-200 p-5">
             <h2 className="font-semibold mb-2">To do</h2>
             {o.tasks.length === 0 ? <p className="text-sm text-slate-500">Nothing waiting for you. Well done.</p> : (

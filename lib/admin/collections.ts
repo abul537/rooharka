@@ -3,6 +3,7 @@
  * Every statement starts from the admin's own store; product ids from the form are checked against that store
  * before they are linked, so a collection can never contain (or reveal) another store's product.
  */
+import { storeCached } from '@/lib/cache'
 import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import { AdminError } from '@/lib/admin/orders'
@@ -66,13 +67,17 @@ export async function deleteCollection(admin: StoreAdmin, id: string): Promise<s
 
 // ------------------------------------------------------------------ storefront
 /** A live collection of this store with the ids of its products in the owner's order, or null. */
-export async function getPublicCollection(storeId: string, handle: string, preview = false) {
-  if (!/^[a-z0-9-]{1,60}$/.test(handle)) return null
-  return db.collection.findFirst({
+const findCollection = (storeId: string, handle: string, preview: boolean) =>
+  db.collection.findFirst({
     // In the owner's preview a hidden collection can be looked at too.
     where: { storeId, handle, ...(preview ? {} : { isActive: true }) },
     select: { title: true, handle: true, description: true, products: { orderBy: { position: 'asc' }, select: { productId: true } } },
   })
+// What customers see is remembered for five minutes (cleared when the owner changes anything); a preview never is.
+const cachedCollection = storeCached('collection', 300, (storeId, handle) => findCollection(storeId, handle, false))
+export async function getPublicCollection(storeId: string, handle: string, preview = false) {
+  if (!/^[a-z0-9-]{1,60}$/.test(handle)) return null
+  return preview ? findCollection(storeId, handle, true) : cachedCollection(storeId, handle)
 }
-export const listPublicCollections = (storeId: string) =>
-  db.collection.findMany({ where: { storeId, isActive: true, products: { some: { product: { status: 'ACTIVE' } } } }, orderBy: { title: 'asc' }, select: { title: true, handle: true } })
+export const listPublicCollections = storeCached('collections', 300, (storeId) =>
+  db.collection.findMany({ where: { storeId, isActive: true, products: { some: { product: { status: 'ACTIVE' } } } }, orderBy: { title: 'asc' }, select: { title: true, handle: true } }))

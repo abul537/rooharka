@@ -240,6 +240,7 @@ model Store {
   visitorDays   VisitorDay[]
   shopThemes    ShopTheme[]
   subscribers   NewsletterSubscriber[]
+  speedDays     SpeedDay[]
   subscription  Subscription?
   invoices      Invoice[]
   tickets       SupportTicket[]
@@ -1414,6 +1415,28 @@ model Storefront {
   updatedAt DateTime @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+/// How fast a shop's pages really were for its visitors, counted per day and kind of page (no visitor is identified).
+model SpeedDay {
+  id        String @id @default(cuid())
+  storeId   String
+  day       String // YYYY-MM-DD in Pakistan time
+  page      String // home | product | collection | shop | checkout | other
+  samples   Int    @default(0)
+  /// Largest picture or text block shown within 2.5 seconds (good) / later than 4 seconds (poor).
+  lcpGood   Int    @default(0)
+  lcpPoor   Int    @default(0)
+  lcpMsSum  Int    @default(0)
+  /// The server's first answer arrived within 0.8 seconds.
+  ttfbGood  Int    @default(0)
+  ttfbMsSum Int    @default(0)
+  /// The page did not jump around while loading.
+  clsGood   Int    @default(0)
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, day, page])
 }
 
 /// An email address a customer left in the shop's Newsletter section, asking to hear from the store.

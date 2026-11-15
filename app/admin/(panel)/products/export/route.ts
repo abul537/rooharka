@@ -1,5 +1,6 @@
 import { adminOrError } from '@/lib/auth/guard'
 import { audit } from '@/lib/audit'
+import { storeLimit } from '@/lib/rate-limit'
 import { exportRows } from '@/lib/admin/products'
 import { EXPORT_HEADER, toCsv } from '@/lib/admin/product-extras'
 import { fromBase, getUnit } from '@/lib/units/registry'
@@ -10,6 +11,8 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const g = await adminOrError('products.view')
   if ('error' in g) return new Response('Please sign in.', { status: 401 })
+  // A whole-catalogue export is the heaviest read a shop can ask for: a few a minute is plenty.
+  if (!storeLimit(g.admin.storeId, 'export').ok) return new Response('Too many exports at once. Please wait a minute.', { status: 429, headers: { 'Retry-After': '60' } })
   const products = await exportRows(g.admin.storeId)
   const rows = products.flatMap((p) => {
     const unit = getUnit(p.unitCode)

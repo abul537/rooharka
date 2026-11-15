@@ -1,11 +1,11 @@
 import { db } from '@/lib/db'
-import { memoKeyed } from '@/lib/memo'
+import { storeCached } from '@/lib/cache'
 
 export interface HomeReview { id: string; authorName: string; city: string | null; rating: number; body: string; isVerified: boolean; product: string }
 export interface HomeReviews { items: HomeReview[]; average: number | null; count: number }
 
 /** Real, approved customer reviews only (the owner approves each one). Never invented or hard-coded. Remembered 60 s. */
-export const getHomeReviews = memoKeyed(60_000, async (storeId: string): Promise<HomeReviews> => {
+export const getHomeReviews = storeCached('home-reviews', 300, async (storeId): Promise<HomeReviews> => {
   const where = { isApproved: true, product: { storeId, status: 'ACTIVE' as const } }
   const [rows, agg] = await Promise.all([
     db.review.findMany({ where: { ...where, rating: { gte: 4 } }, orderBy: [{ isVerified: 'desc' }, { createdAt: 'desc' }], take: 3, select: { id: true, authorName: true, city: true, rating: true, body: true, isVerified: true, product: { select: { name: true } } } }),

@@ -79,7 +79,7 @@ test('buying stays strict: checkout, orders and the counter only ever accept LIV
 
 test('drafts never enter the shared catalogue memory, and a preview needs draft mode AND a valid pass AND an active member', () => {
   const cat = src('lib/data/catalog.ts')
-  assert.match(cat, /const loadCatalog = memoKeyed\(15_000, \(storeId: string\) => buildCatalog\(storeId, false\)\)/)
+  assert.match(cat, /const loadCatalog = storeCached\('catalog', 60, \(storeId\) => buildCatalog\(storeId, false\)\)/)
   assert.doesNotMatch(cat, /memoKeyed\([^)]*buildCatalog\(storeId, true\)/)
   const server = src('lib/preview/server.ts')
   assert.match(server, /isEnabled\) return null/); assert.match(server, /readSessionPass\(/); assert.match(server, /isActive: true/)

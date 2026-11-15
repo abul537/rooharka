@@ -2,7 +2,7 @@ import { db } from '@/lib/db'
 import { getCurrentStore } from '@/lib/store'
 import { isPreviewFor } from '@/lib/preview/server'
 import { parseSubscriberEmail } from '@/lib/theme/newsletter'
-import { clientIp, rateLimit } from '@/lib/rate-limit'
+import { clientIp, rateLimit, storeLimit } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 const json = (status: number, body: object) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
@@ -15,6 +15,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`newsletter:${clientIp(request.headers)}`, 5, 60_000).ok) return json(429, { error: 'Too many tries. Please wait a minute.' })
   const store = await getCurrentStore()
   if (!store) return json(404, { error: 'This store is not available.' })
+  if (!storeLimit(store.id, 'newsletter').ok) return json(429, { error: 'Too many tries. Please wait a minute.' })
   const body = (await request.json().catch(() => ({}))) as { email?: unknown }
   const email = parseSubscriberEmail(body?.email)
   if (!email) return json(400, { error: 'Please enter a valid email address.' })

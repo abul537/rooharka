@@ -2,7 +2,7 @@ import { getCurrentStore } from '@/lib/store'
 import { isPreviewFor } from '@/lib/preview/server'
 import { isBot } from '@/lib/admin/insights'
 import { recordVisit } from '@/lib/visits'
-import { clientIp, rateLimit } from '@/lib/rate-limit'
+import { clientIp, rateLimit, storeLimit } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 const done = () => new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     if (isBot(ua) || !rateLimit(`visit:${ip}`, 90, 60_000).ok) return done()
     const store = await getCurrentStore()
     // The owner looking at a preview is not a customer.
-    if (!store || (await isPreviewFor(store.id))) return done()
+    if (!store || !storeLimit(store.id, 'visits').ok || (await isPreviewFor(store.id))) return done()
     const body = (await request.json().catch(() => ({}))) as { view?: unknown }
     await recordVisit(store.id, ip, ua!.slice(0, 300), body?.view === true)
   } catch (e) {

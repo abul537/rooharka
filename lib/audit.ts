@@ -1,6 +1,8 @@
 import { headers } from 'next/headers'
 import { db } from '@/lib/db'
 import { clientIp } from '@/lib/rate-limit'
+import { invalidateStore } from '@/lib/cache'
+import { keepsCache } from '@/lib/audit-rules'
 
 /**
  * Records who changed what. Failure to write the log must never break the action
@@ -15,6 +17,9 @@ export async function audit(entry: {
   before?: unknown
   after?: unknown
 }) {
+  // Every change in a dashboard passes through here, so this is the one place that tells the shop's cache
+  // "something changed": the next visitor gets fresh data. (A change no code path can forget to announce.)
+  if (entry.storeId && !keepsCache(entry.action)) await invalidateStore(entry.storeId).catch(() => {})
   try {
     await db.auditLog.create({
       data: {

@@ -326,6 +326,21 @@ Highlights, Benefits and Collections remain as "classic" sections so existing sh
 
 Run `pnpm db:push` and `pnpm exec prisma generate` (new table `NewsletterSubscriber`, new column `MediaAsset.durationSec`).
 
+### Speed: caching, pictures, per-shop limits and real measurements (Nov 2026)
+
+Performance is treated as a feature with tests (`tests/cache.test.ts`, `tests/performance.test.ts`).
+
+- **Store cache** (`lib/cache.ts`): the catalogue (1 min), product pages, collections and home reviews (5 min) are remembered per store, so most page views make no database trip. Two layers: each server's memory (always), and optional shared Redis (Upstash over HTTPS; set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`). Every key is `t:<storeId>:…`, built in one function. A failure of Redis falls back to the database and pauses Redis for 30 seconds.
+- **Invalidation:** `audit()` (called by every dashboard change) clears that store's cache, and so does every new order (stock changed). With Redis this raises the store's version number, so all servers drop the old entries within 10 seconds. Previews are never cached.
+- **Pictures** (`components/media/MediaImage.tsx`): one component for every shop photo. Offers six sizes through Cloudinary (`srcset`, AVIF/WebP via `f_auto`, never enlarged), lazy-loads everything except the page's first picture, which is preloaded with high priority. No script is sent for images.
+- **Light uploads** (`lib/media/shrink.ts`): photos are scaled to at most 2000 px and re-encoded as WebP in the owner's browser before upload (a 1.6 MB test photo became 0.29 MB). Anything it cannot improve is uploaded unchanged.
+- **Per-shop ceilings** (`storeLimit` in `lib/rate-limit.ts`): orders 300/min, visit pings 3000/min, speed reports 600/min, newsletter 60/min, catalogue export 6/min, so one shop cannot exhaust what all shops share.
+- **Measured speed:** one page load in four reports LCP, TTFB and CLS from the visitor's browser (`lib/speed-client.ts` → `POST /api/speed` → `SpeedDay`). The owner's Overview shows "Shop speed, last 7 days" judged by Google's rule (fast = 75% of visits within 2.5 s).
+- **Server-first:** storefront pages are server components; the list of client components is fixed by a test, so adding one is a deliberate decision.
+- **Not done, on purpose:** one database per store (the platform's cross-store features and single schema depend on one database; the cache and ceilings address the same risk), and true static regeneration (pages are resolved by host name at request time; see docs).
+
+Run `pnpm db:push` and `pnpm exec prisma generate` (new table `SpeedDay`).
+
 ### Fake-order check: automatic verification of cash-on-delivery orders (Nov 2026)
 
 Every online cash-on-delivery order is scored within seconds of checkout, with no code sent to the customer. Code in `lib/fraud/`, tests in `tests/fraud.test.ts`.
