@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { DEFAULT_PAGES, TEMPLATE_TYPES, sectionsFor, readCloudDetails, templateVideos, videoVerdict, CORE_SECTIONS, FOLD_BUDGET_BYTES, MAX_GALLERY_IMAGES, MAX_HERO_SLIDES, MAX_SECTIONS, MAX_STORY_STEPS, MAX_VIDEOS_PER_SECTION, MAX_VIDEO_SECTIONS, RATIOS, SECTIONS, SECTION_BY_TYPE, aboutFromLegacy, fieldDefault, focalCss, newBlock, newSection, pageWarnings, parseTemplate, ratioCss, readTemplate, sectionMedia, sectionSummary, templateFromLegacy } from '@/lib/theme/schema'
+import { DEFAULT_PAGES, TEMPLATE_TYPES, pageKind, productTemplate, PRODUCT_DESIGNS, sectionsFor, readCloudDetails, templateVideos, videoVerdict, CORE_SECTIONS, FOLD_BUDGET_BYTES, MAX_GALLERY_IMAGES, MAX_HERO_SLIDES, MAX_SECTIONS, MAX_STORY_STEPS, MAX_VIDEOS_PER_SECTION, MAX_VIDEO_SECTIONS, RATIOS, SECTIONS, SECTION_BY_TYPE, aboutFromLegacy, fieldDefault, focalCss, newBlock, newSection, pageWarnings, parseTemplate, ratioCss, readTemplate, sectionMedia, sectionSummary, templateFromLegacy } from '@/lib/theme/schema'
 import { parseSubscriberEmail } from '@/lib/theme/newsletter'
 import { MIN_CONTRAST, contrastWithWhite, normalizeHex, parseCustomColor, parseThemeName, readThemeSettings, shadesFromHex, themeShades, themeVariables } from '@/lib/theme/settings'
 import { THEME_PRESETS, themePreset, type ThemePresetKey } from '@/lib/theme/presets'
@@ -310,7 +310,7 @@ test('the section components keep the performance promises', () => {
 
 // ------------------------------------------------------------------ product and collection pages on the engine
 test('product and collection pages are templates too: their own sections stay on their own page', () => {
-  assert.deepEqual([...TEMPLATE_TYPES], ['home', 'about', 'product', 'collection'])
+  assert.deepEqual([...TEMPLATE_TYPES], ['home', 'about', 'product', 'productB', 'productC', 'collection'])
   const own = (page: 'product' | 'collection') => SECTIONS.filter((d) => d.only === page).map((d) => d.type)
   assert.deepEqual(own('product'), ['product-main', 'product-info', 'product-faq', 'related-products'])
   assert.deepEqual(own('collection'), ['collection-main'])
@@ -318,7 +318,7 @@ test('product and collection pages are templates too: their own sections stay on
   // Every general section may be used on every page; a page's own sections only there.
   for (const t of TEMPLATE_TYPES) {
     const names = sectionsFor(t).map((d) => d.type)
-    for (const d of SECTIONS) assert.equal(names.includes(d.type), !d.only || d.only === t, `${d.type} on ${t}`)
+    for (const d of SECTIONS) assert.equal(names.includes(d.type), !d.only || d.only === pageKind(t), `${d.type} on ${t}`)
   }
   for (const [page, other] of [['home', 'product-main'], ['about', 'collection-main'], ['collection', 'product-info'], ['product', 'collection-main']] as const) {
     const base = page === 'product' ? [newSection('product-main', 'm')!] : page === 'collection' ? [newSection('collection-main', 'm')!] : []
@@ -368,7 +368,7 @@ test('starter designs set up the product and collection pages, and the shop page
   assert.deepEqual(themePreset('spotlight', 'S').product, DEFAULT_PAGES.product(), 'Spotlight keeps the original product page')
   assert.notDeepEqual(themePreset('bold', 'S').product, themePreset('editorial', 'S').product)
   const product = readFileSync('app/(shop)/product/[slug]/page.tsx', 'utf8'), collection = readFileSync('app/(shop)/collections/[handle]/page.tsx', 'utf8')
-  assert.match(product, /pages\.product/); assert.match(product, /<RenderSections sections=\{sections\} data=\{sectionData\} ownHeading \/>/)
+  assert.match(product, /pages\[productTemplate\(product\.pageDesign\)\]/); assert.match(product, /<RenderSections sections=\{sections\} data=\{sectionData\} ownHeading \/>/)
   assert.match(product, /application\/ld\+json/, 'search-engine data is kept')
   assert.match(collection, /pages\.collection/); assert.match(collection, /ownHeading/)
   assert.match(collection, /getPublicCollection\(store\.id, handle/, 'a collection is still looked up inside its own store')
@@ -394,7 +394,7 @@ test('Save stores EVERY kind of page under its own name (product and collection 
   // The shop draws each kind of page from the template of the same name.
   for (const [file, page] of [['app/(shop)/page.tsx', 'home'], ['app/(shop)/about/page.tsx', 'about'], ['app/(shop)/product/[slug]/page.tsx', 'product'], ['app/(shop)/collections/[handle]/page.tsx', 'collection']] as const) {
     const src = readFileSync(file, 'utf8')
-    assert.match(src, new RegExp(`\\.pages\\.${page}\\b`), file)
+    assert.match(src, page === 'product' ? /\.pages\[productTemplate\(product\.pageDesign\)\]/ : new RegExp(`\\.pages\\.${page}\\b`), file)
     for (const other of TEMPLATE_TYPES) if (other !== page) assert.doesNotMatch(src, new RegExp(`\\.pages\\.${other}\\b`), `${file} must not read the ${other} template`)
   }
   // The editor sends only the pages that changed, each under its own name.
@@ -409,4 +409,25 @@ test('a page sent under another page’s name is refused, so one page can never 
     assert.equal(parseTemplate(tpl, as).ok, false, `a ${as} page cannot be saved with another page’s content`)
   }
   for (const t of TEMPLATE_TYPES) assert.equal(parseTemplate(p[t], t).ok, true, t)
+})
+
+// ------------------------------------------------------------------ a design per product
+test('a product can show its own design: B and C are product pages with the same rules as the normal one', () => {
+  assert.equal(productTemplate(null), 'product'); assert.equal(productTemplate(''), 'product'); assert.equal(productTemplate('b'), 'productB'); assert.equal(productTemplate('c'), 'productC')
+  assert.equal(productTemplate('../home'), 'product', 'anything unknown falls back to the normal page')
+  assert.deepEqual(Object.values(PRODUCT_DESIGNS), ['product', 'productB', 'productC'])
+  for (const t of ['productB', 'productC'] as const) {
+    assert.equal(pageKind(t), 'product')
+    assert.deepEqual(sectionsFor(t).map((d) => d.type), sectionsFor('product').map((d) => d.type))
+    // The buy box cannot be removed from an extra design either, and a collection's heart cannot be put on it.
+    const noMain = parseTemplate({ sections: [newSection('product-info', 'r')!] }, t)
+    assert.ok(!noMain.ok && /must stay on the product page, design/.test(noMain.error))
+    assert.equal(readTemplate({ sections: [] }, t).sections[0].type, 'product-main')
+    assert.equal(parseTemplate({ sections: [newSection('product-main', 'm')!, newSection('collection-main', 'x')!] }, t).ok, false)
+    for (const k of Object.keys(THEME_PRESETS) as (keyof typeof THEME_PRESETS)[]) assert.equal(parseTemplate(themePreset(k, 'Shop')[t], t).ok, true, `${k} ${t}`)
+  }
+  // The choice is saved only for the admin's own store, from a fixed list, and the shop page follows it.
+  const act = readFileSync('app/admin/(panel)/products/[id]/actions.ts', 'utf8')
+  assert.match(act, /if \(!\(design in PRODUCT_DESIGNS\)\) return \{ error/); assert.match(act, /where: \{ id: productId, storeId: admin\.storeId \}, data: \{ pageDesign: design \|\| null \}/)
+  assert.match(readFileSync('prisma/schema.prisma', 'utf8'), /pageDesign\s+String\?/)
 })

@@ -268,14 +268,24 @@ export const SECTION_BY_TYPE: ReadonlyMap<string, SectionDef> = new Map(SECTIONS
 export interface Block { id: string; settings: Settings }
 export interface Section { id: string; type: string; hidden: boolean; settings: Settings; blocks: Block[] }
 export interface Template { sections: Section[] }
-export const TEMPLATE_TYPES = ['home', 'about', 'product', 'collection'] as const
-export const TEMPLATE_LABEL: Record<(typeof TEMPLATE_TYPES)[number], string> = { home: 'Home page', about: 'About page', product: 'Product page', collection: 'Collection page' }
+/**
+ * The pages a theme holds. `productB` and `productC` are two EXTRA designs of the product page: a product shows
+ * the normal product page unless the owner chose design B or C for it (Products, the product, "Page design").
+ */
+export const TEMPLATE_TYPES = ['home', 'about', 'product', 'productB', 'productC', 'collection'] as const
+export const TEMPLATE_LABEL: Record<(typeof TEMPLATE_TYPES)[number], string> = { home: 'Home page', about: 'About page', product: 'Product page', productB: 'Product page, design B', productC: 'Product page, design C', collection: 'Collection page' }
 export const isTemplateType = (v: unknown): v is (typeof TEMPLATE_TYPES)[number] => (TEMPLATE_TYPES as readonly unknown[]).includes(v)
 export type TemplateType = (typeof TEMPLATE_TYPES)[number]
 export const MAX_SECTIONS = 25
 /** The sections a kind of page may use: the general ones, plus that page's own. */
-export const sectionsFor = (page: TemplateType): SectionDef[] => SECTIONS.filter((d) => !d.only || d.only === page)
-const allowedOn = (def: SectionDef, page: TemplateType | undefined) => !def.only || def.only === page
+/** What KIND of page a template is: the extra product designs are product pages like the normal one. */
+export const pageKind = (page: TemplateType): 'home' | 'about' | 'product' | 'collection' => (page === 'productB' || page === 'productC' ? 'product' : page)
+/** The product's "Page design" choice ('' = normal, 'b', 'c') and the template it shows. Anything else = normal. */
+export const PRODUCT_DESIGNS = { '': 'product', b: 'productB', c: 'productC' } as const
+export const PRODUCT_DESIGN_LABEL: Record<keyof typeof PRODUCT_DESIGNS, string> = { '': 'Normal product page', b: 'Design B', c: 'Design C' }
+export const productTemplate = (design: string | null | undefined): 'product' | 'productB' | 'productC' => (design === 'b' ? 'productB' : design === 'c' ? 'productC' : 'product')
+export const sectionsFor = (page: TemplateType): SectionDef[] => SECTIONS.filter((d) => !d.only || d.only === pageKind(page))
+const allowedOn = (def: SectionDef, page: TemplateType | undefined) => !def.only || (!!page && def.only === pageKind(page))
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const idOk = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(v)
@@ -376,7 +386,7 @@ function clean(raw: unknown, strict: boolean, page?: TemplateType): { ok: true; 
   }
   // The heart of a page is always there: put back if a stored page lost it, refused if the editor sent a page without it.
   for (const def of SECTIONS) {
-    if (!def.required || def.only !== page || sections.some((x) => x.type === def.type)) continue
+    if (!def.required || !page || def.only !== pageKind(page) || sections.some((x) => x.type === def.type)) continue
     if (strict) return { ok: false, error: `“${def.name}” must stay on the ${TEMPLATE_LABEL[page!].toLowerCase()}.` }
     sections.unshift(newSection(def.type, `${def.type}-1`)!)
   }
@@ -447,7 +457,7 @@ export const DEFAULT_PAGES: Record<'product' | 'collection', () => Template> = {
   collection: () => ({ sections: [newSection('collection-main', 'collection-main-1')!] }),
 }
 export const legacyTemplate = (type: TemplateType, c: StorefrontContent, storeName: string): Template =>
-  type === 'about' ? aboutFromLegacy(c, storeName) : type === 'home' ? templateFromLegacy(c) : DEFAULT_PAGES[type]()
+  type === 'about' ? aboutFromLegacy(c, storeName) : type === 'home' ? templateFromLegacy(c) : DEFAULT_PAGES[pageKind(type) as 'product' | 'collection']()
 
 // ------------------------------------------------------------------ guard rails for the editor
 export interface PageWarning { sectionId: string | null; text: string }

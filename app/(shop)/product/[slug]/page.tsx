@@ -6,6 +6,7 @@ import { getCatalog } from '@/lib/data/catalog'
 import { relatedItems } from '@/lib/catalog'
 import { getShopContext } from '@/lib/storefront/data'
 import { loadSectionData } from '@/lib/theme/page-data'
+import { productTemplate } from '@/lib/theme/schema'
 import { RenderSections } from '@/components/sections/registry'
 import { PixelEventOnce } from '@/components/shop/Pixels'
 
@@ -42,7 +43,8 @@ export default async function ProductPage({ params }: Props) {
   const { product, variants, media, reviews, store } = data
   // The page is DRAWN from the theme's "product" template: the product's own sections (photos and buy box,
   // description, questions, related products) in the owner's order, with any other sections around them.
-  const { sections } = (await getShopContext(store)).pages.product
+  // A product the owner gave its own design (B or C) is drawn from that template instead of the normal one.
+  const { sections } = (await getShopContext(store)).pages[productTemplate(product.pageDesign)]
   const [base, catalog] = await Promise.all([loadSectionData(store, sections), getCatalog(store.id)])
   const sectionData = { ...base, product: { page: data, related: relatedItems(catalog.items, product.slug, 8) } }
 

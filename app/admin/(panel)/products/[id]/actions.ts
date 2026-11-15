@@ -16,6 +16,7 @@ import { reorderMedia, videoLimitBytes, addVariant, attachMedia, deleteProduct, 
 import { getServiceSecrets } from '@/lib/services/store-services'
 import { createUploadSignature, parseExternalMediaUrl, verifyUpload, type SignedUpload, type UploadReport } from '@/lib/media/cloudinary'
 import { destroyCloudFiles } from '@/lib/media/cloud-cleanup'
+import { PRODUCT_DESIGNS, PRODUCT_DESIGN_LABEL } from '@/lib/theme/schema'
 import type { ActionState } from '@/components/admin/ActionForm'
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '')
@@ -37,6 +38,17 @@ async function guarded(
     console.error(`[product ${action}]`, e)
     return { error: 'Something went wrong. Nothing was changed; please try again.' }
   }
+}
+
+/** Which design of the product page this product shows: the normal one, or the theme's design B or C. */
+export async function productDesignAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const productId = str(fd, 'productId'), design = str(fd, 'design')
+  if (!(design in PRODUCT_DESIGNS)) return { error: 'Choose a design from the list.' }
+  return guarded('design', productId, async (admin) => {
+    const res = await db.product.updateMany({ where: { id: productId, storeId: admin.storeId }, data: { pageDesign: design || null } })
+    if (res.count === 0) throw new AdminError('Product not found.')
+    return `This product now shows: ${PRODUCT_DESIGN_LABEL[design as keyof typeof PRODUCT_DESIGNS]}.`
+  }, 'Product', { design: design || 'normal' })
 }
 
 /** The selling rules of a product come from the database (type and unit are fixed when it is created), never from the form. */

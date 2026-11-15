@@ -747,6 +747,8 @@ model Product {
   tags             String[]      @default([])
   seoTitle         String?
   seoDescription   String?
+  /// Which design of the product page this product shows: null = the normal one, "b" or "c" = the theme's extra designs.
+  pageDesign       String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 

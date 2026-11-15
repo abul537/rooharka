@@ -12,6 +12,7 @@ import ShippingFields from '@/components/admin/ShippingFields'
 import TaxonomyPicker from '@/components/admin/TaxonomyPicker'
 import { COUNTRY_CODES, countryName, descriptionHtml, htmlToText, isWeightUnit, showWeight } from '@/lib/admin/product-mvp'
 import { duplicateProductAction } from '../actions'
+import { PRODUCT_DESIGN_LABEL } from '@/lib/theme/schema'
 import { listCategories } from '@/lib/admin/categories'
 import { loadServiceViews } from '@/lib/services/store-services'
 import { COUNT_UNITS, fromBase, getUnit } from '@/lib/units/registry'
@@ -20,7 +21,7 @@ import { PAIR_TYPES, SECTION_TYPES, SECTION_TYPE_LABEL, sectionItemsToText, type
 import ActionForm from '@/components/admin/ActionForm'
 import MediaManager from '@/components/admin/MediaManager'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
-import { addVariantAction, deleteProductAction, deleteVariantAction, generateVariantsAction, saveProductAction, saveSectionsAction } from './actions'
+import { addVariantAction, productDesignAction, deleteProductAction, deleteVariantAction, generateVariantsAction, saveProductAction, saveSectionsAction } from './actions'
 
 const TYPE_LABEL = { SIMPLE: 'Simple product', VARIANTS: 'Product with variants', MEASURABLE: 'Measurable product (by weight, volume or length)' } as const
 
@@ -210,6 +211,20 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
           </ActionForm>
         ) : <p className="text-sm text-slate-500">{sections.length} section(s).</p>}
       </Card>
+
+      {editable && (
+        <Card title="Page design" hint="Most products share one product page design. Give a special product (a hero product, a bundle) its own look: design B or C. You lay those out in Storefront, under “Product page, design B” and “design C”.">
+          <ActionForm action={productDesignAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="productId" value={p.id} />
+            <Field label="This product shows">
+              <select name="design" defaultValue={p.pageDesign === 'b' || p.pageDesign === 'c' ? p.pageDesign : ''} className={inputCls}>
+                {Object.entries(PRODUCT_DESIGN_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </Field>
+            <button className={primaryBtn}>Save design</button>
+          </ActionForm>
+        </Card>
+      )}
 
       <StockHistory storeId={admin.storeId} productId={p.id} unitCode={p.type === 'MEASURABLE' ? p.unitCode : null} variants={p.variants.map((v) => ({ id: v.id, label: v.label }))} />
 

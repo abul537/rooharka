@@ -113,7 +113,7 @@ export async function saveThemeSettings(storeId: string, themeId: string, settin
 export async function createTheme(storeId: string, storeName: string, name: string, from: { preset: ThemePresetKey } | { copyOf: string }, legacy: StorefrontContent): Promise<string> {
   if ((await db.shopTheme.count({ where: { storeId } })) >= MAX_THEMES) throw new ThemeError(`You can keep up to ${MAX_THEMES} themes. Delete one you no longer need first.`)
   let settings: ThemeSettings, pages: Pages
-  if ('preset' in from) { const p = themePreset(from.preset, storeName); settings = p.settings; pages = { home: p.home, about: p.about, product: p.product, collection: p.collection } }
+  if ('preset' in from) { const p = themePreset(from.preset, storeName); settings = p.settings; pages = Object.fromEntries(TEMPLATE_TYPES.map((t) => [t, p[t]])) as Pages }
   else {
     const src = await getThemeById(storeId, from.copyOf, legacy, storeName)
     if (!src) throw new ThemeError('The theme to copy was not found. Reload the page.')

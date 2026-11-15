@@ -15,7 +15,7 @@ export const THEME_PRESETS = {
   spotlight: { name: 'Spotlight', description: 'Built around one hero product with a story and benefits (the original Darwaish design).' },
 } as const
 export type ThemePresetKey = keyof typeof THEME_PRESETS
-export interface ThemePreset { settings: ThemeSettings; home: Template; about: Template; product: Template; collection: Template }
+export interface ThemePreset { settings: ThemeSettings; home: Template; about: Template; product: Template; productB: Template; productC: Template; collection: Template }
 
 const page = (sections: object[], type: TemplateType = 'home'): Template => readTemplate({ sections }, type)
 
@@ -84,8 +84,14 @@ const SHOP_PAGES: Record<ThemePresetKey, { main: object; info: object; related: 
 
 export function themePreset(key: ThemePresetKey, storeName: string): ThemePreset {
   const v = SHOP_PAGES[key]
+  const product = (type: 'product' | 'productB' | 'productC') => page([
+      { id: 'product-main-1', type: 'product-main', settings: v.main }, { id: 'product-info-1', type: 'product-info', settings: v.info },
+      { id: 'product-faq-1', type: 'product-faq' }, { id: 'related-products-1', type: 'related-products', settings: { title: 'You may also like', ...v.related } },
+    ], type)
   return {
     ...basePreset(key, storeName),
+    // The two extra designs start as copies of the normal product page; the owner changes them in the editor.
+    productB: product('productB'), productC: product('productC'),
     product: page([
       { id: 'product-main-1', type: 'product-main', settings: v.main }, { id: 'product-info-1', type: 'product-info', settings: v.info },
       { id: 'product-faq-1', type: 'product-faq' }, { id: 'related-products-1', type: 'related-products', settings: { title: 'You may also like', ...v.related } },

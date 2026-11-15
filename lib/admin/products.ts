@@ -54,7 +54,7 @@ export async function getProductForEdit(storeId: string, id: string) {
   return db.product.findFirst({
     where: { id, storeId },
     select: {
-      id: true, name: true, subtitle: true, shortDescription: true, description: true, status: true, slug: true, categoryId: true, seoTitle: true, seoDescription: true, isFeatured: true, type: true, optionGroups: true, unitCode: true, qtyMin: true, qtyStep: true, vendor: true, tags: true, createdAt: true, updatedAt: true, productType: true, taxonomyId: true, taxonomyPath: true, taxable: true, requiresShipping: true, weightUnit: true, originCountry: true, hsCode: true,
+      id: true, name: true, subtitle: true, shortDescription: true, description: true, status: true, slug: true, categoryId: true, seoTitle: true, seoDescription: true, pageDesign: true, isFeatured: true, type: true, optionGroups: true, unitCode: true, qtyMin: true, qtyStep: true, vendor: true, tags: true, createdAt: true, updatedAt: true, productType: true, taxonomyId: true, taxonomyPath: true, taxable: true, requiresShipping: true, weightUnit: true, originCountry: true, hsCode: true,
       variants: { orderBy: { sortOrder: 'asc' }, select: { id: true, sku: true, barcode: true, costPrice: true, weightGrams: true, allowBackorder: true, imageId: true, optionValues: true, label: true, badge: true, price: true, compareAtPrice: true, stock: true, trackStock: true, isDefault: true, isActive: true } },
     },
   })

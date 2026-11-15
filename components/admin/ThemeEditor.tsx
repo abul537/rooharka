@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Eye } from 'lucide-react'
 import { publishThemeAction, saveThemeAction } from '@/app/admin/(panel)/storefront/actions'
 import {
-  MAX_SECTIONS, RATIOS, SECTION_BY_TYPE, sectionsFor, TEMPLATE_LABEL, TEMPLATE_TYPES, newBlock, newSection, pageWarnings, sectionSummary,
+  MAX_SECTIONS, RATIOS, SECTION_BY_TYPE, sectionsFor, pageKind, TEMPLATE_LABEL, TEMPLATE_TYPES, newBlock, newSection, pageWarnings, sectionSummary,
   type Block, type Field as FieldDef, type Section, type SectionDef, type Settings, type Template, type TemplateType, type Value,
 } from '@/lib/theme/schema'
 import { CORNERS, parseCustomColor, themeShades, themeVariables, type ThemeSettings } from '@/lib/theme/settings'
@@ -241,6 +241,7 @@ export default function ThemeEditor({ theme, collections, data, sizes, paths }: 
       <div className="grid items-start gap-4 xl:grid-cols-[17rem_minmax(0,1fr)_22rem]">
         <section className="rounded-xl border border-slate-200 bg-white p-4" aria-label={`Sections on the ${TEMPLATE_LABEL[tab].toLowerCase()}`}>
           <h2 className="font-semibold">{TEMPLATE_LABEL[tab]}</h2>
+          {(tab === 'productB' || tab === 'productC') && <p className="mb-2 rounded-lg bg-sky-50 p-2 text-xs text-sky-900">An extra design for special products. A product shows it when you choose “Design {tab === 'productB' ? 'B' : 'C'}” under Products, the product, “Page design”.</p>}
           <p className="mb-3 text-xs text-slate-500">Sections appear in this order. Drag to move, or use the arrows.</p>
           {sections.length === 0 && <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">No sections yet. Add your first one below.</p>}
           <ol className="space-y-2">

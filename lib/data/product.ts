@@ -106,6 +106,8 @@ export interface ProductPageData {
     descriptionText: string | null
     seoTitle: string | null
     seoDescription: string | null
+    /** null = the normal product page; "b" / "c" = one of the theme's extra designs. */
+    pageDesign: string | null
     /** How it is sold: counted, with variants, or measured. */
     type: 'SIMPLE' | 'VARIANTS' | 'MEASURABLE'
     unitCode: string | null
@@ -231,6 +233,7 @@ export async function loadProductPage(store: ProductPageData['store'], slug: str
       descriptionText: htmlToText(product.description, 150) || null,
       seoTitle: product.seoTitle,
       seoDescription: product.seoDescription,
+      pageDesign: product.pageDesign,
       type: product.type,
       unitCode: product.unitCode,
       qtyMin: product.qtyMin,
