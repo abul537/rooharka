@@ -13,6 +13,7 @@ import { loadServiceViews } from '@/lib/services/store-services'
 import { rateLimit } from '@/lib/rate-limit'
 import { parseFraudForm } from '@/lib/fraud/rules'
 import { parsePixelsForm } from '@/lib/pixels'
+import { parseNotifyForm } from '@/lib/notify/rules'
 import { saveExtra } from '@/lib/admin/extra'
 import { saveFraudSettings } from '@/lib/fraud/store'
 import type { ActionState } from '@/components/admin/ActionForm'
@@ -65,6 +66,10 @@ export async function saveFraudAction(_: ActionState, fd: FormData): Promise<Act
 /** The owner's advertising pixel ids (Meta, TikTok, Google Analytics). Checked strictly: they are written into the shop's pages. */
 export async function savePixelsAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run('pixels', fd, (f) => parsePixelsForm((k) => f.get(k)), (storeId, v) => saveExtra(storeId, 'pixels', v), ['/admin/settings'], 'Pixels saved. Your shop reports to them from the next page view.')
+}
+/** Which order messages customers get, on which channel, and whether the owner is emailed about new orders. */
+export async function saveNotifyAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('notify', fd, (f) => parseNotifyForm((k) => f.get(k)), (storeId, v) => saveExtra(storeId, 'notify', v), ['/admin/settings'], 'Messages saved. They apply from the next order change.')
 }
 export async function saveCouriersAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run('couriers', fd, parseCourierForm, saveCourierConfig, ['/admin/settings', '/admin/orders'], 'Couriers saved. They are available on the order page now.')

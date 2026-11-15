@@ -2,6 +2,7 @@ import { formatQuantity, isMeasured } from '@/lib/units/registry'
 import { db } from '@/lib/db'
 import type { StoreAdmin } from '@/lib/auth/guard'
 import { HELD_MESSAGE, isHeld } from '@/lib/fraud/rules'
+import { queueOrderMessage } from '@/lib/notify/send'
 import { afterPaymentReceived, checkTransition, isValidTrackingNo, label, type OrderStatus } from './order-rules'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { ADAPTERS, type BookingInput } from '@/lib/couriers/adapters'
@@ -32,7 +33,7 @@ async function loadOrder(tx: Pick<typeof db, 'order'>, admin: { storeId: string 
 
 /** Move an order forward (not cancel: that has its own function with restocking). */
 export async function changeOrderStatus(admin: Actor, orderId: string, to: OrderStatus, publicNote?: string) {
-  return db.$transaction(async (tx) => {
+  const out = await db.$transaction(async (tx) => {
     const order = await loadOrder(tx, admin, orderId)
     if (to === 'CANCELLED') throw new AdminError('Use “Cancel order” to cancel.')
     // Held by the fake-order check: it does not move towards the customer until the owner has approved it.
@@ -64,6 +65,8 @@ export async function changeOrderStatus(admin: Actor, orderId: string, to: Order
     })
     return { before: order.status, after: to, number: order.number }
   })
+  queueOrderMessage(admin.storeId, orderId) // tells the customer, if the owner switched that message on
+  return out
 }
 
 /**
@@ -81,7 +84,7 @@ export async function addCustomerUpdate(admin: Actor, orderId: string, text: str
 
 /** Cancel before dispatch: stock goes back on the shelf and the customer's totals are corrected. */
 export async function cancelOrder(admin: StoreAdmin, orderId: string, reason: string) {
-  return db.$transaction(async (tx) => {
+  const out = await db.$transaction(async (tx) => {
     const order = await loadOrder(tx, admin, orderId)
     const check = checkTransition(order.status as OrderStatus, 'CANCELLED', false)
     if (!check.ok) throw new AdminError('Only orders that have not been shipped can be cancelled. Use “Returned” after shipping.')
@@ -118,6 +121,8 @@ export async function cancelOrder(admin: StoreAdmin, orderId: string, reason: st
     }
     return { before: order.status, refundDue: paid, number: order.number }
   })
+  queueOrderMessage(admin.storeId, orderId) // tells the customer, if the owner switched that message on
+  return out
 }
 
 /** The store confirms it received the customer's wallet advance. */
@@ -163,7 +168,7 @@ export async function addShipment(admin: StoreAdmin, orderId: string, courier: s
   const tn = trackingNo.trim()
   if (!isValidTrackingNo(tn)) throw new AdminError('Enter the courier’s tracking number (4 to 40 letters, digits or dashes).')
 
-  return db.$transaction(async (tx) => {
+  const out = await db.$transaction(async (tx) => {
     const [order, settings] = await Promise.all([
       loadOrder(tx, admin, orderId),
       tx.storeSettings.findUnique({ where: { storeId: admin.storeId }, select: { extra: true } }),
@@ -193,6 +198,8 @@ export async function addShipment(admin: StoreAdmin, orderId: string, courier: s
     }
     return { number: order.number, courier, trackingNo: tn }
   })
+  queueOrderMessage(admin.storeId, orderId) // tells the customer, if the owner switched that message on
+  return out
 }
 
 // Booking the same order twice at once (double click) must not create two parcels at the courier.

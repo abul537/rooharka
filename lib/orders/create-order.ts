@@ -199,6 +199,9 @@ export async function createOrder(
           },
         })
 
+        // A checkout this customer started earlier and left is now finished.
+        await tx.checkoutLead.updateMany({ where: { storeId, phone: input.customer.phone, recoveredAt: null }, data: { recoveredAt: new Date() } })
+
         const sameAddress = await tx.customerAddress.findFirst({
           where: { customerId: customer.id, localityId: input.address.localityId, landmark: input.address.landmark },
           select: { id: true },

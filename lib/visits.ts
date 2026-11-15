@@ -25,6 +25,7 @@ export async function recordVisit(storeId: string, ip: string, userAgent: string
 export async function pruneVisits(now = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - VISIT_KEEP_DAYS * 86_400_000)
   await pruneErrors(now)
+  await db.checkoutLead.deleteMany({ where: { updatedAt: { lt: new Date(now.getTime() - 30 * 86_400_000) } } }) // unfinished checkouts are kept 30 days
   await db.speedDay.deleteMany({ where: { day: { lt: pktDay(cutoff) } } }) // the speed rows of the same age go too
   return (await db.visitorDay.deleteMany({ where: { lastSeenAt: { lt: cutoff } } })).count
 }

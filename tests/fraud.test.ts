@@ -137,7 +137,7 @@ test('a held order cannot be booked, shipped or moved on until the owner approve
   assert.ok(HELD_MESSAGE.includes('approve it or cancel it'))
   // Checkout: the check runs first, the booking after it, and both after the customer has their answer.
   const route = readFileSync('app/api/orders/route.ts', 'utf8')
-  assert.match(route, /await verifyByNumber\(store\.id, order\.number, ip\); await autoBookByNumber\(store\.id, order\.number\) \}\)/)
+  assert.match(route, /await verifyByNumber\(store\.id, order\.number, ip\); await autoBookByNumber\(store\.id, order\.number\);/)
 })
 
 test('the check stays inside its rules: store-scoped writes, counts only across stores, nothing secret stored', () => {

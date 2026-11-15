@@ -6,7 +6,7 @@
 export const SETTINGS_TABS = [
   { key: 'general', label: 'Store details', about: 'Your shop’s name and how customers reach you.', cards: ['store'] },
   { key: 'payments', label: 'Payments and delivery', about: 'How customers pay and what delivery costs.', cards: ['payments'] },
-  { key: 'checkout', label: 'Checkout and orders', about: 'The order form, the fake-order check, phone verification and order tracking.', cards: ['checkout-form', 'fraud', 'otp', 'tracking'] },
+  { key: 'checkout', label: 'Checkout and orders', about: 'The order form, the fake-order check, messages to customers, phone verification and order tracking.', cards: ['checkout-form', 'fraud', 'notify', 'otp', 'tracking'] },
   { key: 'couriers', label: 'Couriers', about: 'The delivery companies you use and automatic booking.', cards: ['postex', 'couriers'] },
   { key: 'product', label: 'Product page options', about: 'Switches for every product page: reviews, badges, stock warnings. The layout is set under Storefront.', cards: ['product-page'] },
   { key: 'connections', label: 'Connected services', about: 'Your own accounts for photos, videos, AI writing, ad pixels and IP risk scores.', cards: ['cloudinary', 'ai', 'ipqs', 'pixels'] },

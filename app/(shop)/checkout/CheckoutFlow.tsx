@@ -115,7 +115,11 @@ export default function CheckoutFlow({ config, entries, fromCart, verifiedPhone 
                 initialData={address ?? (verifiedPhone ? { phone: verifiedPhone } : undefined)}
                 phoneLocked={!!verifiedPhone}
                 serverErrors={fieldErrors}
-                onNext={(data) => { setAddress(data); setError(null); setFieldErrors({}); setStep(2); }}
+                onNext={(data) => {
+                  setAddress(data); setError(null); setFieldErrors({}); setStep(2);
+                  // The shop remembers a checkout that got this far, so the owner can help if no order follows. Never waited for.
+                  try { void fetch('/api/checkout/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true, body: JSON.stringify({ phone: data.phone, name: `${data.firstName} ${data.lastName ?? ''}`.trim(), items }) }).catch(() => {}) } catch { /* ignore */ }
+                }}
               />
             </>
           )}

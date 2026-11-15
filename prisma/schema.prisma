@@ -242,6 +242,7 @@ model Store {
   subscribers   NewsletterSubscriber[]
   speedDays     SpeedDay[]
   discounts     Discount[]
+  checkoutLeads CheckoutLead[]
   subscription  Subscription?
   invoices      Invoice[]
   tickets       SupportTicket[]
@@ -1094,6 +1095,8 @@ model Order {
   discount      Decimal @default(0) @db.Decimal(12, 2)
   /// The discount code the customer used, as typed at checkout (kept even if the code is deleted later).
   discountCode  String?
+  /// The steps the customer has already been messaged about (so no message is ever sent twice).
+  notifiedStatuses String[] @default([])
   total         Decimal @db.Decimal(12, 2)
   amountPaid    Decimal @default(0) @db.Decimal(12, 2)
   amountDue     Decimal @default(0) @db.Decimal(12, 2) // collected as COD
@@ -1459,6 +1462,28 @@ model SpeedDay {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, day, page])
+}
+
+/// A checkout that was started (name and phone entered) but not finished. One row per store and phone number; an
+/// order from that number marks it recovered. Used only so the store can follow up; removed after 30 days.
+model CheckoutLead {
+  id          String    @id @default(cuid())
+  storeId     String
+  phone       String
+  name        String
+  cityName    String?
+  /// [{ variantId, quantity, name, label, price }] as shown to the customer at that moment.
+  items       Json
+  subtotal    Decimal   @db.Decimal(12, 2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  recoveredAt DateTime?
+  contactedAt DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, phone])
+  @@index([storeId, recoveredAt, updatedAt])
 }
 
 enum DiscountKind {

@@ -7,7 +7,7 @@ test('settings are organised into groups: every card is in exactly one group', (
   assert.deepEqual(SETTINGS_TABS.map((t) => t.key), ['general', 'payments', 'checkout', 'couriers', 'product', 'connections'])
   const cards = SETTINGS_TABS.flatMap((t) => [...t.cards])
   assert.equal(new Set(cards).size, cards.length, 'no card is listed twice')
-  assert.deepEqual([...cards].sort(), ['ai', 'checkout-form', 'cloudinary', 'couriers', 'fraud', 'ipqs', 'otp', 'payments', 'pixels', 'postex', 'product-page', 'store', 'tracking'])
+  assert.deepEqual([...cards].sort(), ['ai', 'checkout-form', 'cloudinary', 'couriers', 'fraud', 'ipqs', 'notify', 'otp', 'payments', 'pixels', 'postex', 'product-page', 'store', 'tracking'])
   for (const t of SETTINGS_TABS) assert.ok(t.label.length > 3 && t.about.endsWith('.'), t.key)
 })
 

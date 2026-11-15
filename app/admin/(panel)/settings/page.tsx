@@ -19,9 +19,11 @@ import { Card, Check, Field, Group, inputCls, primaryBtn } from '@/components/ad
 import { SETTINGS_TABS, settingsHref, settingsTab } from '@/lib/admin/settings-tabs'
 import { FRAUD_LIMITS } from '@/lib/fraud/rules'
 import { PIXEL_HINTS, readPixels } from '@/lib/pixels'
+import { EVENT_LABEL, NOTIFY_EVENTS, readNotify } from '@/lib/notify/rules'
+import { resolveProvider } from '@/lib/otp/rules'
 import { loadExtra } from '@/lib/admin/extra'
 import { loadFraudSettings } from '@/lib/fraud/store'
-import { savePixelsAction, saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveFraudAction, saveTrackingAction } from './actions'
+import { saveNotifyAction, savePixelsAction, saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveFraudAction, saveTrackingAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,7 +113,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     </>
   )
   else if (tab === 'checkout' && s && fields && services) {
-    const [otp, fraud] = await Promise.all([loadOtpSettings(admin.storeId), loadFraudSettings(admin.storeId)])
+    const [otp, fraud, extra] = await Promise.all([loadOtpSettings(admin.storeId), loadFraudSettings(admin.storeId), loadExtra(admin.storeId)])
+    const notify = readNotify(extra), messaging = resolveProvider(services.values(), notify.channel)
     const ipqsOn = !!services.get('ipqs')?.enabled
     content = (
       <>
@@ -147,6 +150,25 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Group>
           <p className="text-xs text-slate-500">No automatic check catches every fake order. It stops the obvious ones and shows you where to look; for expensive orders, the “Ask the buyer to confirm on WhatsApp” button on a held order is the surest step.</p>
           <button className={primaryBtn}>Save fake-order check</button>
+        </ActionForm>
+      </Card>
+
+      <Card title="Messages to customers" hint="Tell customers by SMS or WhatsApp how their order is going. Messages are sent through your own SMS / WhatsApp provider (the one connected under Phone verification below), so each message costs what your provider charges. Tick only the ones worth it; “shipped” is the most useful.">
+        <ActionForm action={saveNotifyAction} className="space-y-5">
+          {'problem' in messaging && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">No message can be sent yet: {messaging.problem}</p>}
+          <Group title="Send a message when the order is">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {NOTIFY_EVENTS.map((e) => <Check key={e} name={`event-${e}`} label={EVENT_LABEL[e]} defaultChecked={notify.events.includes(e)} />)}
+            </div>
+          </Group>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Send by"><select name="channel" defaultValue={notify.channel} className={inputCls}><option value="SMS">SMS</option><option value="WHATSAPP">WhatsApp (needs Twilio)</option></select></Field>
+            <Field label="At most this many messages a day" hint="A safety limit on your provider’s bill."><input name="dailyLimit" inputMode="numeric" defaultValue={notify.dailyLimit} className={inputCls} /></Field>
+          </div>
+          <Group title="For you">
+            <Check name="ownerEmail" label="Email me when a new order arrives" defaultChecked={notify.ownerEmail} />
+          </Group>
+          <button className={primaryBtn}>Save messages</button>
         </ActionForm>
       </Card>
 

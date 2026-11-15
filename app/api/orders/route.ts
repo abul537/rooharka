@@ -3,6 +3,7 @@ import { after, NextResponse } from 'next/server'
 import { autoBookByNumber } from '@/lib/couriers/booking'
 import { verifyByNumber } from '@/lib/fraud/verify'
 import { invalidateStore } from '@/lib/cache'
+import { announceNewOrder } from '@/lib/notify/new-order'
 import { isPhoneVerified, otpCookieName, otpCookieOptions } from '@/lib/otp/service'
 import { getCurrentStore } from '@/lib/store'
 import { isPreviewFor } from '@/lib/preview/server'
@@ -17,6 +18,8 @@ export const dynamic = 'force-dynamic'
 // POST /api/orders  ->  { number, trackingCode, ... }
 export async function POST(request: Request) {
   const ip = clientIp(request.headers)
+  const host = request.headers.get('host')
+  const origin = host && /^[a-z0-9.-]+(:\d+)?$/i.test(host) ? `https://${host}` : null // for the link in the owner's new-order email
 
   const limit = rateLimit(`orders:${ip}`, 8, 10 * 60 * 1000)
   if (!limit.ok) {
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
     // Courier booking happens AFTER the customer has their answer, so a slow courier never delays or breaks checkout.
     // FIRST the fake-order check (it decides whether the parcel may be booked at all), THEN the booking.
     // The order changed the stock, so the shop's remembered pages are refreshed.
-    after(async () => { await invalidateStore(store.id); await verifyByNumber(store.id, order.number, ip); await autoBookByNumber(store.id, order.number) })
+    after(async () => { await invalidateStore(store.id); await verifyByNumber(store.id, order.number, ip); await autoBookByNumber(store.id, order.number); await announceNewOrder(store.id, order.number, origin) })
     const res = NextResponse.json(order, { status: 201 })
     // One verification covers one order: the next purchase asks again.
     if (config.phoneVerification) res.cookies.set(otpCookieName(), '', { ...otpCookieOptions(), maxAge: 0 })
