@@ -12,6 +12,8 @@ import { saveOtpSettings, sendTestMessage } from '@/lib/otp/service'
 import { loadServiceViews } from '@/lib/services/store-services'
 import { rateLimit } from '@/lib/rate-limit'
 import { parseFraudForm } from '@/lib/fraud/rules'
+import { parsePixelsForm } from '@/lib/pixels'
+import { saveExtra } from '@/lib/admin/extra'
 import { saveFraudSettings } from '@/lib/fraud/store'
 import type { ActionState } from '@/components/admin/ActionForm'
 
@@ -59,6 +61,10 @@ export async function saveProductPageAction(_: ActionState, fd: FormData): Promi
 }
 export async function saveFraudAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run('fraud', fd, (f) => parseFraudForm((k) => f.get(k)), saveFraudSettings, ['/admin/settings'], 'Fake-order check saved. It applies to the next order.')
+}
+/** The owner's advertising pixel ids (Meta, TikTok, Google Analytics). Checked strictly: they are written into the shop's pages. */
+export async function savePixelsAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run('pixels', fd, (f) => parsePixelsForm((k) => f.get(k)), (storeId, v) => saveExtra(storeId, 'pixels', v), ['/admin/settings'], 'Pixels saved. Your shop reports to them from the next page view.')
 }
 export async function saveCouriersAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run('couriers', fd, parseCourierForm, saveCourierConfig, ['/admin/settings', '/admin/orders'], 'Couriers saved. They are available on the order page now.')

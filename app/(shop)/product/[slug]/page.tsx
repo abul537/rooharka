@@ -7,6 +7,7 @@ import { relatedItems } from '@/lib/catalog'
 import { getShopContext } from '@/lib/storefront/data'
 import { loadSectionData } from '@/lib/theme/page-data'
 import { RenderSections } from '@/components/sections/registry'
+import { PixelEventOnce } from '@/components/shop/Pixels'
 
 // Pages are rebuilt in the background at most once a minute, so dashboard edits
 // go live quickly without hitting the database on every visit.
@@ -81,6 +82,7 @@ export default async function ProductPage({ params }: Props) {
           Draft: only you can see this product. Set its status to Active in your dashboard when it is ready. Customers cannot order it yet.
         </p>
       )}
+      <PixelEventOnce event="ViewContent" data={{ id: product.slug, name: product.name, value: variants.find((v) => v.isDefault)?.price ?? variants[0]?.price, currency: store.currency }} />
       <RenderSections sections={sections} data={sectionData} ownHeading />
     </div>
   )

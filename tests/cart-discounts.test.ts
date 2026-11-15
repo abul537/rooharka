@@ -104,3 +104,27 @@ test('cart and discounts on the server: this store only, prices from the databas
   assert.match(flow, /const items = lines\.map\(\(e\) => \(\{ variantId: e\.line\.variantId, quantity: e\.quantity \}\)\)/)
   assert.doesNotMatch(flow.slice(flow.indexOf("fetch('/api/orders'"), flow.indexOf('const data = await res.json()')), /unitPrice|total|subtotal/)
 })
+
+// ------------------------------------------------------------------ advertising pixels
+import { NO_PIXELS, parsePixelsForm, pixelScript, readPixels } from '@/lib/pixels'
+
+test('pixel ids are checked strictly, because they are written into the page', () => {
+  const good = { meta: '1234567890123456', tiktok: 'CABCDEFGHIJ123456789', ga4: 'G-ABC123XYZ9' }
+  assert.deepEqual(readPixels({ pixels: good }), good); assert.deepEqual(readPixels(null), NO_PIXELS)
+  for (const evil of ["123');alert(1);//", '</script><script>alert(1)</script>', '1234567890 ', 'G-abc', 'UA-12345-1', "');fetch('//evil')//"]) {
+    assert.deepEqual(readPixels({ pixels: { meta: evil, tiktok: evil, ga4: evil } }), NO_PIXELS, evil)
+    assert.equal(pixelScript({ meta: evil, tiktok: evil, ga4: evil }), '', 'nothing unchecked ever reaches the script')
+  }
+  const form = (o: Record<string, string>) => parsePixelsForm((k) => o[k])
+  assert.deepEqual(form({ meta: ' 1234567890123456 ', tiktok: '', ga4: 'g-abc123xyz9' }), { ok: true, value: { meta: '1234567890123456', tiktok: '', ga4: 'G-ABC123XYZ9' } })
+  const bad = form({ meta: 'my pixel' }); assert.ok(!bad.ok && /Meta Pixel ID/.test(bad.error))
+  const script = pixelScript(good)
+  for (const part of ["fbq('init','1234567890123456')", "ttq.load('CABCDEFGHIJ123456789')", "gtag('config','G-ABC123XYZ9')", 'connect.facebook.net', 'analytics.tiktok.com', 'googletagmanager.com']) assert.ok(script.includes(part), part)
+  assert.equal(pixelScript({ ...NO_PIXELS, ga4: good.ga4 }).includes('fbq'), false, 'only the connected pixels load')
+  const layout = readFileSync('app/(shop)/layout.tsx', 'utf8')
+  assert.match(layout, /\{!preview && hasPixels\(ctx\.pixels\) &&/, 'never in the owner’s preview')
+  const flow = readFileSync('app/(shop)/checkout/CheckoutFlow.tsx', 'utf8')
+  assert.match(flow, /track\('Purchase', \{ value: data\.total/); assert.match(flow, /track\('InitiateCheckout'/)
+  assert.match(readFileSync('components/product/PurchasePanel.tsx', 'utf8'), /track\('AddToCart'/)
+  assert.doesNotMatch(readFileSync('lib/pixels-client.ts', 'utf8'), /phone|email|address|customer/i, 'no personal detail is ever sent to a pixel')
+})

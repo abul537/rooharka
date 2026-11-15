@@ -18,8 +18,10 @@ import type { ReactNode } from 'react'
 import { Card, Check, Field, Group, inputCls, primaryBtn } from '@/components/admin/ui'
 import { SETTINGS_TABS, settingsHref, settingsTab } from '@/lib/admin/settings-tabs'
 import { FRAUD_LIMITS } from '@/lib/fraud/rules'
+import { PIXEL_HINTS, readPixels } from '@/lib/pixels'
+import { loadExtra } from '@/lib/admin/extra'
 import { loadFraudSettings } from '@/lib/fraud/store'
-import { saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveFraudAction, saveTrackingAction } from './actions'
+import { savePixelsAction, saveFieldsAction, savePaymentsAction, saveProductPageAction, saveStoreInfoAction, saveFraudAction, saveTrackingAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -211,7 +213,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </Card>
     </>
   )
-  else if (tab === 'connections' && services) content = (
+  else if (tab === 'connections' && services) { const pixels = readPixels(await loadExtra(admin.storeId)); content = (
     <>
       <Card title="Photos and videos" hint="Product photos and videos are stored in your own Cloudinary account, so you stay in control of cost and files. Cloudinary has a free plan.">
         <div className="space-y-4">
@@ -228,9 +230,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           {SERVICES.filter((d) => d.key === 'ipqs').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
         </div>
       </Card>
+      <Card title="Advertising pixels" hint="If you run ads on Facebook, Instagram, TikTok or Google, paste your pixel IDs here. Your shop then reports page views, product views, add to cart, checkout and purchases to them, so you can see which ads bring orders. Leave a box empty if you do not use it.">
+        <ActionForm action={savePixelsAction} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-3">
+            {(['meta', 'tiktok', 'ga4'] as const).map((k) => <Field key={k} label={PIXEL_HINTS[k].name} hint={PIXEL_HINTS[k].hint}><input name={k} defaultValue={pixels[k]} maxLength={30} autoComplete="off" className={`${inputCls} font-mono`} /></Field>)}
+          </div>
+          <button className={primaryBtn}>Save pixels</button>
+        </ActionForm>
+      </Card>
       <p className="text-sm text-slate-600">Looking for something else? Your SMS and WhatsApp provider is under <Link href={settingsHref('checkout')} className="underline">Checkout and orders</Link>, and courier accounts are under <Link href={settingsHref('couriers')} className="underline">Couriers</Link>.</p>
     </>
-  )
+  ) }
 
   return (
     <div className="space-y-6">

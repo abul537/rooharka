@@ -1,3 +1,4 @@
+import { readPixels, type Pixels } from '@/lib/pixels'
 import { cache } from 'react'
 import { cookies } from 'next/headers'
 import { db } from '@/lib/db'
@@ -14,18 +15,21 @@ export interface ShopContext {
   logoUrl: string | null
   phone: string | null; whatsapp: string | null; email: string | null
   trackingEnabled: boolean
+  /** The owner's advertising pixel ids (checked; empty when not connected). */
+  pixels: Pixels
 }
 
 /** Remembered per store (lib/cache.ts) and forgotten the moment anything is saved in the dashboard. */
 const load = storeCached('context', 15, async (storeId, name): Promise<ShopContext> => {
   const [row, s] = await Promise.all([
     db.storefront.findUnique({ where: { storeId }, select: { content: true } }),
-    db.storeSettings.findUnique({ where: { storeId }, select: { logoUrl: true, supportPhone: true, supportWhatsapp: true, supportEmail: true, orderTrackingEnabled: true } }),
+    db.storeSettings.findUnique({ where: { storeId }, select: { logoUrl: true, supportPhone: true, supportWhatsapp: true, supportEmail: true, orderTrackingEnabled: true, extra: true } }),
   ])
   return {
     content: readStorefront(row?.content, name),
     logoUrl: s?.logoUrl ?? null, phone: s?.supportPhone ?? null, whatsapp: s?.supportWhatsapp ?? null, email: s?.supportEmail ?? null,
     trackingEnabled: s?.orderTrackingEnabled ?? true,
+    pixels: readPixels(s?.extra),
   }
 })
 
