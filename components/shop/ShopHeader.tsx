@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Search } from 'lucide-react'
 import MobileMenu from '@/components/shop/MobileMenu'
+import CartLink from '@/components/shop/CartLink'
 import type { ShopContext } from '@/lib/storefront/data'
 
 export const navItems = (ctx: ShopContext) => [
@@ -8,7 +9,7 @@ export const navItems = (ctx: ShopContext) => [
   ...(ctx.trackingEnabled ? [{ label: 'Track order', href: '/track' }] : []),
 ]
 
-/** Sticky header: the store's own logo and name (from Settings and Storefront), links, search. No fake cart. */
+/** Sticky header: the store's own logo and name (from Settings and Storefront), links, search and the cart. */
 export default function ShopHeader({ name, ctx }: { name: string; ctx: ShopContext }) {
   const items = navItems(ctx)
   return (
@@ -32,6 +33,7 @@ export default function ShopHeader({ name, ctx }: { name: string; ctx: ShopConte
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
             <input name="q" placeholder="Search products" aria-label="Search products" maxLength={60} className="w-52 rounded-full border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600" />
           </form>
+          <CartLink />
           <MobileMenu items={items} />
         </div>
       </div>

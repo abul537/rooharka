@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { addItem } from '@/lib/cart-client'
+import { track } from '@/lib/pixels-client'
 import { Check, Clock, Heart, Leaf, Minus, Plus, Shield, ShoppingCart, Truck } from 'lucide-react'
 import { discountPercent, formatPrice } from '@/lib/format'
 import type { ProductPageData, SectionDTO, TrustIcon } from '@/lib/data/product'
@@ -24,6 +26,7 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
   })
   const [typed, setTyped] = useState<string | null>(null) // what is being typed in the "how much" box
   const [showBar, setShowBar] = useState(false)
+  const [added, setAdded] = useState<'no' | 'yes' | 'full'>('no')
   const ctaRef = useRef<HTMLDivElement>(null)
 
   const variant = useMemo(() => variants.find((v) => v.id === variantId) ?? variants[0], [variants, variantId])
@@ -60,6 +63,13 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
     io.observe(el)
     return () => io.disconnect()
   }, [settings.showStickyBuyBar])
+
+  function addToCart() {
+    if (soldOut) return
+    const ok = addItem(variant.id, qty)
+    setAdded(ok ? 'yes' : 'full')
+    if (ok) track('AddToCart', { id: product.slug, name: product.name, value: total, currency: store.currency })
+  }
 
   function order() {
     if (soldOut) return
@@ -215,6 +225,14 @@ export default function PurchasePanel({ data, keyBenefits }: { data: ProductPage
             {soldOut ? 'Out of stock' : `${settings.buyButtonLabel} · ${formatPrice(total, store.currency)}`}
           </button>
         </div>
+        {/* Add to cart keeps the customer shopping; the big button above goes straight to checkout with this one product. */}
+        {!soldOut && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={addToCart} className="flex-1 rounded-xl border-2 border-brand-700 py-3 font-semibold text-brand-800 transition hover:bg-brand-50">{added === 'yes' ? 'Added to cart ✓' : 'Add to cart'}</button>
+            {added === 'yes' && <a href="/cart" className="font-semibold text-brand-700 underline">View cart</a>}
+            {added === 'full' && <p role="alert" className="basis-full text-sm text-red-700">Your cart is full (20 different items). Please check out first.</p>}
+          </div>
+        )}
       </div>
       {settings.showStockCount && lowStock && (
         <p className="text-sm font-medium text-red-600 mb-6">Only {formatQuantity(variant.stock, product.unitCode)} left in stock: order soon.</p>

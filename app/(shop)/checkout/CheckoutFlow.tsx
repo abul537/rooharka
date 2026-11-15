@@ -1,22 +1,25 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AddressFormData } from '@/lib/types';
-import type { CheckoutConfig, CheckoutLine } from '@/lib/data/checkout';
+import type { CheckoutConfig, CheckoutEntry } from '@/lib/data/checkout';
+import { discountCut, type DiscountKind } from '@/lib/discounts';
+import { CART_KEY, itemsParam } from '@/lib/cart';
+import { track } from '@/lib/pixels-client';
 import { buildPaymentOptions, computeCharges, type PaymentMethodCode } from '@/lib/pricing';
 import AddressStep from './steps/addressStep';
 import PaymentStep from './steps/paymentStep';
 import StepIndicator from '@/components/checkout/stepIndicator';
 import OrderSummary from '@/components/checkout/OrderSummary';
 import { lineTotal } from '@/lib/units/quantity';
-import type { QuantityRule } from '@/lib/units/quantity';
 
 interface Props {
   config: Pick<CheckoutConfig, 'currency' | 'fields' | 'pricing'>;
-  line: CheckoutLine;
-  initialQuantity: number;
-  rule: QuantityRule;
+  /** What is being bought: one line from "Order now", or the lines of the cart. Prices come from the server. */
+  entries: CheckoutEntry[];
+  /** True when the customer came from the cart (it is emptied once the order is placed). */
+  fromCart: boolean;
   /** Set when the store requires phone verification: the verified number in local form (03XXXXXXXXX). */
   verifiedPhone?: string;
 }
@@ -29,11 +32,15 @@ function newKey(): string {
   return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 }
 
-export default function CheckoutFlow({ config, line, initialQuantity, rule, verifiedPhone }: Props) {
+/** A discount code the shop accepted, as much of it as the page needs to show the saving. The server judges it again. */
+export interface AppliedDiscount { code: string; kind: DiscountKind; value: number; minSubtotal: number; text: string }
+
+export default function CheckoutFlow({ config, entries, fromCart, verifiedPhone }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [address, setAddress] = useState<AddressFormData | null>(null);
-  const [quantity, setQuantity] = useState(initialQuantity);
+  const [lines, setLines] = useState(entries);
+  const [discount, setDiscount] = useState<AppliedDiscount | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -41,10 +48,15 @@ export default function CheckoutFlow({ config, line, initialQuantity, rule, veri
   const idempotencyKey = useRef<string>('');
   if (!idempotencyKey.current) idempotencyKey.current = newKey();
 
-  const subtotal = lineTotal(line.unitPrice, quantity, line.unitCode);
-  const options = useMemo(() => buildPaymentOptions(config.pricing, subtotal), [config.pricing, subtotal]);
+  const subtotal = lines.reduce((sum, e) => sum + lineTotal(e.line.unitPrice, e.quantity, e.line.unitCode), 0);
+  // A code that needs a larger order stops counting when the customer lowers the quantity (and says why).
+  const discountShort = !!discount && subtotal < discount.minSubtotal;
+  const cut = discount && !discountShort ? discountCut(discount, subtotal) : null;
+  const options = useMemo(() => buildPaymentOptions(config.pricing, subtotal, cut), [config.pricing, subtotal, cut?.amount, cut?.freeDelivery]); // eslint-disable-line react-hooks/exhaustive-deps
   // The summary shows the first/only option's split, or the plain total until a method is chosen.
-  const summaryCharges = options.length === 1 ? options[0].charges : computeCharges(config.pricing, subtotal, 'COD');
+  const summaryCharges = options.length === 1 ? options[0].charges : computeCharges(config.pricing, subtotal, 'COD', cut);
+  const items = lines.map((e) => ({ variantId: e.line.variantId, quantity: e.quantity }));
+  useEffect(() => { track('InitiateCheckout', { value: subtotal, currency: config.currency }) }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function placeOrder(method: PaymentMethodCode, transactionId: string) {
     if (!address) return;
@@ -56,7 +68,8 @@ export default function CheckoutFlow({ config, line, initialQuantity, rule, veri
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: [{ variantId: line.variantId, quantity }],
+          items,
+          discountCode: discount && !discountShort ? discount.code : undefined,
           customer: { firstName: address.firstName, lastName: address.lastName, email: address.email, phone: address.phone },
           address: { provinceId: address.provinceId, cityId: address.cityId, localityId: address.localityId, landmark: address.landmark, addressType: address.addressType },
           paymentMethod: method,
@@ -66,15 +79,18 @@ export default function CheckoutFlow({ config, line, initialQuantity, rule, veri
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        if (fromCart) { try { window.localStorage.removeItem(CART_KEY) } catch { /* nothing to clear */ } }
+        track('Purchase', { value: data.total, currency: config.currency, orderId: data.number });
         router.replace(`/checkout/success?code=${encodeURIComponent(data.trackingCode)}`);
         return; // keep the button disabled while navigating
       }
       if (data.code === 'PHONE_NOT_VERIFIED') {
         // The verification expired (or was never done): send the customer back to verify, keeping their choice.
-        router.replace(`/verify?variant=${encodeURIComponent(line.variantId)}&qty=${quantity}`);
+        router.replace(`/verify?items=${encodeURIComponent(itemsParam(items))}`);
         return;
       }
       setError(data.error ?? 'Something went wrong. Please try again.');
+      if (data.code === 'BAD_DISCOUNT') setDiscount(null); // the code stopped working: the totals go back to normal
       if (data.fields) {
         setFieldErrors(data.fields);
         // If the problem is in the address, send the customer back to fix it.
@@ -117,7 +133,11 @@ export default function CheckoutFlow({ config, line, initialQuantity, rule, veri
         </div>
       </div>
 
-      <OrderSummary line={line} quantity={quantity} rule={rule} onQuantityChange={setQuantity}
+      <OrderSummary
+        entries={lines}
+        onQuantityChange={(variantId, quantity) => setLines((all) => all.map((e) => (e.line.variantId === variantId ? { ...e, quantity } : e)))}
+        onRemove={(variantId) => setLines((all) => (all.length > 1 ? all.filter((e) => e.line.variantId !== variantId) : all))}
+        discount={discount} discountShort={discountShort} onDiscount={setDiscount} subtotal={subtotal}
         charges={summaryCharges} currency={config.currency} locked={submitting} />
     </div>
   );

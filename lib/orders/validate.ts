@@ -3,6 +3,7 @@ import { normalizePkMobile } from '@/lib/phone'
 import type { CheckoutFields } from '@/lib/data/checkout'
 import type { PaymentMethodCode } from '@/lib/pricing'
 import { MAX_BASE_QUANTITY } from '@/lib/units/quantity'
+import { parseDiscountCode } from '@/lib/discounts'
 
 /** What the browser sends. Prices are deliberately NOT part of it: the server looks them up. */
 export interface OrderRequest {
@@ -12,6 +13,7 @@ export interface OrderRequest {
   paymentMethod: PaymentMethodCode
   transactionId?: string
   idempotencyKey: string
+  discountCode?: string
 }
 
 export interface ValidOrder {
@@ -21,6 +23,8 @@ export interface ValidOrder {
   paymentMethod: PaymentMethodCode
   transactionId: string | null
   idempotencyKey: string
+  /** A discount code as typed (upper-cased), or null. Whether it is valid is decided when the order is created. */
+  discountCode: string | null
 }
 
 export type ValidationResult = { ok: true; value: ValidOrder } | { ok: false; errors: Record<string, string> }
@@ -104,6 +108,9 @@ export function validateOrderRequest(body: unknown, fields: CheckoutFields): Val
   const idempotencyKey = str(b.idempotencyKey)
   if (!/^[A-Za-z0-9-]{16,64}$/.test(idempotencyKey)) errors.idempotencyKey = 'Invalid request. Please refresh the page and try again.'
 
+  const discountCode = parseDiscountCode(b.discountCode)
+  if (str(b.discountCode) && !discountCode) errors.discountCode = 'That discount code is not valid.'
+
   if (Object.keys(errors).length > 0) return { ok: false, errors }
   return {
     ok: true,
@@ -114,6 +121,7 @@ export function validateOrderRequest(body: unknown, fields: CheckoutFields): Val
       paymentMethod: method,
       transactionId: method === 'COD' ? null : tid,
       idempotencyKey,
+      discountCode,
     },
   }
 }

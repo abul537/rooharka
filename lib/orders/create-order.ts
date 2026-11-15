@@ -1,7 +1,9 @@
 import { db } from '@/lib/db'
 import { resolveAddress } from '@/lib/address-db'
 import { generateTrackingCode } from '@/lib/tracking-code'
-import { buildPaymentOptions, type PaymentOption } from '@/lib/pricing'
+import { buildPaymentOptions, type Cut, type PaymentOption } from '@/lib/pricing'
+import { discountCut, discountProblem } from '@/lib/discounts'
+import { findDiscount } from '@/lib/discounts-data'
 import type { CheckoutConfig } from '@/lib/data/checkout'
 import { lineTotal, quantityProblem, quantityRule, stockLimited } from '@/lib/units/quantity'
 import { formatQuantity } from '@/lib/units/registry'
@@ -10,7 +12,7 @@ import type { ValidOrder } from './validate'
 /** Errors we expect and can explain to the customer. Anything else is a genuine bug (HTTP 500). */
 export class OrderError extends Error {
   constructor(
-    public code: 'ITEM_UNAVAILABLE' | 'OUT_OF_STOCK' | 'BAD_ADDRESS' | 'PAYMENT_UNAVAILABLE' | 'BLOCKED',
+    public code: 'ITEM_UNAVAILABLE' | 'OUT_OF_STOCK' | 'BAD_ADDRESS' | 'PAYMENT_UNAVAILABLE' | 'BLOCKED' | 'BAD_DISCOUNT',
     message: string,
     public details?: Record<string, string>
   ) {
@@ -124,7 +126,16 @@ export async function createOrder(
 
   // Money + payment rule for this store.
   const subtotal = lines.reduce((sum, l) => sum + l.lineTotal, 0)
-  const option: PaymentOption | undefined = buildPaymentOptions(config.pricing, subtotal).find((o) => o.method === input.paymentMethod)
+  // A discount code is looked up in THIS store and judged here, on the server; the browser's idea of it is ignored.
+  let discount: Awaited<ReturnType<typeof findDiscount>> = null, cut: Cut | null = null
+  if (input.discountCode) {
+    discount = await findDiscount(storeId, input.discountCode)
+    const used = discount?.oncePerCustomer ? await db.order.count({ where: { storeId, customerPhone: input.customer.phone, discountCode: discount.code, status: { not: 'CANCELLED' } } }) : 0
+    const problem = discount ? discountProblem(discount, subtotal, new Date(), used > 0) : 'That discount code is not valid.'
+    if (problem || !discount) throw new OrderError('BAD_DISCOUNT', problem ?? 'That discount code is not valid.', { discountCode: problem ?? 'That discount code is not valid.' })
+    cut = discountCut(discount, subtotal)
+  }
+  const option: PaymentOption | undefined = buildPaymentOptions(config.pricing, subtotal, cut).find((o) => o.method === input.paymentMethod)
   if (!option) {
     throw new OrderError('PAYMENT_UNAVAILABLE', 'That payment method is not available for this store. Please choose another.', { paymentMethod: 'Please choose another payment method' })
   }
@@ -157,6 +168,13 @@ export async function createOrder(
             data: { stock: { decrement: l.quantity } },
           })
           if (res.count === 0) throw new OrderError('OUT_OF_STOCK', `"${l.v.product.name} (${l.v.label})" just sold out.`)
+        }
+
+        // The discount code is claimed inside the same transaction: with a limit of 100 uses, the 101st order is
+        // refused even if two customers press the button in the same instant.
+        if (discount) {
+          const claimed = await tx.$executeRaw`UPDATE "Discount" SET "usedCount" = "usedCount" + 1 WHERE "id" = ${discount.id} AND "storeId" = ${storeId} AND "isActive" = true AND ("maxUses" IS NULL OR "usedCount" < "maxUses")`
+          if (claimed === 0) throw new OrderError('BAD_DISCOUNT', 'That discount code has just been used up.', { discountCode: 'That discount code has just been used up.' })
         }
 
         const customer = await tx.customer.upsert({
@@ -221,6 +239,8 @@ export async function createOrder(
             landmark: input.address.landmark,
             addressType: input.address.addressType,
             subtotal: charges.subtotal,
+            discount: charges.discount,
+            discountCode: discount?.code ?? null,
             deliveryCharge: charges.delivery,
             total: charges.total,
             amountPaid: 0,

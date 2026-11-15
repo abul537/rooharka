@@ -22,8 +22,13 @@ export interface PricingConfig {
   wallets: Wallet[]
 }
 
+/** What a discount code takes off: rupees from the products, and/or the delivery charge. */
+export interface Cut { amount: number; freeDelivery: boolean }
+
 export interface Charges {
   subtotal: number
+  /** Taken off by a discount code (0 when none). */
+  discount: number
   delivery: number
   total: number
   /** Paid up-front through a wallet before dispatch. */
@@ -46,9 +51,11 @@ export function deliveryFor(config: PricingConfig, subtotal: number): number {
 }
 
 /** What the customer pays now / later if they choose `method` under this store's policy. */
-export function computeCharges(config: PricingConfig, subtotal: number, method: PaymentMethodCode): Charges {
-  const delivery = deliveryFor(config, subtotal)
-  const total = money(subtotal) + delivery
+export function computeCharges(config: PricingConfig, subtotal: number, method: PaymentMethodCode, cut?: Cut | null): Charges {
+  // Free delivery over an amount is judged on the products' value BEFORE the discount (the customer's favour).
+  const delivery = cut?.freeDelivery ? 0 : deliveryFor(config, subtotal)
+  const discount = Math.min(money(cut?.amount ?? 0), money(subtotal))
+  const total = money(subtotal) - discount + delivery
   let advance = 0
 
   if (method !== 'COD') {
@@ -68,7 +75,7 @@ export function computeCharges(config: PricingConfig, subtotal: number, method: 
     }
     advance = Math.min(advance, total)
   }
-  return { subtotal: money(subtotal), delivery, total, advance, dueOnDelivery: total - advance }
+  return { subtotal: money(subtotal), discount, delivery, total, advance, dueOnDelivery: total - advance }
 }
 
 /**
@@ -80,20 +87,20 @@ export function computeCharges(config: PricingConfig, subtotal: number, method: 
  * If the policy needs a prepayment but the store has no wallet set up, the list
  * is empty and checkout says so, rather than silently skipping the rule.
  */
-export function buildPaymentOptions(config: PricingConfig, subtotal: number): PaymentOption[] {
+export function buildPaymentOptions(config: PricingConfig, subtotal: number, cut?: Cut | null): PaymentOption[] {
   const options: PaymentOption[] = []
   const { paymentPolicy } = config
   if (paymentPolicy === 'COD_ONLY' || paymentPolicy === 'CUSTOMER_CHOICE') {
-    options.push({ method: 'COD', charges: computeCharges(config, subtotal, 'COD') })
+    options.push({ method: 'COD', charges: computeCharges(config, subtotal, 'COD', cut) })
   }
   if (paymentPolicy !== 'COD_ONLY') {
     for (const wallet of config.wallets) {
-      options.push({ method: wallet.provider, wallet, charges: computeCharges(config, subtotal, wallet.provider) })
+      options.push({ method: wallet.provider, wallet, charges: computeCharges(config, subtotal, wallet.provider, cut) })
     }
   }
   // A delivery-advance rule with nothing to prepay (e.g. free delivery) is just cash on delivery.
   if (paymentPolicy === 'DELIVERY_ADVANCE' && options.length > 0 && options.every((o) => o.charges.advance === 0)) {
-    return [{ method: 'COD', charges: computeCharges(config, subtotal, 'COD') }]
+    return [{ method: 'COD', charges: computeCharges(config, subtotal, 'COD', cut) }]
   }
   return options
 }

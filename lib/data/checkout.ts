@@ -1,3 +1,4 @@
+import { isBuyable, quantityRule, snapQuantity, type QuantityRule } from '@/lib/units/quantity'
 import { db } from '@/lib/db'
 import type { PricingConfig, Wallet } from '@/lib/pricing'
 
@@ -154,4 +155,21 @@ export async function getCheckoutLine(storeId: string, variantId: string): Promi
     stock: v.stock,
     trackStock: v.trackStock && !v.allowBackorder,
   }
+}
+
+export interface CheckoutEntry { line: CheckoutLine; rule: QuantityRule; quantity: number }
+/**
+ * The lines of a cart (or of a single "Order now"), read fresh from the database for ONE store: name, price, stock
+ * and how much may be bought come from here, never from the browser. A size that no longer exists, belongs to
+ * another shop or is sold out is left out and counted in `dropped`; quantities are brought within the allowed range.
+ */
+export async function loadCheckoutEntries(storeId: string, maxQuantity: number, items: { variantId: string; quantity: number }[]): Promise<{ entries: CheckoutEntry[]; dropped: number }> {
+  const lines = await Promise.all(items.map((i) => getCheckoutLine(storeId, i.variantId)))
+  const entries: CheckoutEntry[] = []
+  lines.forEach((line, i) => {
+    if (!line) return
+    const rule = quantityRule(line, line.trackStock ? line.stock : null, maxQuantity)
+    if (isBuyable(rule)) entries.push({ line, rule, quantity: snapQuantity(rule, items[i].quantity) })
+  })
+  return { entries, dropped: items.length - entries.length }
 }

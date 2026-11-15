@@ -68,6 +68,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             </ul>
             <dl className="mt-3 pt-3 border-t border-slate-200 text-sm space-y-1">
               <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatPrice(order.subtotal.toNumber())}</dd></div>
+              {order.discount.toNumber() > 0 && <div className="flex justify-between text-emerald-800"><dt>Discount{order.discountCode ? ` (code ${order.discountCode})` : ''}</dt><dd>- {formatPrice(order.discount.toNumber())}</dd></div>}
+              {order.discountCode && order.discount.toNumber() === 0 && <div className="flex justify-between text-emerald-800"><dt>Code {order.discountCode}</dt><dd>Free delivery</dd></div>}
               <div className="flex justify-between"><dt>Delivery</dt><dd>{formatPrice(order.deliveryCharge.toNumber())}</dd></div>
               <div className="flex justify-between font-bold"><dt>Total</dt><dd>{formatPrice(order.total.toNumber())}</dd></div>
               <div className="flex justify-between"><dt>Paid</dt><dd>{formatPrice(order.amountPaid.toNumber())}</dd></div>

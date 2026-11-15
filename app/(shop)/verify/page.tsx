@@ -1,3 +1,4 @@
+import { itemsParam, readItems } from '@/lib/cart';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -8,15 +9,16 @@ import VerifyFlow from './VerifyFlow';
 export const metadata: Metadata = { title: 'Verify your number', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-type Props = { searchParams: Promise<{ variant?: string; qty?: string }> };
+type Props = { searchParams: Promise<{ items?: string; variant?: string; qty?: string }> };
 
 export default async function VerifyPage({ searchParams }: Props) {
-  const { variant, qty } = await searchParams;
+  const items = readItems(await searchParams);
+  const variant = items.length > 0;
   const store = await getCurrentStore();
   if (!store) redirect('/shop');
 
-  // Only the checkout address is user-controlled here, and it is rebuilt from two values, never copied.
-  const next = variant ? `/checkout?variant=${encodeURIComponent(variant)}&qty=${encodeURIComponent(qty ?? '1')}` : '/shop';
+  // Only the checkout address is user-controlled here, and it is rebuilt from checked ids and numbers, never copied.
+  const next = variant ? `/checkout?items=${encodeURIComponent(itemsParam(items))}` : '/shop';
   const settings = await loadOtpSettings(store.id);
   if (!settings?.enabled) redirect(next); // the store does not use verification (any more)
   if (variant && verifiedPhone((await cookies()).get(otpCookieName())?.value, store.id)) redirect(next);
