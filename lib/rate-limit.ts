@@ -31,5 +31,5 @@ export function clientIp(headers: Headers): string {
  * script pointed at it) goes wild, it runs into its own ceiling instead of using up the server and the database
  * that every shop shares. The ceilings are far above anything a real shop does in a minute.
  */
-export const STORE_LIMITS = { orders: 300, visits: 3000, speed: 600, newsletter: 60, export: 6 } as const
+export const STORE_LIMITS = { orders: 300, visits: 3000, speed: 600, newsletter: 60, export: 6, import: 20 } as const
 export const storeLimit = (storeId: string, what: keyof typeof STORE_LIMITS) => rateLimit(`store:${what}:${storeId}`, STORE_LIMITS[what], 60_000)

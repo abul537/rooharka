@@ -77,7 +77,7 @@ test('the speed report and its page stay inside the store, and are limited per v
 })
 
 test('one shop cannot use up what all shops share: per-shop ceilings', () => {
-  assert.deepEqual(STORE_LIMITS, { orders: 300, visits: 3000, speed: 600, newsletter: 60, export: 6 })
+  assert.deepEqual(STORE_LIMITS, { orders: 300, visits: 3000, speed: 600, newsletter: 60, export: 6, import: 20 })
   for (let i = 0; i < 6; i++) assert.equal(storeLimit('shop-A', 'export').ok, true)
   assert.equal(storeLimit('shop-A', 'export').ok, false, 'the seventh export in a minute is refused')
   assert.equal(storeLimit('shop-B', 'export').ok, true, 'another shop is not affected')

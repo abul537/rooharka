@@ -71,6 +71,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         <h1 className="text-2xl font-bold">Products</h1>
         <div className="flex gap-2">
           <a href="/admin/products/export" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium" download>Export (CSV)</a>
+          <Link href="/admin/products/import" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium">Import (CSV)</Link>
           {editable && <Link href="/admin/products/new" className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium">Add product</Link>}
         </div>
       </div>
