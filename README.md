@@ -397,3 +397,41 @@ The theme now has four templates: `home`, `about`, `product`, `collection`. One 
 - **What stays per product:** name, photos, price, options, description, questions and reviews come from the product; the switches under Settings (reviews, questions, trust badges, sticky order bar, button text) still apply.
 - **Drawing:** `app/(shop)/product/[slug]/page.tsx` and `app/(shop)/collections/[handle]/page.tsx` pass the product / collection to `RenderSections` (`ownHeading`: the product or collection name is the page's h1, so other sections use h2). Search-engine data (JSON-LD, canonical address) is unchanged.
 - **Editor:** "Product page" and "Collection page" tabs. The live preview shows one of the store's own products and collections (`loadSamples`, limited to the admin's store); the eye opens that real page with the draft theme.
+
+## Launch additions (Nov 2026): what was added and what each part is for
+
+Every item below is tested by `pnpm test` (rules) and, where a page is involved, by a render check. After pulling:
+`pnpm db:push`, `pnpm exec prisma generate`, restart.
+
+| Part | Where the owner finds it | What it is for | Main files |
+| --- | --- | --- | --- |
+| Shopping cart | Shop: cart icon, `/cart` | Several products in one order. Kept in the customer's browser; prices and stock always come from the server. | `lib/cart.ts`, `app/(shop)/cart`, `app/api/cart` |
+| Discount codes | Dashboard: Discount codes | Percent or fixed amount off, with a minimum order, a date range and a usage limit. The limit is enforced inside the order's own database transaction, so a code can never be used more often than allowed. | `lib/discounts.ts`, `lib/discounts-data.ts`, `app/api/discount` |
+| Reviews | Product page form; Dashboard: Reviews | Customers write a review; nothing shows until the owner approves it. A delivered order's tracking code marks it "verified buyer". | `lib/reviews.ts`, `app/api/reviews` |
+| Messages to customers | Settings, Checkout and orders | Email or SMS when an order is confirmed, shipped, delivered or cancelled, and an email to the owner for each new order. Never sent twice for the same step. | `lib/notify/*` |
+| Unfinished checkouts | Dashboard: Unfinished checkouts | People who typed name and phone but did not order, with a ready WhatsApp message. | `lib/leads.ts`, `app/api/checkout/lead` |
+| Advertising pixels | Settings, Connected services | Meta, TikTok and Google Analytics ids; the shop reports views, add to cart, checkout and purchases. Ids are checked strictly before they are written into a page. | `lib/pixels.ts` |
+| Product import | Products, Import (CSV) | Change many prices or stock numbers, or add many products, from a spreadsheet. Shows what the file would do first; new products are drafts; nothing is deleted. | `lib/admin/product-import.ts`, `lib/admin/product-import-run.ts` |
+| Stock history | Product page in the dashboard | Every change of stock with its reason (order, cancel, counter sale, by hand, import, return). Written in the same transaction as the change. | `lib/stock-log.ts` |
+| Returns and refunds | Dashboard: Returns; customer: tracking page | Customer asks, owner approves or refuses, items are received (optionally back into stock), refund is recorded. A refund can never be more than the customer paid, across all returns of the order. The owner sends the money; the platform only records it. Off until switched on under Returns, "Return policy". | `lib/returns.ts`, `lib/returns-data.ts`, `app/api/returns` |
+| Shop categories | Dashboard: Collections | Create, rename and delete the categories used by the shop's filter. | `app/admin/(panel)/collections` |
+| Design per product | Storefront: "Product page, design B / C"; Products, a product, "Page design" | Two extra product page layouts per theme for special products. | `lib/theme/schema.ts` (`pageKind`, `productTemplate`) |
+| Urdu | Settings, Store details, "Shop language" | Right-to-left shop with Urdu for the menu, product cards, cart, buy buttons and order summary. The checkout form steps, tracking page and policies still show English (a sentence without Urdu falls back to English automatically; add one line to `UR` in `lib/i18n.ts` per sentence). | `lib/i18n.ts`, `components/shop/Lang.tsx` |
+| Sharing previews, sitemap, robots | automatic | The title, text and picture shown when a link is shared on WhatsApp or Facebook; a sitemap per shop for Google. | `lib/seo.ts`, `app/sitemap.ts`, `app/robots.ts` |
+| Error and loading pages | automatic | A friendly "not found", "something went wrong" and loading state in the shop's own look. | `app/(shop)/{not-found,error,loading}.tsx` |
+| Help (support tickets) | Dashboard: Help; CSMI: Support | Store owners write to the platform owner and get answers in one thread. | `lib/support.ts` |
+| Error monitoring | CSMI: Errors | Server and browser errors, grouped, with counts, without customer data. | `lib/errors/*`, `instrumentation.ts` |
+| Checks on every push (CI) | GitHub, Actions tab | Schema valid, types, all tests, build, bundle-size budget. | `.github/workflows/ci.yml`, `scripts/bundle-budget.mjs` |
+| Security headers | automatic | HSTS in production and a content security policy that blocks framing and foreign form targets. | `next.config.ts` |
+| Migrations and backups | `docs/OPERATIONS.md` | Versioned database changes and a backup routine. | `docs/OPERATIONS.md` |
+
+### Not done on purpose: fully static shop pages (ISR)
+Making shop pages static per shop means moving every shop page under a host-based route and removing every
+`headers()` read. That touches the routing of every shop at once and cannot be verified without a real build and
+a real domain. It was held back before launch; the data caching in `lib/cache.ts` already removes most database
+work per visit. Do it after launch on a branch, with the build running in CI.
+
+### Not verified against live services
+The code paths to Neon, Cloudinary, Upstash, IPQualityScore, PostEx, the SMS provider and Resend have unit and
+render tests only. The bundle-size limits in `lib/bundle-budget.ts` are first estimates: set them from the first
+real build. The CI workflow has not run yet.
