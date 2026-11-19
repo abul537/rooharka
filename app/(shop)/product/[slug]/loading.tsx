@@ -1,7 +1,9 @@
-// Shown instantly while the product loads: a grey skeleton of the real layout.
-export default function Loading() {
+import { Skeleton } from '@/components/shop/Skeletons'
+
+/** PRODUCT skeleton: the picture on the left, name, price, description, options and buy button on the right. */
+export default function ProductLoading() {
   return (
-    <div className="container mx-auto px-4 py-10 md:py-16 animate-pulse" aria-busy="true" aria-label="Loading product">
+    <Skeleton label="product" className="container mx-auto px-4 py-10 md:py-16">
       <div className="grid lg:grid-cols-2 gap-10 lg:gap-16">
         <div className="aspect-square rounded-3xl bg-brand-100" />
         <div className="space-y-6">
@@ -15,6 +17,6 @@ export default function Loading() {
           <div className="h-14 rounded-xl bg-gray-200" />
         </div>
       </div>
-    </div>
+    </Skeleton>
   )
 }
