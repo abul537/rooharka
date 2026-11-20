@@ -206,8 +206,8 @@ test('plan form', () => {
   const video = parsePlan(form({ name: 'Pro', monthlyPrice: '5000', limitVideoMb: '100' }))
   assert.ok(video.ok && video.value.show.videoMb === 100)
   for (const bad of ['0', '501', 'big']) assert.equal(parsePlan(form({ name: 'Pro', monthlyPrice: '5000', limitVideoMb: bad })).ok, false, bad)
-  const rich = parsePlan(form({ name: 'Pro', monthlyPrice: '5000', isPublic: 'on', sortOrder: '2', feature_tcs: 'on', 'feature_sms-otp': 'on', feature_bogus: 'on' }))
-  assert.deepEqual(rich.ok && [rich.value.isPublic, rich.value.sortOrder, rich.value.features], [true, 2, ['sms-otp', 'tcs']]) // unknown feature keys are ignored
+  const rich = parsePlan(form({ name: 'Pro', monthlyPrice: '5000', isPublic: 'on', sortOrder: '2', feature_discounts: 'on', 'feature_fraud-check': 'on', feature_bogus: 'on', feature_tcs: 'on' }))
+  assert.deepEqual(rich.ok && [rich.value.isPublic, rich.value.sortOrder, rich.value.features], [true, 2, ['fraud-check', 'discounts']]) // unknown feature keys are ignored
   assert.equal(parsePlan(form({ name: 'Pro', monthlyPrice: '5000', sortOrder: 'x' })).ok, false)
   for (const bad of [{ limitProducts: '0' }, { limitProducts: '-5' }, { limitOrders: '1e3' }, { limitStaff: 'many' }, { tagline: 'x'.repeat(91) }]) assert.equal(parsePlan(form({ name: 'Pro', monthlyPrice: '5000', ...bad })).ok, false, JSON.stringify(bad))
   assert.equal(parsePlan(form({ name: 'Free', monthlyPrice: '0' })).ok, true)           // a free plan is allowed

@@ -3,7 +3,8 @@ import { requirePlatform } from '@/lib/csmi/guard'
 import { canPlatform } from '@/lib/csmi/rules'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
-import { savePlanAction } from '../actions'
+import { installPlansAction, savePlanAction } from '../actions'
+import { INCLUDED_IN_ALL, PRO_FEATURES, RECOMMENDED_PLANS } from '@/lib/plans/catalog'
 import { FEATURE_LABELS, readLimits } from '@/lib/signup/plans'
 
 export const dynamic = 'force-dynamic'
@@ -33,9 +34,9 @@ export default async function PlansPage() {
       </div>
       <div className="sm:col-span-5 grid sm:grid-cols-[auto_1fr_auto] gap-3 items-end border-t border-slate-100 pt-3">
         <Check name="isPublic" label="Show on pricing page and sign-up" defaultChecked={p?.isPublic ?? true} />
-        <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm"><legend className="text-xs text-slate-500 mb-1">Included services (listed on the pricing page)</legend>
+        <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm"><legend className="text-xs text-slate-500 mb-1">Pro features this plan includes (switched on for its stores and listed on the pricing page)</legend>
           {Object.entries(FEATURE_LABELS).map(([k, label]) => (
-            <label key={k} className="flex items-center gap-1.5"><input type="checkbox" name={`feature_${k}`} defaultChecked={Array.isArray(p?.features) && (p.features as unknown[]).includes(k)} /> {label}</label>
+            <label key={k} title={PRO_FEATURES[k as keyof typeof PRO_FEATURES]?.why} className="flex items-center gap-1.5"><input type="checkbox" name={`feature_${k}`} defaultChecked={Array.isArray(p?.features) && (p.features as unknown[]).includes(k)} /> {label}</label>
           ))}
         </fieldset>
         <Field label="Order" hint="Lowest first"><input name="sortOrder" inputMode="numeric" defaultValue={p?.sortOrder ?? 0} className={`${inputCls} w-20`} /></Field>
@@ -48,6 +49,25 @@ export default async function PlansPage() {
       <h1 className="text-2xl font-bold">Plans</h1>
       <p className="text-sm text-slate-600">What you sell to store owners. A store can have a negotiated price on top (set on the store's page). Switching a plan off hides it from new stores; existing stores keep it. Changing a price changes what existing stores on that plan are billed from their next invoice. To make a tailor-made plan for one client, add a plan and untick “Show on pricing page”: visitors never see it, and you give it to the store from its page. The limits, tagline, included services and “Most popular” are shown on the public pricing page; the staff limit and POS lite are enforced by the platform (a store's page can override both); the products and orders limits are not enforced yet, so treat those as promises you keep by hand.</p>
       <p className="text-sm"><a href="/csmi/offers" className="underline font-medium">Offers and discount codes</a></p>
+      {manage && (
+        <Card title="Recommended: Basic and Pro" hint="Two plans built for Pakistani shops. Basic has everything needed to sell with cash on delivery; Pro adds the tools that pay for themselves. You can change any price or feature afterwards.">
+          <div className="grid gap-4 text-sm md:grid-cols-2">
+            {RECOMMENDED_PLANS.map((p) => (
+              <div key={p.name} className={`rounded-lg border p-4 ${p.limits.popular ? 'border-violet-300 bg-violet-50/50' : 'border-slate-200'}`}>
+                <p className="font-semibold">{p.name} · Rs. {p.monthlyPrice.toLocaleString('en-PK')}/month <span className="font-normal text-slate-500">or Rs. {p.yearlyPrice.toLocaleString('en-PK')}/year</span></p>
+                <p className="mt-1 text-slate-600">{p.limits.tagline}</p>
+                <p className="mt-2 text-slate-700">{p.limits.products ? `Up to ${p.limits.products} products` : 'Unlimited products'} · {p.limits.staff} staff login{p.limits.staff === 1 ? '' : 's'} · videos up to {p.limits.videoMb} MB</p>
+                <p className="mt-2 text-slate-700">{p.features.length ? `All ${p.features.length} Pro features.` : `The ${INCLUDED_IN_ALL.length} essentials every plan has, no Pro features.`}</p>
+              </div>
+            ))}
+          </div>
+          <ActionForm action={installPlansAction} className="mt-4 flex flex-wrap items-center gap-4">
+            <button className={primaryBtn}>Set up Basic and Pro</button>
+            <Check name="refresh" label="If they already exist, update their features and limits to the recommendation (prices are kept)" />
+          </ActionForm>
+          <p className="mt-3 text-xs text-slate-500">Stores on a free trial get every Pro feature until the trial ends; then their plan decides. Existing plans with other names are not touched: switch them off or hide them when you are ready.</p>
+        </Card>
+      )}
       {manage && <Card title="Add a plan">{form()}</Card>}
       <Card title="Your plans">
         {plans.length === 0 ? <p className="text-sm text-slate-500">No plans yet. Add one above, then give stores a plan from their page.</p> : (

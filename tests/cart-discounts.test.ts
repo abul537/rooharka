@@ -85,7 +85,7 @@ test('discount form: a code can never make an order free', () => {
 
 test('cart and discounts on the server: this store only, prices from the database, the code claimed atomically', () => {
   const order = readFileSync('lib/orders/create-order.ts', 'utf8')
-  assert.match(order, /discount = await findDiscount\(storeId, input\.discountCode\)/)
+  assert.match(order, /discount = \(await hasFeature\(storeId, 'discounts'\)\) \? await findDiscount\(storeId, input\.discountCode\) : null/)
   assert.match(order, /buildPaymentOptions\(config\.pricing, subtotal, cut\)/, 'the total the customer pays is computed on the server with the code')
   assert.match(order, /UPDATE "Discount" SET "usedCount" = "usedCount" \+ 1 WHERE "id" = \$\{discount\.id\} AND "storeId" = \$\{storeId\} AND "isActive" = true AND \("maxUses" IS NULL OR "usedCount" < "maxUses"\)/)
   assert.ok(order.indexOf('UPDATE "Discount"') > order.indexOf('db.$transaction(async (tx)'), 'claimed inside the order’s transaction: an order that fails gives the use back')

@@ -13,6 +13,7 @@ import { isHeld } from '@/lib/fraud/rules'
 import ActionForm from '@/components/admin/ActionForm'
 import { courierName, courierOptions, trackingLink } from '@/lib/couriers/config'
 import { loadCourierSetup } from '@/lib/couriers/store'
+import { loadPlanAccess } from '@/lib/plans/access'
 import { startReturnAction } from '../../returns/actions'
 import { bookCourierAction, cancelAction, paymentAction, refreshCourierAction, shipmentAction, statusAction } from './actions'
 
@@ -21,6 +22,7 @@ const btn = 'rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50'
 
 export default async function OrderDetail({ params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin('orders.view')
+  const plan = await loadPlanAccess(admin.storeId)
   const { id } = await params
   const setupPromise = loadCourierSetup(admin.storeId)
   const shopPromise = db.storeSettings.findUnique({ where: { storeId: admin.storeId }, select: { displayName: true } })
@@ -204,7 +206,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             </section>
           )}
 
-          {canUpdate && order.status === 'DELIVERED' && (
+          {canUpdate && order.status === 'DELIVERED' && plan.has('returns') && (
             <section className="rounded-xl bg-white border border-slate-200 p-5">
               <h2 className="font-semibold mb-1">Return</h2>
               <p className="text-sm text-slate-600 mb-3">The customer wants to send items back? Open a return, then follow it under <Link href="/admin/returns" className="underline">Returns</Link>.</p>

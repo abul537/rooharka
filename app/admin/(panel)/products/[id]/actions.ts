@@ -18,6 +18,7 @@ import { createUploadSignature, parseExternalMediaUrl, verifyUpload, type Signed
 import { destroyCloudFiles } from '@/lib/media/cloud-cleanup'
 import { PRODUCT_DESIGNS, PRODUCT_DESIGN_LABEL } from '@/lib/theme/schema'
 import type { ActionState } from '@/components/admin/ActionForm'
+import { featureProblem } from '@/lib/plans/access'
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '')
 
@@ -45,6 +46,7 @@ export async function productDesignAction(_: ActionState, fd: FormData): Promise
   const productId = str(fd, 'productId'), design = str(fd, 'design')
   if (!Object.hasOwn(PRODUCT_DESIGNS, design)) return { error: 'Choose a design from the list.' }
   return guarded('design', productId, async (admin) => {
+    if (design) { const locked = await featureProblem(admin.storeId, 'product-designs'); if (locked) throw new AdminError(locked) }
     const res = await db.product.updateMany({ where: { id: productId, storeId: admin.storeId }, data: { pageDesign: design || null } })
     if (res.count === 0) throw new AdminError('Product not found.')
     return `This product now shows: ${PRODUCT_DESIGN_LABEL[design as keyof typeof PRODUCT_DESIGNS]}.`

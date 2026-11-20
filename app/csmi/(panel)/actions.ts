@@ -6,7 +6,8 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit'
 import { runJob } from '@/lib/jobs'
 import { platformOrError } from '@/lib/csmi/guard'
-import { CsmiError, addDomain, createStore, removeDomain, setDomainLive, deleteCost, markInvoicePaid, runBilling, saveCost, savePlan, saveSubscription, setServiceFee, setStoreEntitlements, setStoreStatus, voidInvoice } from '@/lib/csmi/manage'
+import { parseOverrides } from '@/lib/plans/catalog'
+import { CsmiError, installRecommendedPlans, addDomain, createStore, removeDomain, setDomainLive, deleteCost, markInvoicePaid, runBilling, saveCost, savePlan, saveSubscription, setServiceFee, setStoreEntitlements, setStoreStatus, voidInvoice } from '@/lib/csmi/manage'
 import { parseCost, parseMarkPaid, parseNewStore, parsePlan, parseServiceFee, parseStoreStatus, parseSubscription } from '@/lib/csmi/forms'
 import { parseDomainInput } from '@/lib/domains'
 import { lookupDomain } from '@/lib/dns-check'
@@ -89,6 +90,16 @@ export async function savePlanAction(_: ActionState, fd: FormData): Promise<Acti
     const input = must(parsePlan(fd))
     const saved = await savePlan(id, input)
     return { message: id ? 'Plan saved.' : 'Plan added.', entity: 'Plan', entityId: saved, after: input }
+  }, ['/csmi/plans', '/pricing', '/platform', '/signup'])
+}
+
+/** Creates the recommended Basic and Pro plans; with "refresh", brings existing ones up to the recommended features and limits (prices kept). */
+export async function installPlansAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const refresh = fd.get('refresh') === 'on'
+  return manage('plan.install', async () => {
+    const r = await installRecommendedPlans(refresh)
+    const parts = [r.created.length ? `Created: ${r.created.join(', ')}.` : '', r.refreshed.length ? `Updated features and limits (prices kept): ${r.refreshed.join(', ')}.` : '', r.kept.length ? `Already there, left as they are: ${r.kept.join(', ')}.` : '']
+    return { message: parts.filter(Boolean).join(' '), entity: 'Plan', after: r }
   }, ['/csmi/plans', '/pricing', '/platform', '/signup'])
 }
 
@@ -296,7 +307,9 @@ export async function saveEntitlementsAction(_: ActionState, fd: FormData): Prom
     if (!limit.ok) throw new CsmiError(limit.error)
     const posMode = parsePosMode(str(fd, 'posMode'))
     if (!posMode) throw new CsmiError('Choose how POS lite is decided for this store.')
-    const r = await setStoreEntitlements(storeId, { staffLimit: limit.value, posMode })
-    return { message: `Saved for ${r.name}. It takes effect on the next page the store opens.`, storeId, entity: 'Store', entityId: storeId, after: { staffLimit: limit.value, posMode, was: r.before } }
+    const own = parseOverrides((k) => fd.get(k))
+    if (!own.ok) throw new CsmiError(own.error)
+    const r = await setStoreEntitlements(storeId, { staffLimit: limit.value, posMode, featureOverrides: own.value })
+    return { message: `Saved for ${r.name}. It takes effect on the next page the store opens.`, storeId, entity: 'Store', entityId: storeId, after: { staffLimit: limit.value, posMode, featureOverrides: own.value, was: r.before } }
   }, ['/csmi/stores', `/csmi/stores/${storeId}`])
 }

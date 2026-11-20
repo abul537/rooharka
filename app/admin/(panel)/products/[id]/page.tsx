@@ -22,6 +22,8 @@ import ActionForm from '@/components/admin/ActionForm'
 import MediaManager from '@/components/admin/MediaManager'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { addVariantAction, productDesignAction, deleteProductAction, deleteVariantAction, generateVariantsAction, saveProductAction, saveSectionsAction } from './actions'
+import { loadPlanAccess } from '@/lib/plans/access'
+import { ProNote } from '@/components/admin/ProLock'
 
 const TYPE_LABEL = { SIMPLE: 'Simple product', VARIANTS: 'Product with variants', MEASURABLE: 'Measurable product (by weight, volume or length)' } as const
 
@@ -30,6 +32,7 @@ const BLANK_SECTION_SLOTS = 3
 
 export default async function EditProduct({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string; copied?: string }> }) {
   const admin = await requireAdmin('products.view')
+  const plan = await loadPlanAccess(admin.storeId)
   const [{ id }, { created, copied }] = await Promise.all([params, searchParams])
   const [p, cats, media, sections, services, org, host, videoMax] = await Promise.all([
     getProductForEdit(admin.storeId, id), // every query below is scoped to this store
@@ -214,6 +217,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
 
       {editable && (
         <Card title="Page design" hint="Most products share one product page design. Give a special product (a hero product, a bundle) its own look: design B or C. You lay those out in Storefront, under “Product page, design B” and “design C”.">
+          {!plan.has('product-designs') && <ProNote feature="product-designs" />}
           <ActionForm action={productDesignAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="productId" value={p.id} />
             <Field label="This product shows">

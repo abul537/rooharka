@@ -7,6 +7,8 @@ import { loadExtra } from '@/lib/admin/extra'
 import { formatQuantity } from '@/lib/units/registry'
 import { REFUND_METHODS, RETURN_LABEL, RETURN_REASONS, isOpen, linesValue, readReturnLines, readReturnPolicy, refundCeiling, type ReturnReason, type ReturnStatus } from '@/lib/returns'
 import ActionForm from '@/components/admin/ActionForm'
+import { ProLock, ProNote } from '@/components/admin/ProLock'
+import { loadPlanAccess } from '@/lib/plans/access'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { returnPolicyAction, returnStepAction } from './actions'
 
@@ -31,6 +33,9 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
     loadExtra(admin.storeId),
   ])
   const policy = readReturnPolicy(extra)
+  const pro = (await loadPlanAccess(admin.storeId)).has('returns')
+  // Not on the plan: open returns can still be finished, so no customer is left waiting; nothing new can start.
+  if (!pro && rows.length === 0 && !closed) return <ProLock feature="returns" title="Returns" />
   const editable = can(admin.role, 'orders.update'), canRefund = can(admin.role, 'payments.confirm')
 
   return (
@@ -40,6 +45,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
         <p className="mt-1 text-sm text-slate-600">Requests to send items back. Answer the request, mark the items as received when they arrive, then record the refund you sent. The customer sees each step on their tracking page.</p>
       </div>
 
+      {!pro && <ProNote feature="returns" />}
       <div className="flex gap-2 text-sm">
         <Link href="/admin/returns" className={`${small} ${!closed ? 'border-slate-900 bg-slate-900 text-white' : ''}`}>Open</Link>
         <Link href="/admin/returns?show=closed" className={`${small} ${closed ? 'border-slate-900 bg-slate-900 text-white' : ''}`}>Finished</Link>
@@ -112,7 +118,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
         })}
       </ul>
 
-      {can(admin.role, 'settings.edit') && (
+      {pro && can(admin.role, 'settings.edit') && (
         <Card title="Return policy" hint="Whether customers can ask for a return themselves, from their order tracking page.">
           <ActionForm action={returnPolicyAction}>
             <div className="space-y-4">

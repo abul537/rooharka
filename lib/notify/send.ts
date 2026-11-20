@@ -10,6 +10,7 @@ import { mailConfigured, sendMail } from '@/lib/mail'
 import { rateLimit } from '@/lib/rate-limit'
 import { formatQuantity } from '@/lib/units/registry'
 import { customerMessage, isNotifyEvent, newOrderMail, readNotify } from '@/lib/notify/rules'
+import { hasFeature } from '@/lib/plans/access'
 
 /**
  * Tells the customer about the step their order is at NOW, if the owner switched that message on and it has not
@@ -22,6 +23,7 @@ export async function notifyOrder(storeId: string, orderId: string): Promise<voi
       select: { id: true, number: true, status: true, total: true, amountDue: true, customerName: true, customerPhone: true, trackingCode: true, notifiedStatuses: true, shipments: { orderBy: { bookedAt: 'desc' }, take: 1, select: { courier: true, courierTrackingNo: true } } },
     })
     if (!order || !isNotifyEvent(order.status) || order.notifiedStatuses.includes(order.status)) return
+    if (!(await hasFeature(storeId, 'sms-updates'))) return // Pro feature (the owner's new-order email stays on every plan)
     const settings = await db.storeSettings.findUnique({ where: { storeId }, select: { extra: true, displayName: true, orderTrackingEnabled: true } })
     const rules = readNotify(settings?.extra)
     if (!rules.events.includes(order.status)) return

@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { otpCookieName, verifiedPhone } from '@/lib/otp/service';
 import { getCurrentStore } from '@/lib/store';
+import { hasFeature } from '@/lib/plans/access';
 import { getCheckoutConfig, loadCheckoutEntries } from '@/lib/data/checkout';
 import { itemsParam, readItems } from '@/lib/cart';
 import CheckoutFlow from './CheckoutFlow';
@@ -59,6 +60,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
           entries={entries}
           fromCart={fromCart}
           verifiedPhone={phone}
+          codesOn={await hasFeature(store.id, 'discounts')}
         />
       </div>
     </div>

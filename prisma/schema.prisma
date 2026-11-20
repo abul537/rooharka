@@ -227,6 +227,9 @@ model Store {
   shopDecidedAt DateTime?
   staffLimit    Int?        // staff logins besides the owner: null = follow the plan, -1 = unlimited, 0.. = this many
   posMode       PosMode     @default(PLAN)
+  /// The platform owner's own switches for Pro features on THIS store: { "discounts": "on", "pixels": "off" }.
+  /// A switch always wins over the plan. Keys are listed in lib/plans/catalog.ts.
+  featureOverrides Json     @default("{}")
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 

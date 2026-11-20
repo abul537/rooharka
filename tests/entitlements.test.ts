@@ -146,7 +146,7 @@ test('plan staff limit may be 0 (owner only); POS is a plan feature', () => {
   assert.equal(readLimits({ staff: 0 }).staff, 0)
   assert.equal(readLimits({ staff: -1 }).staff, null)
   assert.equal(describePlan({ limits: { staff: 0 }, features: ['pos'] }).bullets.includes('Owner login only'), true)
-  assert.equal(describePlan({ limits: { staff: 0 }, features: ['pos'] }).bullets.includes('POS lite: sell at the counter'), true)
+  assert.equal(describePlan({ limits: { staff: 0 }, features: ['pos'] }).bullets.includes('POS lite: sell at your counter'), true)
   const p = parsePlan(form({ name: 'Solo', monthlyPrice: '1000', limitStaff: '0', feature_pos: 'on' }))
   assert.ok(p.ok && p.value.show.staff === 0 && p.value.features.includes('pos'))
   assert.ok(!parsePlan(form({ name: 'Solo', monthlyPrice: '1000', limitStaff: '-1' })).ok)

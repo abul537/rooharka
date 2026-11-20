@@ -10,6 +10,7 @@ import { productTemplate } from '@/lib/theme/schema'
 import { sharePreview } from '@/lib/seo'
 import { RenderSections } from '@/components/sections/registry'
 import { PixelEventOnce } from '@/components/shop/Pixels'
+import { hasFeature } from '@/lib/plans/access'
 
 // Pages are rebuilt in the background at most once a minute, so dashboard edits
 // go live quickly without hitting the database on every visit.
@@ -45,7 +46,8 @@ export default async function ProductPage({ params }: Props) {
   // The page is DRAWN from the theme's "product" template: the product's own sections (photos and buy box,
   // description, questions, related products) in the owner's order, with any other sections around them.
   // A product the owner gave its own design (B or C) is drawn from that template instead of the normal one.
-  const { sections } = (await getShopContext(store)).pages[productTemplate(product.pageDesign)]
+  const design = (await hasFeature(store.id, 'product-designs')) ? product.pageDesign : null // Pro; otherwise the normal page
+  const { sections } = (await getShopContext(store)).pages[productTemplate(design)]
   const [base, catalog] = await Promise.all([loadSectionData(store, sections), getCatalog(store.id)])
   const sectionData = { ...base, product: { page: data, related: relatedItems(catalog.items, product.slug, 8) } }
 

@@ -8,19 +8,19 @@ import { Eye } from 'lucide-react'
 import { db } from '@/lib/db'
 import { getBanners } from '@/lib/banners/store'
 import BannerBar from '@/components/BannerBar'
-import { loadPosAccess } from '@/lib/entitlements/service'
+import { loadPlanAccess } from '@/lib/plans/access'
 
 // Every page inside this group requires a signed-in store admin.
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin()
-  const [storeName, sub, overdue, shop, banners, unread, pos] = await Promise.all([
+  const [storeName, sub, overdue, shop, banners, unread, plan] = await Promise.all([
     getStoreName(admin.storeId),
     db.subscription.findUnique({ where: { storeId: admin.storeId }, select: { status: true, trialEndsAt: true } }),
     db.invoice.count({ where: { storeId: admin.storeId, status: { in: ['OPEN', 'OVERDUE'] }, dueDate: { lt: new Date() } } }),
     db.store.findUnique({ where: { id: admin.storeId }, select: { shopApproval: true, shopDecisionNote: true } }),
     getBanners('STORES'),
     db.contactMessage.count({ where: { storeId: admin.storeId, isRead: false } }),
-    loadPosAccess(admin.storeId), // whether the platform owner allows POS lite for this store
+    loadPlanAccess(admin.storeId), // which Pro features this store has (plan, trial, or the platform owner's own switches)
   ])
   const trialLeft = sub?.status === 'TRIALING' && sub.trialEndsAt ? Math.max(0, Math.ceil((sub.trialEndsAt.getTime() - Date.now()) / 86_400_000)) : null
   const canBill = can(admin.role, 'settings.edit')
@@ -29,7 +29,9 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   if (can(admin.role, 'products.view')) allowed.push('/admin/products', '/admin/collections', '/admin/reviews')
   if (can(admin.role, 'settings.edit')) allowed.push('/admin/storefront', '/admin/settings', '/admin/billing')
   if (can(admin.role, 'staff.manage')) allowed.push('/admin/team')
-  if (pos.enabled && can(admin.role, 'pos.sell')) allowed.push('/admin/pos')
+  if (plan.has('pos') && can(admin.role, 'pos.sell')) allowed.push('/admin/pos')
+  // Pro pages the plan does not include stay in the menu with a "Pro" mark: they open a page that explains them.
+  const pro = ([['/admin/abandoned', 'abandoned'], ['/admin/discounts', 'discounts'], ['/admin/returns', 'returns']] as const).filter(([, k]) => !plan.has(k)).map(([h]) => h)
 
   return (
     <div className="lg:flex min-h-screen bg-slate-50">
@@ -48,7 +50,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           className="mb-3 flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50">
           <Eye className="h-4 w-4" aria-hidden /> Preview store
         </a>
-        <AdminNav allowed={allowed} unread={unread} />
+        <AdminNav allowed={allowed} unread={unread} pro={pro} />
         <div className="hidden lg:block mt-10 pt-4 border-t border-slate-200 text-sm">
           <p className="font-medium truncate" title={admin.email}>{admin.name}</p>
           <p className="text-slate-500 truncate mb-3">{admin.role.replace('STORE_', '').toLowerCase()}</p>

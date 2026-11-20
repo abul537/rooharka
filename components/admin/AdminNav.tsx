@@ -24,7 +24,7 @@ const ITEMS = [
   { href: '/admin/security', label: 'My security' },
 ]
 
-export default function AdminNav({ allowed, unread = 0 }: { allowed: string[]; unread?: number }) {
+export default function AdminNav({ allowed, unread = 0, pro = [] }: { allowed: string[]; unread?: number; pro?: readonly string[] }) {
   const pathname = usePathname()
   return (
     <nav aria-label="Dashboard" className="flex lg:flex-col gap-1 overflow-x-auto">
@@ -36,6 +36,7 @@ export default function AdminNav({ allowed, unread = 0 }: { allowed: string[]; u
               active ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-200'
             }`}>
             {item.label}
+            {pro.includes(item.href) && <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase ${active ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-800'}`}>Pro</span>}
             {item.href === '/admin/messages' && unread > 0 && <span className="ml-2 rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-semibold text-white">{unread}</span>}
           </Link>
         )

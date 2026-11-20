@@ -4,6 +4,7 @@ import { lastFour } from '@/lib/phone'
 import { logStock } from '@/lib/stock-log'
 import { loadExtra } from '@/lib/admin/extra'
 import { alreadyReturned, canMove, isOpen, pickReturnLines, readReturnLines, readReturnPolicy, refundCeiling, returnWindow, type OrderLine, type ReturnAsk } from '@/lib/returns'
+import { featureProblem, hasFeature } from '@/lib/plans/access'
 
 type Actor = { id: string; storeId: string }
 const NOT_FOUND = 'We could not find a delivered order with those details.'
@@ -18,7 +19,7 @@ const ORDER_PARTS = { items: true, returns: { select: { id: true, status: true, 
  */
 export async function requestReturn(storeId: string, ask: ReturnAsk, requirePhoneLast4: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
   const policy = readReturnPolicy(await loadExtra(storeId))
-  if (!policy.enabled) return { ok: false, error: 'This shop does not take return requests online. Please contact the shop.' }
+  if (!policy.enabled || !(await hasFeature(storeId, 'returns'))) return { ok: false, error: 'This shop does not take return requests online. Please contact the shop.' }
   return db.$transaction(async (tx) => {
     const order = await tx.order.findFirst({ where: { storeId, trackingCode: ask.code }, include: ORDER_PARTS })
     if (!order || (requirePhoneLast4 && ask.last4 !== lastFour(order.customerPhone))) return { ok: false as const, error: NOT_FOUND }
@@ -34,6 +35,7 @@ export async function requestReturn(storeId: string, ask: ReturnAsk, requirePhon
 
 /** THE OWNER starts a return themselves (the customer phoned): everything not returned yet, already approved. */
 export async function startReturn(admin: Actor, orderId: string) {
+  const locked = await featureProblem(admin.storeId, 'returns'); if (locked) throw new AdminError(locked)
   return db.$transaction(async (tx) => {
     const order = await tx.order.findFirst({ where: { id: orderId, storeId: admin.storeId }, include: ORDER_PARTS })
     if (!order) throw new AdminError('Order not found.')

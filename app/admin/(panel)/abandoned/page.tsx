@@ -7,6 +7,8 @@ import { itemsParam } from '@/lib/cart'
 import { LEAD_KEEP_DAYS, LEAD_WAIT_MINUTES, leadMessage, readLeadLines } from '@/lib/leads'
 import ActionForm from '@/components/admin/ActionForm'
 import { leadAction } from './actions'
+import { loadPlanAccess } from '@/lib/plans/access'
+import { ProLock } from '@/components/admin/ProLock'
 
 export const dynamic = 'force-dynamic'
 const rs = (n: number) => `Rs. ${Math.round(n).toLocaleString('en-PK')}`
@@ -17,6 +19,7 @@ const rs = (n: number) => `Rs. ${Math.round(n).toLocaleString('en-PK')}`
  */
 export default async function AbandonedPage() {
   const admin = await requireAdmin('orders.view')
+  if (!(await loadPlanAccess(admin.storeId)).has('abandoned')) return <ProLock feature="abandoned" title="Unfinished checkouts" />
   const now = Date.now()
   const [rows, recovered, store, domain] = await Promise.all([
     db.checkoutLead.findMany({ where: { storeId: admin.storeId, recoveredAt: null, updatedAt: { lt: new Date(now - LEAD_WAIT_MINUTES * 60_000), gt: new Date(now - LEAD_KEEP_DAYS * 86_400_000) } }, orderBy: { updatedAt: 'desc' }, take: 100 }),

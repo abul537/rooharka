@@ -6,12 +6,15 @@ import { pktDay } from '@/lib/admin/insights'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { createDiscountAction, discountAction } from './actions'
+import { loadPlanAccess } from '@/lib/plans/access'
+import { ProLock } from '@/components/admin/ProLock'
 
 export const dynamic = 'force-dynamic'
 
 /** DISCOUNT CODES of this store: what each gives, how often it was used, and a form to make a new one. */
 export default async function DiscountsPage() {
   const admin = await requireAdmin('orders.view')
+  if (!(await loadPlanAccess(admin.storeId)).has('discounts')) return <ProLock feature="discounts" />
   const rows = await db.discount.findMany({ where: { storeId: admin.storeId }, orderBy: { createdAt: 'desc' } })
   const editable = can(admin.role, 'settings.edit')
   const now = new Date()

@@ -368,7 +368,7 @@ test('starter designs set up the product and collection pages, and the shop page
   assert.deepEqual(themePreset('spotlight', 'S').product, DEFAULT_PAGES.product(), 'Spotlight keeps the original product page')
   assert.notDeepEqual(themePreset('bold', 'S').product, themePreset('editorial', 'S').product)
   const product = readFileSync('app/(shop)/product/[slug]/page.tsx', 'utf8'), collection = readFileSync('app/(shop)/collections/[handle]/page.tsx', 'utf8')
-  assert.match(product, /pages\[productTemplate\(product\.pageDesign\)\]/); assert.match(product, /<RenderSections sections=\{sections\} data=\{sectionData\} ownHeading \/>/)
+  assert.match(product, /pages\[productTemplate\(design\)\]/); assert.match(product, /<RenderSections sections=\{sections\} data=\{sectionData\} ownHeading \/>/)
   assert.match(product, /application\/ld\+json/, 'search-engine data is kept')
   assert.match(collection, /pages\.collection/); assert.match(collection, /ownHeading/)
   assert.match(collection, /getPublicCollection\(store\.id, handle/, 'a collection is still looked up inside its own store')
@@ -394,7 +394,7 @@ test('Save stores EVERY kind of page under its own name (product and collection 
   // The shop draws each kind of page from the template of the same name.
   for (const [file, page] of [['app/(shop)/page.tsx', 'home'], ['app/(shop)/about/page.tsx', 'about'], ['app/(shop)/product/[slug]/page.tsx', 'product'], ['app/(shop)/collections/[handle]/page.tsx', 'collection']] as const) {
     const src = readFileSync(file, 'utf8')
-    assert.match(src, page === 'product' ? /\.pages\[productTemplate\(product\.pageDesign\)\]/ : new RegExp(`\\.pages\\.${page}\\b`), file)
+    assert.match(src, page === 'product' ? /\.pages\[productTemplate\(design\)\]/ : new RegExp(`\\.pages\\.${page}\\b`), file)
     for (const other of TEMPLATE_TYPES) if (other !== page) assert.doesNotMatch(src, new RegExp(`\\.pages\\.${other}\\b`), `${file} must not read the ${other} template`)
   }
   // The editor sends only the pages that changed, each under its own name.

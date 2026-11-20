@@ -13,6 +13,7 @@ import { bookOnce, type BookingLedger, type BookOutcome, type Claim } from '@/li
 import { getCourierAdapter } from '@/lib/couriers/factory'
 import { STATUS_TEXT } from '@/lib/couriers/contract'
 import { recordCourierResult, withCredentials, isConnected } from '@/lib/couriers/vault'
+import { hasFeature } from '@/lib/plans/access'
 
 const orderSelect = { id: true, storeId: true, number: true, status: true, verificationStatus: true, source: true, total: true, amountPaid: true, customerName: true, customerEmail: true, customerPhone: true, cityName: true, landmark: true, localityName: true, payments: { select: { method: true, status: true } }, items: { select: { name: true, variantLabel: true, quantity: true, unitCode: true } } } as const
 
@@ -71,6 +72,7 @@ export async function bookOrderWithCourier(storeId: string, orderId: string, pro
 /** Automatic booking for a new order, for a store that has connected the courier. Safe to call twice. */
 export async function autoBookOrder(storeId: string, orderId: string, provider = 'postex'): Promise<BookOutcome | null> {
   if (!(await isConnected(storeId, provider))) return null
+  if (!(await hasFeature(storeId, 'auto-booking'))) return null // Pro: on Basic the owner books each order with one click
   const o = await db.order.findFirst({ where: { id: orderId, storeId }, select: { source: true } })
   if (!o || o.source === 'POS') return null // a counter sale is handed over in the shop
   return bookOrderWithCourier(storeId, orderId, provider)

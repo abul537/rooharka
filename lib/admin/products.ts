@@ -8,6 +8,7 @@ import type { ProductEdit, VariantEdit } from './product-rules'
 import { AdminError } from './orders'
 import { handleTakenError, videoMaxBytes } from '@/lib/admin/product-mvp'
 import { LIST_PAGE_SIZE, LOW_STOCK_AT, cloneName, cloneSku, mergeTags, type BulkRequest, type ListQuery } from '@/lib/admin/product-extras'
+import { productRoomProblem } from '@/lib/plans/access'
 
 /** The database filter for the product list. Always starts from the store, so no filter can reach another store. */
 function listWhere(storeId: string, q: ListQuery) {
@@ -152,6 +153,7 @@ async function assertCategory(storeId: string, categoryId: string | null) {
 const autoSku = (seed: string) => `${slugify(seed).toUpperCase().replace(/-/g, '').slice(0, 6) || 'SKU'}-${randomBytes(2).toString('hex').toUpperCase()}`
 
 export async function createProduct(admin: StoreAdmin, input: NewProduct): Promise<string> {
+  const full = await productRoomProblem(admin.storeId, 1); if (full) throw new AdminError(full)
   await assertCategory(admin.storeId, input.product.categoryId)
   const userChoseSlug = input.slug !== slugify(input.product.name)
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -277,6 +279,7 @@ export async function generateVariants(admin: StoreAdmin, productId: string, gro
  * item) and, unless asked, stock (so the shop never shows stock that does not exist). The copy starts as a DRAFT.
  */
 export async function duplicateProduct(admin: StoreAdmin, productId: string, opts: { copyStock: boolean }): Promise<{ id: string; name: string }> {
+  const full = await productRoomProblem(admin.storeId, 1); if (full) throw new AdminError(full)
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       return await db.$transaction(async (tx) => {

@@ -6,12 +6,14 @@ import { audit } from '@/lib/audit'
 import { db } from '@/lib/db'
 import { MAX_DISCOUNTS, parseDiscountForm } from '@/lib/discounts'
 import type { ActionState } from '@/components/admin/ActionForm'
+import { featureProblem } from '@/lib/plans/access'
 
 const oops = (what: string, e: unknown): ActionState => { console.error(`[discount ${what}]`, e); return { error: 'Something went wrong. Nothing was changed; please try again.' } }
 
 /** A new discount code for this store. The code is unique inside the store. */
 export async function createDiscountAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const g = await adminOrError('settings.edit'); if ('error' in g) return g
+  const locked = await featureProblem(g.admin.storeId, 'discounts'); if (locked) return { error: locked }
   const parsed = parseDiscountForm((k) => fd.get(k))
   if (!parsed.ok) return { error: parsed.error }
   try {
@@ -28,6 +30,7 @@ export async function createDiscountAction(_: ActionState, fd: FormData): Promis
 /** Switch a code on or off, or delete it. Orders that already used it keep their discount. */
 export async function discountAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const g = await adminOrError('settings.edit'); if ('error' in g) return g
+  const locked = await featureProblem(g.admin.storeId, 'discounts'); if (locked) return { error: locked }
   const id = String(fd.get('id') ?? ''), what = String(fd.get('what') ?? '')
   try {
     const d = await db.discount.findFirst({ where: { id, storeId: g.admin.storeId }, select: { id: true, code: true, isActive: true } })

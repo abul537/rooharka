@@ -2,6 +2,7 @@ import { getCurrentStore } from '@/lib/store'
 import { describeDiscount, discountProblem, parseDiscountCode } from '@/lib/discounts'
 import { findDiscount } from '@/lib/discounts-data'
 import { clientIp, rateLimit } from '@/lib/rate-limit'
+import { hasFeature } from '@/lib/plans/access'
 
 export const dynamic = 'force-dynamic'
 const json = (status: number, body: object) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
@@ -15,6 +16,8 @@ export async function POST(request: Request) {
   if (!rateLimit(`discount:${clientIp(request.headers)}`, 10, 60_000).ok) return json(429, { error: 'Too many tries. Please wait a minute.' })
   const store = await getCurrentStore()
   if (!store) return json(404, { error: 'This store is not available.' })
+  // A shop whose plan has no discount codes answers exactly like an unknown code.
+  if (!(await hasFeature(store.id, 'discounts'))) return json(404, { error: 'That discount code is not valid.' })
   const body = (await request.json().catch(() => null)) as { code?: unknown; subtotal?: unknown } | null
   const code = parseDiscountCode(body?.code)
   const subtotal = typeof body?.subtotal === 'number' && Number.isFinite(body.subtotal) && body.subtotal >= 0 ? body.subtotal : 0

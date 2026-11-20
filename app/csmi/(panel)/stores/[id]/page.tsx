@@ -10,6 +10,8 @@ import ActionForm from '@/components/admin/ActionForm'
 import { Card, Field, inputCls, primaryBtn } from '@/components/admin/ui'
 import { Flags, Pill, Stat, pct } from '@/components/csmi/Pills'
 import { loadEntitlements } from '@/lib/entitlements/service'
+import { loadPlanAccess } from '@/lib/plans/access'
+import { PRO_FEATURES, SWITCHABLE, readOverrides } from '@/lib/plans/catalog'
 import { STAFF_UNLIMITED, isOverStaffLimit, staffUsage } from '@/lib/entitlements/rules'
 import { addDomainAction, checkDomainAction, removeDomainAction, saveSubscriptionAction, setDomainLiveAction, setStatusAction, decideServiceAction, decideShopAction, saveEntitlementsAction } from '../../actions'
 
@@ -29,8 +31,10 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
     db.storeDomain.findMany({ where: { storeId: id }, orderBy: { createdAt: 'asc' } }),
     db.store.findUnique({ where: { id }, select: { shopApproval: true, shopDecisionNote: true } }),
     loadEntitlements(id),
-    db.store.findUnique({ where: { id }, select: { staffLimit: true, posMode: true } }),
+    db.store.findUnique({ where: { id }, select: { staffLimit: true, posMode: true, featureOverrides: true } }),
   ])
+  const access = await loadPlanAccess(id)
+  const switches = readOverrides(own?.featureOverrides)
   const r = p.rows.find((x) => x.id === id)
   if (!r) notFound()
   const now = new Date()
@@ -96,7 +100,7 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
         </Card>
       </div>
 
-      <Card title="Staff limit and POS lite" hint="You decide what this store may use. “Follow the plan” uses the plan's staff limit and its POS lite tick; anything else here overrides the plan for this store only. The store cannot change this.">
+      <Card title="Plan features, staff limit and POS lite" hint="You decide what this store may use. “Follow the plan” uses the plan (and the free trial, which opens every Pro feature); On or Off overrides the plan for this store only: a gift, a paid add-on, or switching something off. The store cannot change this.">
         <p className="text-sm mb-3">Now: <strong>{staffUsage(ent.staff.used, ent.staff)}</strong> ({ent.staff.source === 'store' ? 'set for this store' : ent.staff.source === 'plan' ? `from the ${ent.planName ?? ''} plan` : 'safe default: no plan yet'}) · POS lite <strong>{ent.pos.enabled ? 'ON' : 'OFF'}</strong> ({ent.pos.source === 'store' ? 'set for this store' : 'from the plan'}){isOverStaffLimit(ent.staff.used, ent.staff) && <span className="text-amber-700"> · over the limit: existing staff keep working, but the store cannot add or switch on more</span>}</p>
         {manage && (
           <ActionForm action={saveEntitlementsAction} className="grid sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
@@ -105,9 +109,21 @@ export default async function StoreDetail({ params }: { params: Promise<{ id: st
             <Field label="POS lite (counter sales)">
               <select name="posMode" defaultValue={own?.posMode ?? 'PLAN'} className={inputCls}><option value="PLAN">Follow the plan</option><option value="ON">Always on</option><option value="OFF">Always off</option></select>
             </Field>
+            <fieldset className="sm:col-span-3 border-t border-slate-100 pt-3">
+              <legend className="mb-2 text-sm font-medium">Pro features for this store {access.trial && <span className="font-normal text-slate-500">(on a free trial: every feature is on unless you switch it off)</span>}</legend>
+              <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                {SWITCHABLE.map((k) => (
+                  <label key={k} className="flex items-center justify-between gap-3 text-sm">
+                    <span><span className={`mr-2 inline-block h-2 w-2 rounded-full ${access.has(k) ? 'bg-emerald-500' : 'bg-slate-300'}`} aria-hidden />{PRO_FEATURES[k].label}<span className="sr-only">{access.has(k) ? ' (now on)' : ' (now off)'}</span></span>
+                    <select name={`feat_${k}`} defaultValue={switches[k] ?? ''} className="rounded border border-slate-300 px-2 py-1 text-sm"><option value="">Follow the plan</option><option value="on">On</option><option value="off">Off</option></select>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <button className={primaryBtn}>Save</button>
           </ActionForm>
         )}
+        {!manage && <p className="text-sm text-slate-600">Pro features on now: {[...access.features.on].map((k) => PRO_FEATURES[k].short).join(', ') || 'none'}.</p>}
       </Card>
 
       <Card title="Shop visibility" hint="Open: customers can browse and order. Closed: customers see a plain 'not open yet' page. The owner can always sign in and set up. Closing needs a reason, which the store owner reads and is told.">

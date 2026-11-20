@@ -4,12 +4,15 @@ import { EXPORT_HEADER } from '@/lib/admin/product-extras'
 import { IMPORT_MAX_ROWS } from '@/lib/admin/product-import'
 import ProductImport from '@/components/admin/ProductImport'
 import { Card } from '@/components/admin/ui'
+import { loadPlanAccess } from '@/lib/plans/access'
+import { ProLock } from '@/components/admin/ProLock'
 
 export const dynamic = 'force-dynamic'
 
 /** Add or update many products at once from a spreadsheet. */
 export default async function ImportPage() {
-  await requireAdmin('products.edit')
+  const admin = await requireAdmin('products.edit')
+  if (!(await loadPlanAccess(admin.storeId)).has('product-import')) return <ProLock feature="product-import" title="Import products" />
   return (
     <div className="max-w-3xl space-y-6">
       <div>

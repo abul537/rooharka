@@ -192,12 +192,13 @@ import { effectiveInvoiceStatus, intervalOf, periodPrice } from '@/lib/csmi/rule
 import { describePlan, yearlySaving } from '@/lib/signup/plans'
 
 test('plan card text: limits, unlimited, features and saving', () => {
-  const d = describePlan({ limits: { products: 100, staff: 1, tagline: 'For new shops', popular: true }, features: ['postex', 'nonsense', 'sms-otp'] })
-  assert.deepEqual(d.bullets.slice(0, 3), ['Up to 100 products', 'Unlimited orders', '1 staff login'])
-  assert.ok(d.bullets.includes('PostEx booking and tracking') && d.bullets.includes('Fake-order check by SMS code'))
+  const d = describePlan({ limits: { products: 100, staff: 1, tagline: 'For new shops', popular: true }, features: ['auto-booking', 'nonsense', 'fraud-check', 'postex'] })
+  assert.deepEqual(d.bullets.slice(1, 4), ['Up to 100 products', 'Unlimited orders', '1 staff login']); assert.equal(d.bullets[0], 'Everything in every plan, plus:')
+  assert.ok(d.bullets.includes('Automatic courier booking') && d.bullets.includes('Automatic fake-order check'))
+  assert.ok(!d.bullets.some((b) => /postex/i.test(b)), 'old service keys are no longer plan features')
   assert.ok(!d.bullets.some((b) => /nonsense/.test(b)))
   assert.equal(d.popular, true)
-  assert.equal(describePlan({ limits: null, features: 'oops' }).bullets[0], 'Unlimited products')
+  assert.equal(describePlan({ limits: null, features: 'oops' }).bullets[1], 'Unlimited products'); assert.match(describePlan({ limits: null, features: [] }).bullets[0], /^Everything to sell online/)
   assert.equal(yearlySaving(3000, 30000), 17)
   assert.equal(yearlySaving(3000, 36000), null)
   assert.equal(yearlySaving(3000, null), null)

@@ -435,3 +435,37 @@ work per visit. Do it after launch on a branch, with the build running in CI.
 The code paths to Neon, Cloudinary, Upstash, IPQualityScore, PostEx, the SMS provider and Resend have unit and
 render tests only. The bundle-size limits in `lib/bundle-budget.ts` are first estimates: set them from the first
 real build. The CI workflow has not run yet.
+
+## Plans: Basic and Pro (Nov 2026)
+
+**One list decides everything:** `lib/plans/catalog.ts`. The pricing page, sign-up, CSMI, the dashboard and the
+server checks all read it.
+
+| | Basic | Pro |
+| --- | --- | --- |
+| Price (starting point, change in CSMI) | Rs. 2,999 / month, Rs. 29,990 / year | Rs. 6,999 / month, Rs. 69,990 / year |
+| Products | up to 100 | unlimited |
+| Orders, commission | unlimited, none | unlimited, none |
+| Staff logins (besides the owner) | 1 | 5 |
+| Product videos | 20 MB | 50 MB |
+| The essentials (`INCLUDED_IN_ALL`) | ✓ | ✓ |
+| 13 Pro features (`PRO_FEATURES`) | – | ✓ |
+
+**Pro features**, each refused on the server when the store does not have it: automatic fake-order check,
+unfinished checkouts, discount codes, ad pixels, SMS/WhatsApp order updates, automatic courier booking, returns,
+POS lite, AI descriptions, spreadsheet import, special product page designs, own web address, priority support.
+
+**Who gets what** (`resolveFeatures`): the platform owner's own switch for that store (CSMI, store page, "Plan
+features") always wins; then the free trial (every Pro feature on); then the plan. A store with no plan at all
+(made by hand before plans existed) keeps everything, as before. Answers are cached 30 seconds per store; a CSMI
+change to a store clears its cache at once.
+
+**Moving down never deletes anything.** Features beyond the plan switch off and come back on upgrade. Open returns
+can still be finished; existing discount codes simply stop being accepted; products above the limit stay in the
+shop, but no new ones can be added.
+
+**Where:**
+- CSMI → Plans → "Set up Basic and Pro". `pnpm db:seed` also creates them when missing, and never overwrites your changes.
+- CSMI → a store → "Plan features": per-store on/off for each feature.
+- Dashboard → Plan and billing: comparison table and "Switch to …". The request arrives in CSMI → Support; you change the plan on the store's page.
+- Pricing page: plan cards, the comparison table, and "Why Pro pays for itself" (computed from the two prices and an estimated Rs. 350 per refused parcel).

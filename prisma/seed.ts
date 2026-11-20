@@ -4,6 +4,7 @@ import 'dotenv/config'
 import { db } from '../lib/db'
 import { CHECKOUT_FIELD_DEFAULTS } from '../lib/store-defaults'
 import { presetContent } from '../lib/storefront/presets'
+import { RECOMMENDED_PLANS } from '../lib/plans/catalog'
 
 const SERVICES = [
   { key: 'jazzcash', name: 'JazzCash', type: 'PAYMENT' },
@@ -153,6 +154,11 @@ async function main() {
       update: { name: s.name, type: s.type },
       create: { ...s },
     })
+  }
+
+  // The recommended Basic and Pro plans. Only CREATED when missing: prices and features you changed in CSMI are never overwritten.
+  for (const p of RECOMMENDED_PLANS) {
+    await db.plan.upsert({ where: { name: p.name }, update: {}, create: { name: p.name, monthlyPrice: p.monthlyPrice, yearlyPrice: p.yearlyPrice, sortOrder: p.sortOrder, limits: p.limits, features: [...p.features] } })
   }
 
   const store = await db.store.upsert({

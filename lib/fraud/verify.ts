@@ -13,6 +13,7 @@ import { rateLimit } from '@/lib/rate-limit'
 import { decide, readFraudSettings, VERDICT_TEXT, type Decision, type IpRisk } from '@/lib/fraud/rules'
 import { firstOrderAverage, loadHistory, partnerLabel } from '@/lib/fraud/network'
 import { ipRisk } from '@/lib/fraud/ip-risk'
+import { hasFeature } from '@/lib/plans/access'
 
 const SELECT = {
   id: true, storeId: true, number: true, source: true, status: true, total: true, customerPhone: true, customerName: true, cityName: true, localityName: true, landmark: true,
@@ -41,6 +42,8 @@ export async function verifyOrder(storeId: string, orderId: string, opts: { ip?:
   if (order.verificationStatus && !opts.again) return null
   const rules = readFraudSettings(settings?.extra)
   if (!rules.enabled) return null
+  // A Pro feature: on Basic, orders are not checked (and so never held).
+  if (!(await hasFeature(storeId, 'fraud-check'))) return null
 
   const total = order.total.toNumber()
   const [history, partner, average, ip] = await Promise.all([

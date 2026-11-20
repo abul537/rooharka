@@ -15,6 +15,8 @@ import { DEFAULT_OTP_SETTINGS } from '@/lib/otp/rules'
 import { SERVICES } from '@/lib/services/registry'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
+import { ProNote } from '@/components/admin/ProLock'
+import { loadPlanAccess } from '@/lib/plans/access'
 import { Card, Check, Field, Group, inputCls, primaryBtn } from '@/components/admin/ui'
 import { SETTINGS_TABS, settingsHref, settingsTab } from '@/lib/admin/settings-tabs'
 import { FRAUD_LIMITS } from '@/lib/fraud/rules'
@@ -45,6 +47,7 @@ const POLICY_TEXT: Record<string, string> = {
  */
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
   const admin = await requireAdmin('settings.edit')
+  const plan = await loadPlanAccess(admin.storeId)
   const tab = settingsTab((await searchParams).tab)
   const current = SETTINGS_TABS.find((t) => t.key === tab)!
   const needsServices = tab === 'checkout' || tab === 'couriers' || tab === 'connections'
@@ -147,6 +150,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </ActionForm>
       </Card>
       <Card title="Fake-order check" hint="Every cash-on-delivery order is checked within seconds, without asking the customer for a code: the phone number, this buyer’s delivered and refused parcels at every shop on the platform, and how many orders they placed today. You see one result on the order: Clear, Review or Blocked, with the reasons. Held orders get no courier until you approve them.">
+        {!plan.has('fraud-check') && <ProNote feature="fraud-check" />}
         <ActionForm action={saveFraudAction} className="space-y-5">
           <Check name="enabled" label="Check every cash-on-delivery order" defaultChecked={fraud.enabled} />
           <Group title="Limits">
@@ -162,6 +166,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </Card>
 
       <Card title="Messages to customers" hint="Tell customers by SMS or WhatsApp how their order is going. Messages are sent through your own SMS / WhatsApp provider (the one connected under Phone verification below), so each message costs what your provider charges. Tick only the ones worth it; “shipped” is the most useful.">
+        {!plan.has('sms-updates') && <ProNote feature="sms-updates" />}
         <ActionForm action={saveNotifyAction} className="space-y-5">
           {'problem' in messaging && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">No message can be sent yet: {messaging.problem}</p>}
           <Group title="Send a message when the order is">
@@ -251,16 +256,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </div>
       </Card>
       <Card title="AI writing assistant" hint="Adds a “Generate with AI” button to the product description. It uses your own Anthropic account, so you control the cost (a description costs a tiny fraction of a rupee). Limit: 10 descriptions an hour.">
+        {!plan.has('ai-writer') && <ProNote feature="ai-writer" />}
         <div className="space-y-4">
           {SERVICES.filter((d) => d.key === 'ai').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
         </div>
       </Card>
       <Card title="IP risk score" hint="Optional. Adds one more signal to the fake-order check for larger cash-on-delivery orders: whether the buyer hides behind a VPN or proxy, orders from abroad, or uses a connection known for abuse. It uses your own IPQualityScore account, so you control the cost. The order-value limit is under Checkout and orders.">
+        {!plan.has('fraud-check') && <ProNote feature="fraud-check" />}
         <div className="space-y-4">
           {SERVICES.filter((d) => d.key === 'ipqs').map((d) => <ServiceCard key={d.key} def={d} view={services.get(d.key)!} />)}
         </div>
       </Card>
       <Card title="Advertising pixels" hint="If you run ads on Facebook, Instagram, TikTok or Google, paste your pixel IDs here. Your shop then reports page views, product views, add to cart, checkout and purchases to them, so you can see which ads bring orders. Leave a box empty if you do not use it.">
+        {!plan.has('pixels') && <ProNote feature="pixels" />}
         <ActionForm action={savePixelsAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
             {(['meta', 'tiktok', 'ga4'] as const).map((k) => <Field key={k} label={PIXEL_HINTS[k].name} hint={PIXEL_HINTS[k].hint}><input name={k} defaultValue={pixels[k]} maxLength={30} autoComplete="off" className={`${inputCls} font-mono`} /></Field>)}

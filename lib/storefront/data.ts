@@ -9,6 +9,7 @@ import { getLiveTheme, getThemeById, type Pages } from '@/lib/theme/data'
 import type { ThemeSettings } from '@/lib/theme/settings'
 import { storeCached } from '@/lib/cache'
 import { readStorefront, type StorefrontContent } from '@/lib/storefront/rules'
+import { hasFeature } from '@/lib/plans/access'
 
 /** What every storefront page needs to draw itself: the owner's content plus the store's contact and branding settings. */
 export interface ShopContext {
@@ -32,7 +33,8 @@ const load = storeCached('context', 15, async (storeId, name): Promise<ShopConte
     content: readStorefront(row?.content, name),
     logoUrl: s?.logoUrl ?? null, phone: s?.supportPhone ?? null, whatsapp: s?.supportWhatsapp ?? null, email: s?.supportEmail ?? null,
     trackingEnabled: s?.orderTrackingEnabled ?? true,
-    pixels: readPixels(s?.extra),
+    // Ad tracking is a Pro feature: without it the ids stay saved but are not written into the pages.
+    pixels: (await hasFeature(storeId, 'pixels')) ? readPixels(s?.extra) : readPixels(null),
     lang: readLanguage(s?.extra),
   }
 })

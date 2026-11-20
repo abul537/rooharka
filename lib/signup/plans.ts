@@ -1,22 +1,13 @@
+import { INCLUDED_IN_ALL as ALL, PRO_FEATURES, isProFeature } from '@/lib/plans/catalog'
+
 /** Turns a plan's stored limits and features into the lines shown on the pricing page. Pure, so it is tested. */
 export interface PlanLimits { products: number | null; ordersPerMonth: number | null; staff: number | null; tagline: string; popular: boolean; /** Largest product video in MB (null = the standard 20 MB). */ videoMb: number | null }
 
-export const FEATURE_LABELS: Record<string, string> = {
-  'sms-otp': 'Fake-order check by SMS code', 'whatsapp-otp': 'Fake-order check by WhatsApp code', jazzcash: 'JazzCash payments', easypaisa: 'EasyPaisa payments',
-  tcs: 'TCS shipping', pos: 'POS lite: sell at the counter', leopards: 'Leopards booking and tracking', postex: 'PostEx booking and tracking', 'order-tracking': 'Customer order tracking page',
-}
-
+/** The Pro features, by key, as the pricing page and CSMI show them (the list lives in lib/plans/catalog.ts). */
+export const FEATURE_LABELS: Record<string, string> = Object.fromEntries(Object.entries(PRO_FEATURES).map(([k, v]) => [k, v.label]))
 export const FEATURE_KEYS = Object.keys(FEATURE_LABELS)
-
-/** Everything every plan includes. Kept to what the product really does. */
-export const INCLUDED_IN_ALL = [
-  'Pakistan address dropdowns: province, city, locality',
-  'Cash on delivery, advance or full-payment rules you control',
-  'Products with photos and video, catalog page',
-  'Order management and customer profiles',
-  'Courier choice: PostEx, Leopards, TCS or any local company',
-  'Two-factor sign-in and encrypted API keys',
-]
+/** Everything every plan includes. */
+export const INCLUDED_IN_ALL: readonly string[] = ALL
 
 const num = (v: unknown, min = 1) => (typeof v === 'number' && Number.isInteger(v) && v >= min ? v : null)
 
@@ -29,11 +20,13 @@ const fmt = (n: number) => n.toLocaleString('en-PK')
 
 export function describePlan(p: { limits: unknown; features: unknown }) {
   const l = readLimits(p.limits)
+  const pro = Array.isArray(p.features) ? p.features.filter(isProFeature) : []
   const bullets = [
+    pro.length === 0 ? 'Everything to sell online: shop designer, cart, cash on delivery, couriers, tracking, Urdu' : 'Everything in every plan, plus:',
     l.products ? `Up to ${fmt(l.products)} products` : 'Unlimited products',
     l.ordersPerMonth ? `Up to ${fmt(l.ordersPerMonth)} orders a month` : 'Unlimited orders',
     l.staff === null ? 'Unlimited staff logins' : l.staff === 0 ? 'Owner login only' : `${fmt(l.staff)} staff login${l.staff === 1 ? '' : 's'}`,
-    ...(Array.isArray(p.features) ? p.features.filter((k): k is string => typeof k === 'string' && k in FEATURE_LABELS).map((k) => FEATURE_LABELS[k]) : []),
+    ...pro.map((k) => FEATURE_LABELS[k]),
   ]
   return { tagline: l.tagline, popular: l.popular, bullets }
 }

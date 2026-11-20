@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import { effectiveStaffLimit, posAccess, type PosAccess, type StaffLimit } from './rules'
+import { loadPlanAccess } from '@/lib/plans/access'
+import { effectiveStaffLimit, type PosAccess, type StaffLimit } from './rules'
 
 /** Active logins a store is charged against its limit: managers and staff. The owner is always free. */
 export const countStaff = (tx: Pick<typeof db, 'user'> | Prisma.TransactionClient, storeId: string) =>
@@ -17,13 +18,13 @@ export async function loadEntitlements(storeId: string): Promise<Entitlements> {
   const plan = store?.subscription?.plan ?? null
   return {
     staff: { ...effectiveStaffLimit({ storeLimit: store?.staffLimit ?? null, plan }), used },
-    pos: posAccess({ mode: store?.posMode ?? 'PLAN', planFeatures: plan?.features ?? null }),
+    pos: await loadPosAccess(storeId),
     planName: plan?.name ?? null,
   }
 }
 
-/** Just the POS switch (one query): used on every dashboard page to decide whether to show the POS menu entry. */
+/** Just the POS switch: used on every dashboard page to decide whether to show the POS menu entry. Same rules as every Pro feature. */
 export async function loadPosAccess(storeId: string): Promise<PosAccess> {
-  const s = await db.store.findUnique({ where: { id: storeId }, select: { posMode: true, subscription: { select: { plan: { select: { features: true } } } } } })
-  return posAccess({ mode: s?.posMode ?? 'PLAN', planFeatures: s?.subscription?.plan.features ?? null })
+  const a = await loadPlanAccess(storeId)
+  return { enabled: a.has('pos'), source: a.features.source.pos === 'store' ? 'store' : 'plan' }
 }

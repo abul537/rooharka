@@ -4,10 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { adminOrError } from '@/lib/auth/guard'
 import { db } from '@/lib/db'
 import type { ActionState } from '@/components/admin/ActionForm'
+import { featureProblem } from '@/lib/plans/access'
 
 /** Marks an unfinished checkout as contacted, or removes it. Only one of the admin's own store. */
 export async function leadAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const g = await adminOrError('orders.update'); if ('error' in g) return g
+  const locked = await featureProblem(g.admin.storeId, 'abandoned'); if (locked) return { error: locked }
   const id = String(fd.get('id') ?? ''), what = String(fd.get('what') ?? '')
   try {
     const scope = { id, storeId: g.admin.storeId }

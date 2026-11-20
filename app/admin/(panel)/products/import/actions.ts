@@ -6,6 +6,7 @@ import { audit } from '@/lib/audit'
 import { IMPORT_MAX_BYTES, describePlan } from '@/lib/admin/product-import'
 import { previewImport, runImport } from '@/lib/admin/product-import-run'
 import { storeLimit } from '@/lib/rate-limit'
+import { featureProblem } from '@/lib/plans/access'
 
 export interface ImportAnswer { summary: string; problems: string[]; updates: number; creates: number; done: boolean; error?: string }
 const refuse = (error: string): ImportAnswer => ({ summary: '', problems: [], updates: 0, creates: 0, done: false, error })
@@ -16,6 +17,7 @@ const refuse = (error: string): ImportAnswer => ({ summary: '', problems: [], up
  */
 export async function importProductsAction(text: unknown, apply: unknown): Promise<ImportAnswer> {
   const g = await adminOrError('products.edit'); if ('error' in g) return refuse(g.error)
+  const locked = await featureProblem(g.admin.storeId, 'product-import'); if (locked) return refuse(locked)
   if (typeof text !== 'string' || text.length === 0) return refuse('Choose a file first.')
   if (text.length > IMPORT_MAX_BYTES) return refuse('The file is larger than 1 MB. Split it into smaller files.')
   if (!storeLimit(g.admin.storeId, 'import').ok) return refuse('Too many imports at once. Please wait a minute.')

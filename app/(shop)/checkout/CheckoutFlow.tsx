@@ -35,7 +35,7 @@ function newKey(): string {
 /** A discount code the shop accepted, as much of it as the page needs to show the saving. The server judges it again. */
 export interface AppliedDiscount { code: string; kind: DiscountKind; value: number; minSubtotal: number; text: string }
 
-export default function CheckoutFlow({ config, entries, fromCart, verifiedPhone }: Props) {
+export default function CheckoutFlow({ config, entries, fromCart, verifiedPhone, codesOn = true }: Props & { codesOn?: boolean }) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [address, setAddress] = useState<AddressFormData | null>(null);
@@ -141,7 +141,7 @@ export default function CheckoutFlow({ config, entries, fromCart, verifiedPhone 
         entries={lines}
         onQuantityChange={(variantId, quantity) => setLines((all) => all.map((e) => (e.line.variantId === variantId ? { ...e, quantity } : e)))}
         onRemove={(variantId) => setLines((all) => (all.length > 1 ? all.filter((e) => e.line.variantId !== variantId) : all))}
-        discount={discount} discountShort={discountShort} onDiscount={setDiscount} subtotal={subtotal}
+        discount={discount} discountShort={discountShort} onDiscount={setDiscount} codesOn={codesOn} subtotal={subtotal}
         charges={summaryCharges} currency={config.currency} locked={submitting} />
     </div>
   );

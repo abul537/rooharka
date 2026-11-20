@@ -4,6 +4,8 @@ import type { CostFormInput, NewStoreInput, PlanInput, StatusInput, Subscription
 import { MAX_DOMAINS_PER_STORE } from '@/lib/domains'
 import { applyDiscount } from '@/lib/offers/rules'
 import { addPeriod, intervalOf, invoiceLines, invoiceTotals, nextInvoiceNumber, periodPrice, type BillingInterval } from '@/lib/csmi/rules'
+import { hasFeature } from '@/lib/plans/access'
+import { RECOMMENDED_PLANS, type FeatureOverride, type ProFeature } from '@/lib/plans/catalog'
 
 /** A problem whose message is safe to show to the platform owner. */
 export class CsmiError extends Error {}
@@ -54,6 +56,7 @@ export async function setStoreStatus(storeId: string, input: StatusInput) {
 export async function addDomain(storeId: string, host: string) {
   const store = await db.store.findUnique({ where: { id: storeId }, select: { id: true, _count: { select: { domains: true } } } })
   if (!store) throw new CsmiError('Store not found.')
+  if (!(await hasFeature(storeId, 'custom-domain'))) throw new CsmiError('This store’s plan does not include its own web address. Move it to Pro, or switch “Own web address” on for this store under Plan features.')
   if (store._count.domains >= MAX_DOMAINS_PER_STORE) throw new CsmiError(`A store can have at most ${MAX_DOMAINS_PER_STORE} web addresses.`)
   try {
     return await db.storeDomain.create({ data: { storeId, host, isPrimary: store._count.domains === 0 }, select: { id: true, host: true } })
@@ -122,6 +125,29 @@ export async function saveSubscription(storeId: string, input: SubscriptionInput
 }
 
 // -------------------------------------------------------------------- plans
+/**
+ * Creates the recommended Basic and Pro plans (lib/plans/catalog.ts). A plan that already exists under that name
+ * is left alone, unless `refresh` is asked: then its features, limits and tagline are brought up to the
+ * recommendation and its PRICES ARE KEPT (prices are the platform owner's decision).
+ */
+export async function installRecommendedPlans(refresh: boolean): Promise<{ created: string[]; refreshed: string[]; kept: string[] }> {
+  const out = { created: [] as string[], refreshed: [] as string[], kept: [] as string[] }
+  for (const p of RECOMMENDED_PLANS) {
+    const existing = await db.plan.findUnique({ where: { name: p.name }, select: { id: true, limits: true } })
+    const limits = { ...p.limits } as Prisma.InputJsonValue, features = [...p.features] as Prisma.InputJsonValue
+    if (!existing) {
+      try {
+        await db.plan.create({ data: { name: p.name, monthlyPrice: p.monthlyPrice, yearlyPrice: p.yearlyPrice, sortOrder: p.sortOrder, isActive: true, isPublic: true, limits, features } })
+        out.created.push(p.name)
+      } catch (e) { if (isUnique(e)) out.kept.push(p.name); else throw e } // made a moment ago by another click
+    } else if (refresh) {
+      await db.plan.update({ where: { id: existing.id }, data: { limits, features, sortOrder: p.sortOrder } })
+      out.refreshed.push(p.name)
+    } else out.kept.push(p.name)
+  }
+  return out
+}
+
 export async function savePlan(id: string | null, input: PlanInput) {
   const { products, ordersPerMonth, staff, tagline, popular, videoMb } = input.show
   // staff: 0 is a real choice (owner only), so it is kept; only "empty" (null) means unlimited.
@@ -294,9 +320,9 @@ export async function runBilling(now = new Date()): Promise<BillingRun> {
 
 // ------------------------------------------------------- what a store may use
 /** Sets the platform owner's overrides for one store: its staff limit (null = follow the plan) and POS lite (PLAN / ON / OFF). */
-export async function setStoreEntitlements(storeId: string, input: { staffLimit: number | null; posMode: 'PLAN' | 'ON' | 'OFF' }) {
-  const before = await db.store.findUnique({ where: { id: storeId }, select: { name: true, staffLimit: true, posMode: true } })
+export async function setStoreEntitlements(storeId: string, input: { staffLimit: number | null; posMode: 'PLAN' | 'ON' | 'OFF'; featureOverrides?: Partial<Record<ProFeature, FeatureOverride>> }) {
+  const before = await db.store.findUnique({ where: { id: storeId }, select: { name: true, staffLimit: true, posMode: true, featureOverrides: true } })
   if (!before) throw new CsmiError('Store not found.')
-  await db.store.update({ where: { id: storeId }, data: { staffLimit: input.staffLimit, posMode: input.posMode } })
-  return { name: before.name, before: { staffLimit: before.staffLimit, posMode: before.posMode } }
+  await db.store.update({ where: { id: storeId }, data: { staffLimit: input.staffLimit, posMode: input.posMode, ...(input.featureOverrides ? { featureOverrides: input.featureOverrides as Prisma.InputJsonValue } : {}) } })
+  return { name: before.name, before: { staffLimit: before.staffLimit, posMode: before.posMode, featureOverrides: before.featureOverrides } }
 }

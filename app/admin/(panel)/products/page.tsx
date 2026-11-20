@@ -1,3 +1,4 @@
+import { db } from '@/lib/db'
 import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth/guard'
 import { can } from '@/lib/auth/permissions'
@@ -11,6 +12,8 @@ import ActionForm from '@/components/admin/ActionForm'
 import ProductBulkBar from '@/components/admin/ProductBulkBar'
 import { inputCls } from '@/components/admin/ui'
 import { bulkProductsAction } from './actions'
+import { loadPlanAccess } from '@/lib/plans/access'
+import { ProBadge } from '@/components/admin/ProLock'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +25,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const admin = await requireAdmin('products.view')
   const sp = await searchParams
   const q = parseListQuery(sp)
-  const [{ rows, total, counts }, cats] = await Promise.all([listProducts(admin.storeId, q), listCategories(admin.storeId)])
+  const [{ rows, total, counts }, cats, plan, owned] = await Promise.all([listProducts(admin.storeId, q), listCategories(admin.storeId), loadPlanAccess(admin.storeId), db.product.count({ where: { storeId: admin.storeId } })])
+  const full = plan.productLimit !== null && owned >= plan.productLimit
   const editable = can(admin.role, 'products.edit')
   const all = counts.ACTIVE + counts.DRAFT + counts.ARCHIVED
   const pages = pageCount(total)
@@ -71,10 +75,16 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         <h1 className="text-2xl font-bold">Products</h1>
         <div className="flex gap-2">
           <a href="/admin/products/export" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium" download>Export (CSV)</a>
-          <Link href="/admin/products/import" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium">Import (CSV)</Link>
-          {editable && <Link href="/admin/products/new" className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium">Add product</Link>}
+          <Link href="/admin/products/import" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium">Import (CSV){!plan.has('product-import') && <ProBadge />}</Link>
+          {editable && !full && <Link href="/admin/products/new" className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium">Add product</Link>}
         </div>
       </div>
+      {/* The plan's product limit: how much room is left, and what to do when it is full. */}
+      {plan.productLimit !== null && (
+        <p className={`mb-4 rounded-lg border px-3 py-2 text-sm ${full ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-200 bg-white text-slate-600'}`}>
+          {owned.toLocaleString('en-PK')} of {plan.productLimit.toLocaleString('en-PK')} products on your plan.{full && <> Your plan is full: <Link href="/admin/billing#plans" className="font-medium underline">upgrade to Pro</Link> for unlimited products, or delete products you no longer sell.</>}
+        </p>
+      )}
       {sp.deleted && <p role="status" className="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900">Product deleted.</p>}
 
       <nav aria-label="Status" className="flex flex-wrap gap-2 mb-3">

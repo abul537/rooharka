@@ -9,6 +9,7 @@ import type { CheckoutConfig } from '@/lib/data/checkout'
 import { lineTotal, quantityProblem, quantityRule, stockLimited } from '@/lib/units/quantity'
 import { formatQuantity } from '@/lib/units/registry'
 import type { ValidOrder } from './validate'
+import { hasFeature } from '@/lib/plans/access'
 
 /** Errors we expect and can explain to the customer. Anything else is a genuine bug (HTTP 500). */
 export class OrderError extends Error {
@@ -130,7 +131,8 @@ export async function createOrder(
   // A discount code is looked up in THIS store and judged here, on the server; the browser's idea of it is ignored.
   let discount: Awaited<ReturnType<typeof findDiscount>> = null, cut: Cut | null = null
   if (input.discountCode) {
-    discount = await findDiscount(storeId, input.discountCode)
+    // Codes work only while the shop's plan includes them (Pro); otherwise any code is simply not valid.
+    discount = (await hasFeature(storeId, 'discounts')) ? await findDiscount(storeId, input.discountCode) : null
     const used = discount?.oncePerCustomer ? await db.order.count({ where: { storeId, customerPhone: input.customer.phone, discountCode: discount.code, status: { not: 'CANCELLED' } } }) : 0
     const problem = discount ? discountProblem(discount, subtotal, new Date(), used > 0) : 'That discount code is not valid.'
     if (problem || !discount) throw new OrderError('BAD_DISCOUNT', problem ?? 'That discount code is not valid.', { discountCode: problem ?? 'That discount code is not valid.' })

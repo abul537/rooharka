@@ -6,6 +6,7 @@ import { MESSAGE_MAX, PRIORITY_LABEL, TICKET_STATUSES, isOpen, type TicketPriori
 import ActionForm from '@/components/admin/ActionForm'
 import TicketThread from '@/components/admin/TicketThread'
 import { supportAction } from './actions'
+import { hasFeature } from '@/lib/plans/access'
 
 export const dynamic = 'force-dynamic'
 const input = 'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm'
@@ -19,8 +20,11 @@ export default async function CsmiSupportPage({ searchParams }: { searchParams: 
     db.supportTicket.findMany({ where: sp.all ? {} : { status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING_ON_STORE'] } }, orderBy: { updatedAt: 'desc' }, take: 200, select: { id: true, subject: true, status: true, priority: true, updatedAt: true, store: { select: { id: true, name: true } } } }),
     sp.t ? db.supportTicket.findUnique({ where: { id: sp.t }, select: { id: true, subject: true, status: true, priority: true, store: { select: { id: true, name: true, ownerEmail: true, ownerPhone: true } }, messages: { orderBy: { createdAt: 'asc' }, take: 200, select: { id: true, body: true, fromPlatform: true, createdAt: true } } } }) : null,
   ])
-  // Waiting for US first (open), then by urgency, then the most recent.
-  const sorted = [...tickets].sort((a, b) => Number(a.status !== 'OPEN') - Number(b.status !== 'OPEN') || rank[a.priority] - rank[b.priority] || b.updatedAt.getTime() - a.updatedAt.getTime())
+  // Shops whose plan includes priority support (Pro) are answered first.
+  const storeIds = [...new Set(tickets.map((t) => t.store.id))]
+  const priority = new Set((await Promise.all(storeIds.map(async (id) => ((await hasFeature(id, 'priority-support')) ? id : null)))).filter(Boolean))
+  // Waiting for US first (open), then priority-support shops, then by urgency, then the most recent.
+  const sorted = [...tickets].sort((a, b) => Number(a.status !== 'OPEN') - Number(b.status !== 'OPEN') || Number(!priority.has(a.store.id)) - Number(!priority.has(b.store.id)) || rank[a.priority] - rank[b.priority] || b.updatedAt.getTime() - a.updatedAt.getTime())
   const waiting = tickets.filter((t) => t.status === 'OPEN').length
   return (
     <div className="space-y-5">
@@ -34,7 +38,7 @@ export default async function CsmiSupportPage({ searchParams }: { searchParams: 
           {sorted.map((t) => (
             <Link key={t.id} href={`/csmi/support?t=${t.id}${sp.all ? '&all=1' : ''}`} className={`block p-3 hover:bg-slate-50 ${t.id === open?.id ? 'bg-slate-50' : ''}`}>
               <span className="flex items-center justify-between gap-2"><span className="truncate font-medium">{t.subject}</span>{t.status === 'OPEN' && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">answer</span>}</span>
-              <span className="text-xs text-slate-500">{t.store.name} · {PRIORITY_LABEL[t.priority as TicketPriority]} · {formatPkt(t.updatedAt)}</span>
+              <span className="text-xs text-slate-500">{priority.has(t.store.id) && <span className="mr-1 rounded bg-violet-100 px-1 font-semibold text-violet-800">PRO</span>}{t.store.name} · {PRIORITY_LABEL[t.priority as TicketPriority]} · {formatPkt(t.updatedAt)}</span>
             </Link>
           ))}
         </div>

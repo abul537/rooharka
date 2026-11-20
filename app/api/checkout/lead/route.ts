@@ -5,6 +5,7 @@ import { getCheckoutConfig, loadCheckoutEntries } from '@/lib/data/checkout'
 import { parseLead } from '@/lib/leads'
 import { lineTotal } from '@/lib/units/quantity'
 import { clientIp, rateLimit } from '@/lib/rate-limit'
+import { hasFeature } from '@/lib/plans/access'
 
 export const dynamic = 'force-dynamic'
 const done = () => new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
     if (!rateLimit(`lead:${clientIp(request.headers)}`, 10, 3_600_000).ok || Number(request.headers.get('content-length') ?? 0) > 4000) return done()
     const store = await getCurrentStore()
     if (!store || !rateLimit(`lead-store:${store.id}`, 600, 3_600_000).ok || (await isPreviewFor(store.id))) return done()
+    if (!(await hasFeature(store.id, 'abandoned'))) return done() // Pro: unfinished checkouts are only kept for Pro shops
     const lead = parseLead(await request.json().catch(() => null))
     if (!lead) return done()
     const config = await getCheckoutConfig(store)

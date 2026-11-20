@@ -5,6 +5,12 @@ import { formatPrice } from '@/lib/format'
 import { formatPkt } from '@/lib/admin/dates'
 import { getPlatformSettings } from '@/lib/signup/store'
 import { Pill } from '@/components/csmi/Pills'
+import ActionForm from '@/components/admin/ActionForm'
+import CompareTable from '@/components/plans/CompareTable'
+import { getPublicPlans } from '@/lib/signup/public-plans'
+import { loadPlanAccess } from '@/lib/plans/access'
+import { PRO_FEATURES, paysForItself } from '@/lib/plans/catalog'
+import { requestPlanAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 const day = (d: Date) => formatPkt(d).split(',').slice(0, 2).join(',')
@@ -13,14 +19,22 @@ const day = (d: Date) => formatPkt(d).split(',').slice(0, 2).join(',')
 export default async function BillingPage() {
   const admin = await requireAdmin('settings.edit')
   const now = new Date()
-  const [sub, invoices, s] = await Promise.all([
+  const [sub, invoices, s, plans, access] = await Promise.all([
     db.subscription.findUnique({ where: { storeId: admin.storeId }, include: { plan: true } }),
     db.invoice.findMany({ where: { storeId: admin.storeId }, orderBy: { createdAt: 'desc' }, take: 24 }),
     getPlatformSettings(),
+    getPublicPlans(),
+    loadPlanAccess(admin.storeId),
   ])
+  // The plans this store can switch to (public ones), plus its own plan when that one is private (tailor-made).
+  const shown = sub && !plans.some((p) => p.id === sub.planId) ? [...plans, { id: sub.planId, name: sub.plan.name, monthly: sub.plan.monthlyPrice.toNumber(), yearly: sub.plan.yearlyPrice?.toNumber() ?? null, limits: sub.plan.limits, features: sub.plan.features }] : plans
+  const basic = plans.find((p) => p.name === 'Basic'), pro = plans.find((p) => p.name === 'Pro')
+  const saving = basic && pro && sub?.planId !== pro.id ? paysForItself(basic.monthly, pro.monthly) : null
+  const onNow = [...access.features.on]
   const interval = sub ? intervalOf(sub.currentPeriodStart, sub.currentPeriodEnd) : 'MONTHLY'
   const price = sub ? periodPrice({ monthlyPrice: sub.plan.monthlyPrice.toNumber(), yearlyPrice: sub.plan.yearlyPrice?.toNumber() ?? null }, interval, sub.priceOverride?.toNumber() ?? null) : null
   const trialLeft = sub?.status === 'TRIALING' && sub.trialEndsAt ? Math.max(0, Math.ceil((sub.trialEndsAt.getTime() - now.getTime()) / 86_400_000)) : null
+  const canSwitch = plans.length > 0 && sub?.status !== 'CANCELLED'
   const wa = s.supportWhatsapp ? `https://wa.me/${s.supportWhatsapp.replace(/\D/g, '')}` : null
 
   return (
@@ -38,6 +52,33 @@ export default async function BillingPage() {
             </p>
           </div>
         )}
+      </section>
+
+      <section id="plans" className="scroll-mt-6 rounded-xl bg-white border border-slate-200 p-5">
+        <h2 className="font-semibold">Plans</h2>
+        <p className="mt-1 mb-4 text-sm text-slate-600">
+          {access.trial ? 'During your free trial every Pro feature is switched on, so you can see what each one does. When the trial ends, your plan decides.' : onNow.length ? `Pro features you have now: ${onNow.map((k) => PRO_FEATURES[k].short).join(', ')}.` : 'Your plan has the essentials. Pro adds the tools below that protect and grow your sales.'}
+        </p>
+        <CompareTable plans={shown.map((p) => ({ ...p, current: p.id === sub?.planId }))} />
+        {saving && <p className="mt-4 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-950"><strong>Why Pro pays for itself.</strong> {saving}</p>}
+        {canSwitch && (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {plans.filter((p) => p.id !== sub?.planId).map((p) => (
+              <ActionForm key={p.id} action={requestPlanAction} confirm={`Ask to move your shop to ${p.name}?`} className="rounded-lg border border-slate-200 p-4">
+                <input type="hidden" name="planId" value={p.id} />
+                <p className="font-semibold">{p.name}: {formatPrice(p.monthly)} a month{p.yearly ? ` or ${formatPrice(p.yearly)} a year` : ''}</p>
+                {p.yearly && (
+                  <div className="mt-2 flex gap-4 text-sm">
+                    <label className="flex items-center gap-1.5"><input type="radio" name="interval" value="monthly" defaultChecked /> Monthly</label>
+                    <label className="flex items-center gap-1.5"><input type="radio" name="interval" value="yearly" /> Yearly</label>
+                  </div>
+                )}
+                <button className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Switch to {p.name}</button>
+              </ActionForm>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-xs text-slate-500">Your request goes to us under Help; we confirm it, usually the same day. Moving to a smaller plan never deletes anything: features beyond the plan are simply switched off, and come back if you move up again.</p>
       </section>
 
       <section className="rounded-xl bg-white border border-slate-200 p-5">

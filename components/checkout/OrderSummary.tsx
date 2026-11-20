@@ -23,10 +23,12 @@ interface Props {
   charges: Charges;
   currency: string;
   locked: boolean;
+  /** False when the shop's plan has no discount codes: the box is not shown. */
+  codesOn?: boolean;
 }
 
 /** Order summary beside the form: every line, a place for a discount code, and totals that are the same numbers the server will charge. */
-export default function OrderSummary({ entries, onQuantityChange, onRemove, discount, discountShort, onDiscount, subtotal, charges, currency, locked }: Props) {
+export default function OrderSummary({ entries, onQuantityChange, onRemove, discount, discountShort, onDiscount, subtotal, charges, currency, locked, codesOn = true }: Props) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export default function OrderSummary({ entries, onQuantityChange, onRemove, disc
       </ul>
 
       <div className="border-b border-gray-100 py-4">
-        {discount ? (
+        {!codesOn && !discount ? null : discount ? (
           <div className="text-sm">
             <p className="flex items-center justify-between gap-2"><span className="font-medium text-emerald-800">Code {discount.code}: {discount.text}</span><button type="button" disabled={locked} onClick={() => onDiscount(null)} className="text-gray-500 underline disabled:opacity-40">Remove</button></p>
             {discountShort && <p role="alert" className="mt-1 text-amber-800">This code needs an order of at least {formatPrice(discount.minSubtotal, currency)}, so it is not applied.</p>}

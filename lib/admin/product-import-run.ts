@@ -4,6 +4,7 @@ import type { StoreAdmin } from '@/lib/auth/guard'
 import { uniqueSlug } from '@/lib/admin/slug'
 import { logStock } from '@/lib/stock-log'
 import { planImport, type ExistingVariant, type ImportPlan } from '@/lib/admin/product-import'
+import { productRoomProblem } from '@/lib/plans/access'
 
 /** The store's variants by SKU (upper case), for the import plan. Only this store's. */
 export async function existingVariants(storeId: string): Promise<Map<string, ExistingVariant>> {
@@ -11,7 +12,12 @@ export async function existingVariants(storeId: string): Promise<Map<string, Exi
   return new Map(rows.map((v) => [v.sku.toUpperCase(), { id: v.id, productId: v.productId, sku: v.sku, price: v.price.toNumber(), stock: v.stock, measured: v.product.type === 'MEASURABLE', label: v.label, productName: v.product.name }]))
 }
 
-export const previewImport = async (storeId: string, text: string): Promise<ImportPlan> => planImport(text, await existingVariants(storeId))
+/** The plan's product limit, checked on the preview AND again on the import: new products must fit, or nothing changes. */
+async function withinLimit(storeId: string, plan: ImportPlan): Promise<ImportPlan> {
+  const full = plan.creates.length ? await productRoomProblem(storeId, plan.creates.length) : null
+  return full ? { ...plan, updates: [], creates: [], problems: [full, ...plan.problems] } : plan
+}
+export const previewImport = async (storeId: string, text: string): Promise<ImportPlan> => withinLimit(storeId, planImport(text, await existingVariants(storeId)))
 
 /**
  * Carries the plan out, in ONE transaction: either every good row is applied or none. Stock changes go through
@@ -19,7 +25,8 @@ export const previewImport = async (storeId: string, text: string): Promise<Impo
  */
 export async function runImport(admin: StoreAdmin, text: string): Promise<ImportPlan> {
   const storeId = admin.storeId
-  const plan = planImport(text, await existingVariants(storeId))
+  // Nothing is changed when the new products do not fit: the owner trims the file or upgrades.
+  const plan = await withinLimit(storeId, planImport(text, await existingVariants(storeId)))
   if (plan.updates.length === 0 && plan.creates.length === 0) return plan
   await db.$transaction(async (tx) => {
     for (const u of plan.updates) {

@@ -3,6 +3,7 @@ import { lastFour, maskedName } from '@/lib/phone'
 import { RETURN_CUSTOMER_LABEL, alreadyReturned, isOpen, readReturnPolicy, returnWindow, type ReturnStatus } from '@/lib/returns'
 import { isMeasured } from '@/lib/units/registry'
 import { courierName, readCourierConfig, trackingLink } from '@/lib/couriers/config'
+import { hasFeature } from '@/lib/plans/access'
 
 export const STATUS_STEPS = ['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'] as const
 
@@ -71,7 +72,7 @@ export async function lookupOrder(
   else paymentNote = 'Cash on delivery'
 
   // Returns: allowed only inside the shop's window after delivery, and never for what already came back.
-  const policy = readReturnPolicy(settings?.extra), covered = alreadyReturned(order.returns)
+  const policy = (await hasFeature(storeId, 'returns')) ? readReturnPolicy(settings?.extra) : readReturnPolicy(null), covered = alreadyReturned(order.returns)
   const deliveredAt = [...order.history].reverse().find((h) => h.status === 'DELIVERED')?.createdAt ?? null
   const window = returnWindow(policy, { status: order.status, deliveredAt }, order.returns.some((r) => isOpen(r.status)), new Date())
   const lines = order.items.map((i) => ({ id: i.id, name: i.variantLabel ? `${i.name} (${i.variantLabel})` : i.name, max: i.quantity - (covered.get(i.id) ?? 0), whole: isMeasured(i.unitCode) })).filter((l) => l.max > 0)
