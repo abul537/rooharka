@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { UR, t, readLanguage, parseLanguage, isRtl, LANGUAGES } from '../lib/i18n.ts'
+import { UR, t, readLanguage, parseLanguage, isRtl, LANGUAGES } from '@/lib/i18n'
 
 test('the language comes from the shop settings; anything unknown is English', () => {
   assert.equal(readLanguage({ language: { language: 'ur' } }), 'ur')

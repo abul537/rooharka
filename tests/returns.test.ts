@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { canMove, isOpen, readReturnPolicy, parseReturnPolicy, returnWindow, pickReturnLines, alreadyReturned, readReturnLines, linesValue, parseReturnAsk, refundCeiling, parseRefund, DEFAULT_RETURN_POLICY, type OrderLine } from '../lib/returns.ts'
+import { canMove, isOpen, readReturnPolicy, parseReturnPolicy, returnWindow, pickReturnLines, alreadyReturned, readReturnLines, linesValue, parseReturnAsk, refundCeiling, parseRefund, DEFAULT_RETURN_POLICY, type OrderLine } from '@/lib/returns'
 
 const day = 86_400_000, now = new Date('2026-11-20T10:00:00Z')
 const order: OrderLine[] = [

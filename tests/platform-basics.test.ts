@@ -45,7 +45,7 @@ test('the safety net is in place: checks on every push, hardened headers, friend
 })
 
 test('sharing previews: a title, a short text and only an https picture; every shop page has one', async () => {
-  const { sharePreview } = await import('../lib/seo.ts')
+  const { sharePreview } = await import('@/lib/seo')
   const a = sharePreview({ siteName: 'Ali Store', title: 'Sidr Honey', description: 'x '.repeat(300), image: 'https://res.cloudinary.com/a/b.jpg', url: 'https://ali.pk/product/honey' })
   assert.equal(a.openGraph.title, 'Sidr Honey'); assert.equal(a.openGraph.siteName, 'Ali Store'); assert.deepEqual(a.openGraph.images, ['https://res.cloudinary.com/a/b.jpg'])
   assert.ok(a.openGraph.description!.length <= 200); assert.equal(a.twitter.card, 'summary_large_image'); assert.equal(a.openGraph.url, 'https://ali.pk/product/honey')

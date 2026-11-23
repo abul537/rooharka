@@ -101,7 +101,7 @@ test('photos are made light in the browser before upload', () => {
 })
 
 test('bundle-size gate: growth past the budget fails, in plain words', async () => {
-  const { checkBudget } = await import('../lib/bundle-budget.ts')
+  const { checkBudget } = await import('@/lib/bundle-budget')
   const f = (file: string, kb: number) => ({ file, gzipBytes: kb * 1024 })
   assert.deepEqual(checkBudget([f('a.js', 100), f('b.js', 50)]), { ok: true, totalKb: 150, largest: { file: 'a.js', kb: 100 }, problems: [] })
   const big = checkBudget([f('a.js', 300), f('b.js', 50)])

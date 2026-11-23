@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { saveExtra } from '@/lib/admin/extra'
 import { readFraudSettings, type FraudSettings } from '@/lib/fraud/rules'
 
 export async function loadFraudSettings(storeId: string): Promise<FraudSettings> {
@@ -8,8 +9,5 @@ export async function loadFraudSettings(storeId: string): Promise<FraudSettings>
 
 /** Saves the fake-order check settings, keeping every other key in `extra` (wallets, couriers…). */
 export async function saveFraudSettings(storeId: string, value: FraudSettings) {
-  await db.$transaction(async (tx) => {
-    const current = await tx.storeSettings.findUnique({ where: { storeId }, select: { extra: true } })
-    await tx.storeSettings.update({ where: { storeId }, data: { extra: { ...((current?.extra ?? {}) as Record<string, unknown>), fraud: { ...value } } } })
-  })
+  await saveExtra(storeId, 'fraud', value)
 }

@@ -161,7 +161,8 @@ test('the check stays inside its rules: store-scoped writes, counts only across 
   const fn = actions.slice(actions.indexOf('export async function verificationAction'))
   assert.match(fn, /adminOrError\('orders\.update'\)/); assert.match(fn, /approveHeldOrder\(g\.admin, orderId\)/); assert.match(fn, /action: 'order\.verification\.approve'/)
   assert.match(readFileSync('app/admin/(panel)/orders/[id]/page.tsx', 'utf8'), /<VerificationCard order=/)
-  assert.match(readFileSync('lib/fraud/store.ts', 'utf8'), /\.\.\.\(\(current\?\.extra \?\? \{\}\) as Record<string, unknown>\), fraud:/, 'other settings in the same place are kept')
+  // Other settings in the same place are kept: saveExtra merges one group (tested in extra-merge.test.ts).
+  assert.match(readFileSync('lib/fraud/store.ts', 'utf8'), /await saveExtra\(storeId, 'fraud', value\)/, 'other settings in the same place are kept')
 })
 
 test('the orders list can show what the check is holding', () => {

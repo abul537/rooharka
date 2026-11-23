@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseCsv, planImport, describePlan, IMPORT_MAX_ROWS, type ExistingVariant } from '../lib/admin/product-import.ts'
+import { parseCsv, planImport, describePlan, IMPORT_MAX_ROWS, type ExistingVariant } from '@/lib/admin/product-import'
 
 const have = new Map<string, ExistingVariant>([
   ['OUD-50', { id: 'v1', productId: 'p1', sku: 'OUD-50', price: 2500, stock: 10, measured: false, label: '50ml', productName: 'Oud' }],

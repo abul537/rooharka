@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PRO_FEATURE_KEYS, RECOMMENDED_PLANS, resolveFeatures, readOverrides, productLimitProblem, lockedMessage, isProFeature } from '../lib/plans/catalog.ts'
-import { describePlan, yearlySaving } from '../lib/signup/plans.ts'
+import { PRO_FEATURE_KEYS, RECOMMENDED_PLANS, resolveFeatures, readOverrides, productLimitProblem, lockedMessage, isProFeature } from '@/lib/plans/catalog'
+import { describePlan, yearlySaving } from '@/lib/signup/plans'
 
 const basic = RECOMMENDED_PLANS[0], pro = RECOMMENDED_PLANS[1]
 const on = (a: ReturnType<typeof resolveFeatures>) => [...a.on].sort()
@@ -48,7 +48,7 @@ test('the product limit: room, the last ones, and full, in plain words', () => {
 })
 
 import { readFileSync } from 'node:fs'
-import { parseOverrides, compareRows, paysForItself, SWITCHABLE, INCLUDED_IN_ALL } from '../lib/plans/catalog.ts'
+import { parseOverrides, compareRows, paysForItself, SWITCHABLE, INCLUDED_IN_ALL } from '@/lib/plans/catalog'
 
 test('CSMI per-store switches: follow / on / off per feature; anything else is refused', () => {
   const f = (o: Record<string, string>) => (k: string) => o[k]
