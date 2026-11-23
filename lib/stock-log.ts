@@ -1,3 +1,5 @@
+import type { Prisma } from '@/lib/generated/prisma/client'
+
 /**
  * STOCK HISTORY. Every change of stock writes one line here, inside the same database transaction as the change,
  * so the history and the stock can never disagree. `tx` is that transaction.
@@ -6,10 +8,11 @@ export const STOCK_REASONS = { ORDER: 'Online order', ORDER_CANCELLED: 'Order ca
 export type StockReason = keyof typeof STOCK_REASONS
 export interface StockLine { productId: string; variantId: string; delta: number; reason: StockReason; note?: string | null; orderId?: string | null; userId?: string | null }
 
-type Tx = { stockMovement: { createMany(args: { data: object[] }): Promise<unknown> } }
+/** The transaction, typed by Prisma itself: only the stock-history table is needed here. */
+type Tx = Pick<Prisma.TransactionClient, 'stockMovement'>
 /** Lines with no real change (a delta of zero) are skipped. */
 export async function logStock(tx: Tx, storeId: string, lines: StockLine[]): Promise<void> {
-  const data = lines.filter((l) => Number.isInteger(l.delta) && l.delta !== 0 && l.productId && l.variantId).map((l) => ({ storeId, productId: l.productId, variantId: l.variantId, delta: l.delta, reason: l.reason, note: l.note?.slice(0, 200) ?? null, orderId: l.orderId ?? null, userId: l.userId ?? null }))
+  const data: Prisma.StockMovementCreateManyInput[] = lines.filter((l) => Number.isInteger(l.delta) && l.delta !== 0 && l.productId && l.variantId).map((l) => ({ storeId, productId: l.productId, variantId: l.variantId, delta: l.delta, reason: l.reason, note: l.note?.slice(0, 200) ?? null, orderId: l.orderId ?? null, userId: l.userId ?? null }))
   if (data.length) await tx.stockMovement.createMany({ data })
 }
 /** "+5" / "-2" for display. */

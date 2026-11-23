@@ -14,6 +14,7 @@ import { decide, readFraudSettings, VERDICT_TEXT, type Decision, type IpRisk } f
 import { firstOrderAverage, loadHistory, partnerLabel } from '@/lib/fraud/network'
 import { ipRisk } from '@/lib/fraud/ip-risk'
 import { hasFeature } from '@/lib/plans/access'
+import { toJson } from '@/lib/json'
 
 const SELECT = {
   id: true, storeId: true, number: true, source: true, status: true, total: true, customerPhone: true, customerName: true, cityName: true, localityName: true, landmark: true,
@@ -66,7 +67,7 @@ export async function verifyOrder(storeId: string, orderId: string, opts: { ip?:
   await db.$transaction([
     db.order.updateMany({
       where: { id: order.id, storeId },
-      data: { fraudRiskLabel: decision.label, verificationStatus: decision.status, riskScore: decision.riskScore, recommendedAction: decision.recommendedAction, verification: stored as object, verifiedAt: new Date(), verificationOverrideBy: null, verificationOverrideAt: null },
+      data: { fraudRiskLabel: decision.label, verificationStatus: decision.status, riskScore: decision.riskScore, recommendedAction: decision.recommendedAction, verification: toJson(stored), verifiedAt: new Date(), verificationOverrideBy: null, verificationOverrideAt: null },
     }),
     // A private line in the order's history (the customer never sees it).
     ...(first || decision.status !== order.verificationStatus

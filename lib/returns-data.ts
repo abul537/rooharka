@@ -5,6 +5,7 @@ import { logStock } from '@/lib/stock-log'
 import { loadExtra } from '@/lib/admin/extra'
 import { alreadyReturned, canMove, isOpen, pickReturnLines, readReturnLines, readReturnPolicy, refundCeiling, returnWindow, type OrderLine, type ReturnAsk } from '@/lib/returns'
 import { featureProblem, hasFeature } from '@/lib/plans/access'
+import { toJson } from '@/lib/json'
 
 type Actor = { id: string; storeId: string }
 const NOT_FOUND = 'We could not find a delivered order with those details.'
@@ -27,7 +28,7 @@ export async function requestReturn(storeId: string, ask: ReturnAsk, requirePhon
     if (!window.allowed) return { ok: false as const, error: order.returns.some((r) => isOpen(r.status)) ? 'A return for this order is already open.' : `Returns can be requested within ${policy.days} days of delivery.` }
     const picked = pickReturnLines(toLines(order.items), ask.items, alreadyReturned(order.returns))
     if (!picked.ok) return picked
-    await tx.returnRequest.create({ data: { storeId, orderId: order.id, status: 'REQUESTED', reason: ask.reason, note: ask.note || null, items: picked.lines as object[], source: 'CUSTOMER' } })
+    await tx.returnRequest.create({ data: { storeId, orderId: order.id, status: 'REQUESTED', reason: ask.reason, note: ask.note || null, items: toJson(picked.lines), source: 'CUSTOMER' } })
     await tx.orderStatusHistory.create({ data: { orderId: order.id, status: order.status, note: 'Return requested', isPublic: true } })
     return { ok: true as const }
   })
@@ -43,7 +44,7 @@ export async function startReturn(admin: Actor, orderId: string) {
     if (order.returns.some((r) => isOpen(r.status))) throw new AdminError('This order already has an open return.')
     const picked = pickReturnLines(toLines(order.items), [], alreadyReturned(order.returns))
     if (!picked.ok) throw new AdminError('Everything in this order has been returned already.')
-    const row = await tx.returnRequest.create({ data: { storeId: admin.storeId, orderId: order.id, status: 'APPROVED', reason: 'OTHER', items: picked.lines as object[], source: 'OWNER', decidedById: admin.id }, select: { id: true } })
+    const row = await tx.returnRequest.create({ data: { storeId: admin.storeId, orderId: order.id, status: 'APPROVED', reason: 'OTHER', items: toJson(picked.lines), source: 'OWNER', decidedById: admin.id }, select: { id: true } })
     await tx.orderStatusHistory.create({ data: { orderId: order.id, status: order.status, note: 'Return approved', isPublic: true, createdById: admin.id } })
     return { id: row.id, number: order.number }
   })

@@ -26,3 +26,19 @@ test('code review: every write to StoreSettings.extra goes through a JSON-typed 
   assert.match(readFileSync('lib/fraud/store.ts', 'utf8'), /await saveExtra\(storeId, 'fraud', value\)/)
   for (const f of ['lib/admin/extra.ts', 'lib/fraud/store.ts']) assert.doesNotMatch(readFileSync(f, 'utf8'), /as Record<string, unknown>\), /, f)
 })
+
+test('toJson: what goes into a JSON column is plain JSON, and a copy', async () => {
+  const { toJson } = await import('@/lib/json')
+  assert.deepEqual(toJson([{ itemId: 'a', quantity: 2, gone: undefined }]), [{ itemId: 'a', quantity: 2 }])
+  assert.equal(toJson(undefined), null); assert.equal(toJson('x'), 'x')
+  const src = { checkedAt: new Date('2026-11-23T12:00:00Z'), reasons: ['new phone'] }
+  const out = toJson(src) as { checkedAt: string; reasons: string[] }
+  assert.equal(out.checkedAt, '2026-11-23T12:00:00.000Z'); src.reasons.push('x'); assert.deepEqual(out.reasons, ['new phone'])
+})
+
+test('code review: our own objects reach JSON columns only through toJson (never "as object")', () => {
+  for (const f of ['lib/returns-data.ts', 'lib/fraud/verify.ts', 'lib/admin/extra-merge.ts', 'lib/stock-log.ts']) assert.doesNotMatch(readFileSync(f, 'utf8'), /as object\b/, f)
+  assert.equal((readFileSync('lib/returns-data.ts', 'utf8').match(/items: toJson\(picked\.lines\)/g) ?? []).length, 2)
+  assert.match(readFileSync('lib/fraud/verify.ts', 'utf8'), /verification: toJson\(stored\)/)
+  assert.match(readFileSync('lib/stock-log.ts', 'utf8'), /type Tx = Pick<Prisma\.TransactionClient, 'stockMovement'>/)
+})
