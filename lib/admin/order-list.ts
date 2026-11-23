@@ -14,7 +14,11 @@ export const SOURCE_FILTERS = ['online', 'counter'] as const
 /** The fake-order check: held = review or blocked (everything waiting for the owner). */
 export const CHECK_FILTERS = ['held', 'review', 'block', 'clear'] as const
 export const CHECK_LABEL: Record<(typeof CHECK_FILTERS)[number], string> = { held: 'Held (review or blocked)', review: 'Review', block: 'Blocked', clear: 'Clear' }
-export const CHECK_WHERE: Record<(typeof CHECK_FILTERS)[number], { in: string[] }> = { held: { in: ['REVIEW', 'BLOCK'] }, review: { in: ['REVIEW'] }, block: { in: ['BLOCK'] }, clear: { in: ['CLEAR'] } }
+/** The values of the database's VerificationStatus enum (prisma/schema.prisma). A test keeps the two the same. */
+export const VERIFICATION_STATUSES = ['CLEAR', 'REVIEW', 'BLOCK'] as const
+export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number]
+/** Each filter as a database condition. Typed with the enum's own values (not plain strings), so Prisma accepts it. */
+export const CHECK_WHERE: Record<(typeof CHECK_FILTERS)[number], { in: VerificationStatus[] }> = { held: { in: ['REVIEW', 'BLOCK'] }, review: { in: ['REVIEW'] }, block: { in: ['BLOCK'] }, clear: { in: ['CLEAR'] } }
 export const WHEN_FILTERS = ['today', '7d', '30d'] as const
 export const WHEN_LABEL: Record<(typeof WHEN_FILTERS)[number], string> = { today: 'Today', '7d': 'Last 7 days', '30d': 'Last 30 days' }
 

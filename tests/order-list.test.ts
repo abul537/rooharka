@@ -104,3 +104,12 @@ test('POS barcode scan: an exact code wins; otherwise only a single remaining ma
   const twins = [{ id: 'x', sku: 'A', barcode: '1111' }, { id: 'y', sku: 'B', barcode: '1111' }]
   assert.equal(scanMatch(twins, twins, '1111'), null, 'the same barcode on two items: the cashier must choose')
 })
+
+test('the fake-order filters use exactly the database enum values (Orders page, line 29)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { VERIFICATION_STATUSES, CHECK_WHERE, CHECK_FILTERS } = await import('../lib/admin/order-list.ts')
+  const schema = readFileSync('prisma/schema.prisma', 'utf8')
+  const inDb = schema.match(/enum VerificationStatus \{([^}]*)\}/)![1].split(/\s+/).filter(Boolean)
+  assert.deepEqual([...VERIFICATION_STATUSES].sort(), inDb.sort())
+  for (const f of CHECK_FILTERS) for (const v of CHECK_WHERE[f].in) assert.ok((VERIFICATION_STATUSES as readonly string[]).includes(v), `${f}: ${v}`)
+})
