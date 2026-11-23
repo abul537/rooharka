@@ -431,3 +431,11 @@ test('a product can show its own design: B and C are product pages with the same
   assert.match(act, /if \(!Object\.hasOwn\(PRODUCT_DESIGNS, design\)\) return \{ error/); assert.match(act, /where: \{ id: productId, storeId: admin\.storeId \}, data: \{ pageDesign: design \|\| null \}/)
   assert.match(readFileSync('prisma/schema.prisma', 'utf8'), /pageDesign\s+String\?/)
 })
+
+test('editor: the preview button and live preview treat design B and C as product pages', () => {
+  const src = readFileSync('components/admin/ThemeEditor.tsx', 'utf8')
+  assert.doesNotMatch(src, /paths\[tab\]/, 'paths only knows product and collection: look it up by page kind')
+  assert.match(src, /const kind = pageKind\(tab\)/); assert.match(src, /: paths\[kind\]/)
+  assert.match(src, /ownHeading=\{kind === 'product' \|\| kind === 'collection'\}/)
+  for (const t of ['productB', 'productC'] as const) assert.equal(pageKind(t), 'product')
+})

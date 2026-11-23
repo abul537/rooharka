@@ -167,7 +167,9 @@ export default function ThemeEditor({ theme, collections, data, sizes, paths }: 
   const customProblem = settings.customColor ? (() => { const r = parseCustomColor(settings.customColor); return r.ok ? null : r.error })() : null
   const shades = customProblem ? PALETTES[settings.color] : themeShades(settings)
   const available = sectionsFor(tab)
-  const eye = tab === 'home' ? '/' : tab === 'about' ? '/about' : paths[tab]
+  // Design B and C are product pages too: the preview button opens a product, and the preview keeps its own heading.
+  const kind = pageKind(tab)
+  const eye = kind === 'home' ? '/' : kind === 'about' ? '/about' : paths[kind]
   const shown: ThemeSettings = customProblem ? { ...settings, customColor: '' } : settings
 
   const send = async () => {
@@ -267,7 +269,7 @@ export default function ThemeEditor({ theme, collections, data, sizes, paths }: 
         </section>
 
         <div className="min-w-0 space-y-2">
-          <LivePreview sections={sections} data={data} settings={shown} picked={picked} onPick={setPicked} ownHeading={tab === 'product' || tab === 'collection'} />
+          <LivePreview sections={sections} data={data} settings={shown} picked={picked} onPick={setPicked} ownHeading={kind === 'product' || kind === 'collection'} />
           <p className="text-xs text-slate-500">This is how the page looks on a computer with what is on your screen now, saved or not. Click a section to edit it. For phones and a final check, save and press Preview.</p>
         </div>
 
