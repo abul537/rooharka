@@ -24,7 +24,10 @@ test('only plain JSON reaches the database (what is saved is exactly what is rea
 test('code review: every write to StoreSettings.extra goes through a JSON-typed value', () => {
   assert.match(readFileSync('lib/admin/extra.ts', 'utf8'), /data: \{ extra: mergeExtra\(current\?\.extra, key, value\) \}/)
   assert.match(readFileSync('lib/fraud/store.ts', 'utf8'), /await saveExtra\(storeId, 'fraud', value\)/)
-  for (const f of ['lib/admin/extra.ts', 'lib/fraud/store.ts']) assert.doesNotMatch(readFileSync(f, 'utf8'), /as Record<string, unknown>\), /, f)
+  assert.match(readFileSync('lib/admin/settings.ts', 'utf8'), /const extra = mergeExtra\(current\?\.extra, 'manualPayments', wallets\)/)
+  assert.match(readFileSync('lib/couriers/store.ts', 'utf8'), /const extra = mergeExtra\(current\?\.extra, 'couriers', /)
+  // Nowhere may a settings object of "anything" be forced into a JSON column again.
+  for (const f of ['lib/admin/extra.ts', 'lib/fraud/store.ts', 'lib/admin/settings.ts', 'lib/couriers/store.ts']) assert.doesNotMatch(readFileSync(f, 'utf8'), /as Record<string, unknown>\), /, f)
 })
 
 test('toJson: what goes into a JSON column is plain JSON, and a copy', async () => {

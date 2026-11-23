@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import type { Prisma } from '@/lib/generated/prisma/client'
+import { mergeExtra } from '@/lib/admin/extra-merge'
 import { loadServiceViews } from '@/lib/services/store-services'
 import { ADAPTERS } from '@/lib/couriers/adapters'
 import { readCourierConfig, type CourierConfig } from '@/lib/couriers/config'
@@ -21,7 +21,7 @@ export async function saveCourierConfig(storeId: string, config: CourierConfig) 
   await db.$transaction(async (tx) => {
     const current = await tx.storeSettings.findUnique({ where: { storeId }, select: { extra: true } })
     // Keep every other key in `extra` (wallets etc.); only replace the courier list.
-    const extra = { ...((current?.extra ?? {}) as Record<string, unknown>), couriers: { enabled: config.enabled, default: config.defaultKey, custom: config.custom, autoUpdate: config.autoUpdate } } as Prisma.InputJsonValue
+    const extra = mergeExtra(current?.extra, 'couriers', { enabled: config.enabled, default: config.defaultKey, custom: config.custom, autoUpdate: config.autoUpdate })
     await tx.storeSettings.update({ where: { storeId }, data: { extra } })
   })
 }

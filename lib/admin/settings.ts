@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { DEFAULT_PRODUCT_PAGE_SETTINGS, type ProductPageSettings } from '@/lib/data/product'
 import type { FieldRow, PaymentSettings, ProductPageInput, StoreInfo } from './settings-rules'
+import { mergeExtra } from '@/lib/admin/extra-merge'
 
 type Json = Prisma.InputJsonValue
 
@@ -38,7 +39,7 @@ export async function savePayments(storeId: string, v: PaymentSettings) {
   await db.$transaction(async (tx) => {
     const current = await tx.storeSettings.findUnique({ where: { storeId }, select: { extra: true } })
     // Keep every other key in `extra`; only replace the wallets.
-    const extra = { ...((current?.extra ?? {}) as Record<string, unknown>), manualPayments: wallets } as Json
+    const extra = mergeExtra(current?.extra, 'manualPayments', wallets)
     await tx.storeSettings.update({ where: { storeId }, data: { ...rest, extra } })
   })
 }
