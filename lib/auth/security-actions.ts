@@ -39,19 +39,19 @@ export async function startTwoFactorAction(): Promise<SecurityState> {
   return run('2fa_setup_started', async (u) => ({ setup: await beginEnrollment(u.id) }))
 }
 
-export async function confirmTwoFactorAction(_: SecurityState, fd: FormData): Promise<SecurityState> {
+export async function confirmTwoFactorAction(_: SecurityState | null, fd: FormData): Promise<SecurityState> {
   return run('2fa_enabled', async (u) => ({ ...(await confirmEnrollment(u.id, str(fd, 'code'))), ok: 'Two-factor protection is on.' }))
 }
 
-export async function disableTwoFactorAction(_: SecurityState, fd: FormData): Promise<SecurityState> {
+export async function disableTwoFactorAction(_: SecurityState | null, fd: FormData): Promise<SecurityState> {
   return run('2fa_disabled', async (u) => { await disableTwoFactor(u.id, str(fd, 'password'), str(fd, 'code')); return { ok: 'Two-factor protection is off.' } })
 }
 
-export async function regenerateCodesAction(_: SecurityState, fd: FormData): Promise<SecurityState> {
+export async function regenerateCodesAction(_: SecurityState | null, fd: FormData): Promise<SecurityState> {
   return run('2fa_codes_renewed', async (u) => ({ ...(await regenerateRecoveryCodes(u.id, str(fd, 'password'), str(fd, 'code'))), ok: 'New recovery codes created. The old ones no longer work.' }))
 }
 
-export async function changePasswordAction(_: SecurityState, fd: FormData): Promise<SecurityState> {
+export async function changePasswordAction(_: SecurityState | null, fd: FormData): Promise<SecurityState> {
   return run('password_changed', async (u) => {
     await changePassword(u.id, { current: str(fd, 'current'), next: str(fd, 'next'), confirm: str(fd, 'confirm') })
     return { ok: 'Password changed. Any other browsers or phones signed in to your account have been signed out.' }
