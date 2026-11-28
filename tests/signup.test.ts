@@ -213,11 +213,10 @@ test('routing: on the platform address shop pages go to the shop address; / stay
     const redirects: { source: string; destination: string; permanent: boolean; has: { value: string }[] }[] = await cfg.redirects()
     const rewrites = (await cfg.rewrites()).beforeFiles as { source: string; destination: string; has: { value: string }[] }[]
     const host = (r: { has: { value: string }[] }) => r.has[0].value.replace(/\\/g, '')
-    assert.deepEqual(redirects.map(host), ['rooharka.vercel.app', 'www.rooharka.vercel.app'])
-    for (const r of redirects) {
-      assert.equal(r.destination, 'https://mppmhk.vercel.app/:page/:rest*')
-      assert.equal(r.permanent, false)
-    }
+    assert.deepEqual(redirects.map(host), ['rooharka.vercel.app', 'rooharka.vercel.app', 'www.rooharka.vercel.app', 'www.rooharka.vercel.app'])
+    // "/shop" goes to "/shop" (no trailing slash, no second hop) and "/product/abc" to "/product/abc".
+    assert.deepEqual(redirects.slice(0, 2).map((r) => [r.source.replace(/\(.*\)/, '(…)'), r.destination]), [['/:page(…)', 'https://mppmhk.vercel.app/:page'], ['/:page(…)/:rest+', 'https://mppmhk.vercel.app/:page/:rest+']])
+    for (const r of redirects) assert.equal(r.permanent, false)
     // Every shop folder is covered, and nothing of the platform (/, /platform, /pricing, /signup, /admin, /csmi, /api).
     const pattern = new RegExp(`^/(${redirects[0].source.match(/\(([^)]+)\)/)![1]})(/.*)?$`)
     const shopFolders = readdirSync('app/(shop)', { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)

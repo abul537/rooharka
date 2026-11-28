@@ -27,10 +27,12 @@ const hostRule = (h: string) => [{ type: 'host' as const, value: h.replace(/\./g
 const nextConfig: NextConfig = {
   async redirects() {
     if (!shopHost || platformHosts.some((h) => h === shopHost || `www.${h}` === shopHost)) return []
-    return platformHosts.flatMap((h) => [h, `www.${h}`]).map((h) => ({
-      source: `/:page(${SHOP_PAGES})/:rest*`, has: hostRule(h), destination: `https://${shopHost}/:page/:rest*`,
-      permanent: false, // temporary: browsers must not remember it, the shop may move to its own domain later
-    }))
+    // Two rules per address: "/shop" itself, and anything below it ("/product/abc"), so no trailing "/" is ever added.
+    // permanent: false = browsers must not remember it; the shop may move to its own domain later.
+    return platformHosts.flatMap((h) => [h, `www.${h}`]).flatMap((h) => [
+      { source: `/:page(${SHOP_PAGES})`, has: hostRule(h), destination: `https://${shopHost}/:page`, permanent: false },
+      { source: `/:page(${SHOP_PAGES})/:rest+`, has: hostRule(h), destination: `https://${shopHost}/:page/:rest+`, permanent: false },
+    ])
   },
   async rewrites() {
     return {
