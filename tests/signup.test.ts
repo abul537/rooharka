@@ -139,7 +139,14 @@ test('platform host: only configured addresses are the platform', () => {
 test('the public site shows on the platform address, or anywhere in development when none is set, never on a shop address in production', () => {
   assert.equal(marketingAllowed('rooharka.pk', 'rooharka.pk', false), true)
   assert.equal(marketingAllowed('darwaish.pk', 'rooharka.pk', false), false)
-  assert.equal(marketingAllowed('localhost', 'rooharka.pk', true), false) // configured: respect it even in dev
+  // Developing: your own computer always shows the public site, even with PLATFORM_HOST set to the real address.
+  assert.equal(marketingAllowed('localhost', 'rooharka.pk', true), true)
+  assert.equal(marketingAllowed('127.0.0.1', 'rooharka.pk', true), true)
+  assert.equal(marketingAllowed('shop.localhost', 'rooharka.pk', true), true)
+  // ...but a store's real address never does, in development or production, and localhost never does in production.
+  assert.equal(marketingAllowed('darwaish.pk', 'rooharka.pk', true), false)
+  assert.equal(marketingAllowed('localhost', 'rooharka.pk', false), false)
+  assert.equal(marketingAllowed('localhost.evil.pk', 'rooharka.pk', true), false)
   assert.equal(marketingAllowed('localhost', undefined, true), true)
   assert.equal(marketingAllowed('darwaish.pk', undefined, false), false) // production, nothing configured: hidden
 })

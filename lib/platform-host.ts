@@ -18,8 +18,13 @@ export function isPlatformHost(host: string | null, env: string | undefined = pr
 /** May the public sign-up site be shown on this address? Platform addresses, or anything in development when none is set. */
 export function marketingAllowed(host: string | null, env: string | undefined = process.env.PLATFORM_HOST, dev = process.env.NODE_ENV !== 'production'): boolean {
   if (isPlatformHost(host, env)) return true
-  return dev && platformHosts(env).length === 0
+  // While developing (`pnpm dev`), your own computer always shows the public site, even when .env already names the
+  // real platform address. In production only the platform's own address shows it.
+  return dev && (platformHosts(env).length === 0 || isLocalAddress(host))
 }
+
+/** The developer's own computer: localhost, 127.0.0.1 or a *.localhost name. Never true for a real web address. */
+export const isLocalAddress = (host: string | null) => !!host && (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost'))
 
 /** "ali-store.rooharka.pk" -> "ali-store" when the host is a one-label sub-address of a platform host; otherwise null. */
 export function subdomainOf(host: string | null, env: string | undefined = process.env.PLATFORM_HOST): string | null {
