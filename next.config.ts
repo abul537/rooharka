@@ -17,11 +17,25 @@ const securityHeaders = [
 // Read at build/start time; the alias imports used elsewhere are not available in this file, so the parsing is repeated here.
 const platformHosts = (process.env.PLATFORM_HOST ?? '').split(',').map((h) => h.trim().toLowerCase().replace(/:\d+$/, '')).filter(Boolean)
 
+// The first store's own shop address (DEFAULT_STORE_HOST="mppmhk.vercel.app"). When it is set, the platform's address
+// keeps ONLY the public site and the dashboards: a shop page opened there (an old link, a bookmark) is sent to the same
+// page on the shop's address, so the shop's Home button and every other shop link always stay inside the shop.
+const shopHost = (process.env.DEFAULT_STORE_HOST ?? '').trim().toLowerCase().replace(/:\d+$/, '')
+const SHOP_PAGES = 'shop|about|cart|checkout|collections|contact|policies|product|track|verify' // the folders of app/(shop)
+const hostRule = (h: string) => [{ type: 'host' as const, value: h.replace(/\./g, '\\.') }]
+
 const nextConfig: NextConfig = {
+  async redirects() {
+    if (!shopHost || platformHosts.some((h) => h === shopHost || `www.${h}` === shopHost)) return []
+    return platformHosts.flatMap((h) => [h, `www.${h}`]).map((h) => ({
+      source: `/:page(${SHOP_PAGES})/:rest*`, has: hostRule(h), destination: `https://${shopHost}/:page/:rest*`,
+      permanent: false, // temporary: browsers must not remember it, the shop may move to its own domain later
+    }))
+  },
   async rewrites() {
     return {
       beforeFiles: platformHosts.flatMap((h) => [h, `www.${h}`]).map((h) => ({
-        source: '/', has: [{ type: 'host' as const, value: h.replace(/\./g, '\\.') }], destination: '/platform',
+        source: '/', has: hostRule(h), destination: '/platform',
       })),
       afterFiles: [], fallback: [],
     }

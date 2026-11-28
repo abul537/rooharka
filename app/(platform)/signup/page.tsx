@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { getPlatformSettings } from '@/lib/signup/store'
 import { getPublicPlans } from '@/lib/signup/public-plans'
-import { platformHosts } from '@/lib/platform-host'
+import { freeAddressSuffix } from '@/lib/platform-host'
 import SignupForm from './SignupForm'
 
 export const metadata: Metadata = { title: 'Create your store' }
@@ -23,7 +23,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
           <p className="mt-4 text-sm">{s.supportEmail && <a className="underline mr-4" href={`mailto:${s.supportEmail}`}>{s.supportEmail}</a>}{wa && <a className="underline" href={wa} target="_blank" rel="noopener noreferrer">WhatsApp us</a>}</p>
         </div>
       ) : (
-        <div className="mt-10"><SignupForm plans={plans} defaultPlanId={plans.find((p) => p.id === sp.plan)?.id ?? plans.find((p) => isPopular(p))?.id ?? plans[0].id} domainSuffix={platformHosts()[0] ?? null} trialDays={s.trialDays} defaultOffer={(sp.offer ?? '').slice(0, 24)} /></div>
+        <div className="mt-10"><SignupForm plans={plans} defaultPlanId={plans.find((p) => p.id === sp.plan)?.id ?? plans.find((p) => isPopular(p))?.id ?? plans[0].id} domainSuffix={freeAddressSuffix()} trialDays={s.trialDays} defaultOffer={(sp.offer ?? '').slice(0, 24)} /></div>
       )}
       <p className="mt-10 text-sm text-stone-500">Already have a store? <a href="/admin/login" className="underline">Sign in</a></p>
     </div>

@@ -1,10 +1,11 @@
+import { readdirSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   RESERVED_SLUGS, hashToken, needsApproval, newVerifyToken, parseSignupForm, requestExpiry, signupGate, slugFromName, slugProblem, splitVerifyToken, trialEnd,
 } from '@/lib/signup/rules'
 import { DEFAULT_SETTINGS, parseSettingsForm, readSettings } from '@/lib/signup/settings'
-import { isPlatformHost, marketingAllowed, platformHosts, platformOrigin, storeAddress, subdomainOf } from '@/lib/platform-host'
+import { defaultShopHost, freeAddressSuffix, isPlatformHost, marketingAllowed, platformHosts, platformOrigin, shopOrigin, storeAddress, subdomainOf } from '@/lib/platform-host'
 import { alreadyRegisteredMail, approvedMail, escapeHtml, mailConfigured, rejectedMail, sendMail, verifyEmailMail } from '@/lib/mail'
 
 const form = (o: Record<string, string>) => ({ get: (k: string) => o[k] ?? null })
@@ -160,6 +161,79 @@ test('free store addresses: exactly one label under the platform address', () =>
   assert.equal(platformOrigin(null, 'rooharka.pk'), 'https://rooharka.pk')
   assert.equal(platformOrigin('localhost:3000', undefined), 'http://localhost:3000')
   assert.equal(platformOrigin('app.example.com', undefined), 'https://app.example.com')
+})
+
+test('free store addresses: none on a *.vercel.app platform address (Vercel cannot give it sub-addresses)', () => {
+  assert.equal(freeAddressSuffix('rooharka.pk'), 'rooharka.pk')
+  assert.equal(freeAddressSuffix('rooharka.vercel.app'), null)
+  assert.equal(freeAddressSuffix(undefined), null)
+  assert.equal(storeAddress('mppmhk', 'rooharka.vercel.app'), null) // never the dead mppmhk.rooharka.vercel.app
+})
+
+test('shared shop address: a real address that is not the platform itself', () => {
+  assert.equal(defaultShopHost('mppmhk.vercel.app', 'rooharka.vercel.app'), 'mppmhk.vercel.app')
+  assert.equal(defaultShopHost(' MPPMHK.vercel.app ', 'rooharka.vercel.app'), 'mppmhk.vercel.app')
+  assert.equal(defaultShopHost('rooharka.vercel.app', 'rooharka.vercel.app'), null) // would send the platform to itself
+  assert.equal(defaultShopHost('www.rooharka.vercel.app', 'rooharka.vercel.app'), null)
+  assert.equal(defaultShopHost('localhost', 'rooharka.vercel.app'), null)
+  assert.equal(defaultShopHost('', 'rooharka.vercel.app'), null)
+  assert.equal(defaultShopHost(undefined, 'rooharka.vercel.app'), null)
+})
+
+test('shop links: always the shop itself, never the public site and never another store', () => {
+  const vercel = { platform: 'rooharka.vercel.app', shop: 'mppmhk.vercel.app', defaultSlug: 'mppmhk' }
+  const none: { host: string; isPrimary: boolean }[] = []
+  // The first store, opened from the dashboard on the platform address: its own shop address.
+  assert.equal(shopOrigin({ slug: 'mppmhk', domains: none, requestHost: 'rooharka.vercel.app' }, vercel), 'https://mppmhk.vercel.app')
+  // Its own live domain wins (the primary one first).
+  assert.equal(shopOrigin({ slug: 'mppmhk', domains: [{ host: 'a.pk', isPrimary: false }, { host: 'main.pk', isPrimary: true }], requestHost: 'rooharka.vercel.app' }, vercel), 'https://main.pk')
+  assert.equal(shopOrigin({ slug: 'mppmhk', domains: [{ host: 'a.pk', isPrimary: false }], requestHost: null }, vercel), 'https://a.pk')
+  // Another store without any address: no public link (the shared address shows the first store to customers)...
+  assert.equal(shopOrigin({ slug: 'ali', domains: none, requestHost: 'rooharka.vercel.app' }, vercel), null)
+  // ...but its owner may preview there: the signed token decides which store a shared address shows.
+  assert.equal(shopOrigin({ slug: 'ali', domains: none, requestHost: 'rooharka.vercel.app', preview: true }, vercel), 'https://mppmhk.vercel.app')
+  // A platform address with free sub-addresses.
+  assert.equal(shopOrigin({ slug: 'ali', domains: none, requestHost: 'rooharka.pk' }, { platform: 'rooharka.pk' }), 'https://ali.rooharka.pk')
+  // Platform address set, no shop address anywhere: no link (never the platform's own address, which shows the public site).
+  assert.equal(shopOrigin({ slug: 'mppmhk', domains: none, requestHost: 'rooharka.vercel.app' }, { platform: 'rooharka.vercel.app' }), null)
+  // Nothing configured: the address in use shows the shop.
+  assert.equal(shopOrigin({ slug: 'mppmhk', domains: none, requestHost: 'rooharka-abc.vercel.app' }, {}), 'https://rooharka-abc.vercel.app')
+  assert.equal(shopOrigin({ slug: 'mppmhk', domains: none, requestHost: null }, {}), null)
+  // Your own computer always stays on your own computer, whatever is configured.
+  assert.equal(shopOrigin({ slug: 'mppmhk', domains: [{ host: 'main.pk', isPrimary: true }], requestHost: 'localhost:3000' }, vercel), 'http://localhost:3000')
+  // A forged Host header is never turned into a link.
+  assert.equal(shopOrigin({ slug: 'mppmhk', domains: none, requestHost: 'evil.pk/"><script>' }, {}), null)
+})
+
+test('routing: on the platform address shop pages go to the shop address; / stays the public site', async () => {
+  const saved = { p: process.env.PLATFORM_HOST, s: process.env.DEFAULT_STORE_HOST }
+  process.env.PLATFORM_HOST = 'rooharka.vercel.app'; process.env.DEFAULT_STORE_HOST = 'mppmhk.vercel.app'
+  try {
+    const cfg = (await import(`../next.config.ts?case=${Date.now()}`)).default
+    const redirects: { source: string; destination: string; permanent: boolean; has: { value: string }[] }[] = await cfg.redirects()
+    const rewrites = (await cfg.rewrites()).beforeFiles as { source: string; destination: string; has: { value: string }[] }[]
+    const host = (r: { has: { value: string }[] }) => r.has[0].value.replace(/\\/g, '')
+    assert.deepEqual(redirects.map(host), ['rooharka.vercel.app', 'www.rooharka.vercel.app'])
+    for (const r of redirects) {
+      assert.equal(r.destination, 'https://mppmhk.vercel.app/:page/:rest*')
+      assert.equal(r.permanent, false)
+    }
+    // Every shop folder is covered, and nothing of the platform (/, /platform, /pricing, /signup, /admin, /csmi, /api).
+    const pattern = new RegExp(`^/(${redirects[0].source.match(/\(([^)]+)\)/)![1]})(/.*)?$`)
+    const shopFolders = readdirSync('app/(shop)', { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
+    for (const f of shopFolders) assert.ok(pattern.test(`/${f}`) && pattern.test(`/${f}/x`), `shop page /${f} is sent to the shop`)
+    for (const p of ['/', '/platform', '/pricing', '/signup', '/terms', '/privacy', '/admin', '/admin/login', '/csmi', '/api/cart', '/shopping', '/sitemap.xml']) assert.ok(!pattern.test(p), `${p} stays on the platform`)
+    assert.deepEqual(rewrites.map((r) => [host(r), r.source, r.destination]), [['rooharka.vercel.app', '/', '/platform'], ['www.rooharka.vercel.app', '/', '/platform']])
+    // No shop address, or one pointing back at the platform: no redirects at all (never a loop).
+    process.env.DEFAULT_STORE_HOST = ''
+    assert.deepEqual(await (await import(`../next.config.ts?case=${Date.now()}b`)).default.redirects(), [])
+    process.env.DEFAULT_STORE_HOST = 'rooharka.vercel.app'
+    assert.deepEqual(await (await import(`../next.config.ts?case=${Date.now()}c`)).default.redirects(), [])
+  } finally {
+    process.env.PLATFORM_HOST = saved.p; process.env.DEFAULT_STORE_HOST = saved.s
+    if (saved.p === undefined) delete process.env.PLATFORM_HOST
+    if (saved.s === undefined) delete process.env.DEFAULT_STORE_HOST
+  }
 })
 
 // --------------------------------------------------------------------- mail

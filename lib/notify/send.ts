@@ -2,6 +2,7 @@
  * SENDING the messages. Everything here is best effort: a message that cannot be sent is logged and forgotten,
  * and it can never fail, slow or undo the order change that caused it.
  */
+import { shopOriginFor } from '@/lib/shop-address'
 import { db } from '@/lib/db'
 import { loadServiceViews, getServiceSecrets } from '@/lib/services/store-services'
 import { resolveProvider } from '@/lib/otp/rules'
@@ -35,10 +36,10 @@ export async function notifyOrder(storeId: string, orderId: string): Promise<voi
     if (claimed.count === 0) return
     const secrets = await getServiceSecrets(storeId, provider.key)
     if (!secrets) return
-    const host = await db.storeDomain.findFirst({ where: { storeId, verifiedAt: { not: null } }, orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }], select: { host: true } }).catch(() => null)
+    const shop = await shopOriginFor(storeId, null).catch(() => null)
     const text = customerMessage(order.status, {
       store: settings?.displayName ?? 'our shop', name: order.customerName, number: order.number, total: order.total.toNumber(), due: order.amountDue.toNumber(), trackingCode: order.trackingCode,
-      trackUrl: host && settings?.orderTrackingEnabled ? `https://${host.host}/track?code=${order.trackingCode}` : null,
+      trackUrl: shop && settings?.orderTrackingEnabled ? `${shop}/track?code=${order.trackingCode}` : null,
       courier: order.shipments[0]?.courier, courierTrackingNo: order.shipments[0]?.courierTrackingNo,
     })
     const sent = await sendMessage(provider.key, secrets.credentials, secrets.config, rules.channel, order.customerPhone, text)

@@ -4,7 +4,7 @@ import { requirePlatform } from '@/lib/csmi/guard'
 import { canPlatform } from '@/lib/csmi/rules'
 import { formatPkt, startOfPktDay } from '@/lib/admin/dates'
 import { mailConfigured } from '@/lib/mail'
-import { platformHosts } from '@/lib/platform-host'
+import { defaultShopHost, freeAddressSuffix, platformHosts } from '@/lib/platform-host'
 import { getPlatformSettings } from '@/lib/signup/store'
 import ActionForm from '@/components/admin/ActionForm'
 import { Card, Check, Field, inputCls, primaryBtn } from '@/components/admin/ui'
@@ -39,6 +39,8 @@ export default async function SignupAdminPage() {
     offeredPlans === 0 && 'No plan is offered yet. Add one on the Plans page, otherwise nobody can sign up.',
     !mail && 'Email is not set up (RESEND_API_KEY and MAIL_FROM). People cannot confirm their email, so EVERY sign-up waits for your approval.',
     hosts.length === 0 && 'PLATFORM_HOST is not set. The public site is only reachable at /platform while developing, and stores get no free address.',
+    hosts.length > 0 && !freeAddressSuffix() && `Your platform address (${hosts[0]}) cannot give stores free addresses like name.${hosts[0]}. New stores need their own domain before customers can reach them.`,
+    hosts.length > 0 && !defaultShopHost() && 'DEFAULT_STORE_HOST is not set. Your first store has no address of its own, so its pages share the platform address and its Home button opens the public site.',
   ].filter(Boolean) as string[]
 
   return (

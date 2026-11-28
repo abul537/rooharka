@@ -171,6 +171,12 @@ Two jobs run by themselves. Both are web addresses the hosting scheduler calls; 
 
 The platform's own address (`PLATFORM_HOST`, for example `rooharka.pk`) shows a public site instead of a shop: home page (features, why it fits Pakistan, FAQ), `/pricing` (your plans from CSMI), `/signup`, `/terms` and `/privacy`. On any store's address these pages do not exist (404). In development, with `PLATFORM_HOST` unset, open `/platform`.
 
+**One address for the public site, another for each shop.** The platform's address and a shop can never share one address, because both need the home page `/`. So:
+- `PLATFORM_HOST` = the public site and the dashboards (`/`, `/pricing`, `/signup`, `/terms`, `/privacy`, `/admin`, `/csmi`).
+- `DEFAULT_STORE_HOST` = the first store's shop (for example `mppmhk.vercel.app`, added to the Vercel project under Settings, Domains). Any shop page opened on the platform address (`/shop`, `/product/...`, `/cart`, ...) is sent to the same page there, and the dashboard's Preview, "Live at" links and order-tracking messages use it.
+- Every other store: its own domain (Web addresses in CSMI), or its free `store.<PLATFORM_HOST>` address. A `*.vercel.app` platform address cannot have free sub-addresses, so on Vercel's free address new stores need a domain of their own.
+On your own computer (`pnpm dev`) everything stays on `localhost`: `/` is the shop and `/platform` the public site.
+
 **Flow:** choose a plan and billing period, name the store (the address is suggested and checked live), enter name, email, mobile and a strong password, accept the terms. A sign-up *request* is saved (password already hashed; no store or login exists yet). The person confirms their email by pressing a button on the emailed link; then the store, its settings, checkout form, free-trial subscription and owner login are created together in one step and they land in `/admin`. With "I approve every new store myself" on (or whenever email is not set up) the request waits in CSMI, **Sign-ups**, until you press Approve or Reject.
 
 **Your controls (CSMI, Sign-ups):** the kill switch (sign-ups start CLOSED), approval, free-trial days, a daily sign-up cap, brand name, support email/WhatsApp, an announcement bar, and the "how to pay" text store owners see. Plans (CSMI, Plans) hold the price, limits shown on the pricing page, a tagline and "Most popular". Plan limits are shown but **not enforced** by the platform yet.

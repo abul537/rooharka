@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  PREVIEW_LINK_SECONDS, PREVIEW_SESSION_SECONDS, makeLinkToken, makeSessionPass, previewAllowedAt, previewLink, readLinkToken, readSessionPass, safePreviewPath, storeOrigin, visibleStatuses,
+  PREVIEW_LINK_SECONDS, PREVIEW_SESSION_SECONDS, makeLinkToken, makeSessionPass, previewAllowedAt, previewLink, readLinkToken, readSessionPass, safePreviewPath, visibleStatuses,
 } from '@/lib/preview/rules'
 
 const A = { storeId: 'store_AAAAAAAAAA', userId: 'user_1111111111' }
@@ -53,10 +53,6 @@ test('statuses: customers see live products only; a preview adds drafts; archive
 test('preview address: the shop own address, with the token and the page safely encoded', () => {
   assert.equal(previewLink('https://ali.rooharka.pk/', '/product/a b', 'tok.en'), 'https://ali.rooharka.pk/api/preview?secret=tok.en&slug=%2Fproduct%2Fa%20b')
   assert.equal(previewLink('https://x.pk', '//evil.com', 't'), 'https://x.pk/api/preview?secret=t&slug=%2F')
-  assert.equal(storeOrigin({ domains: [{ host: 'a.pk', isPrimary: false }, { host: 'main.pk', isPrimary: true }], free: 'https://ali.rooharka.pk', requestHost: 'x' }), 'https://main.pk')
-  assert.equal(storeOrigin({ domains: [], free: 'https://ali.rooharka.pk', requestHost: 'x' }), 'https://ali.rooharka.pk')
-  assert.equal(storeOrigin({ domains: [], free: null, requestHost: 'localhost:3000' }), 'http://localhost:3000')
-  assert.equal(storeOrigin({ domains: [], free: null, requestHost: 'shop.example.pk' }), 'https://shop.example.pk')
 })
 
 // ------------------------------------------------------------------ a code review that runs with the tests

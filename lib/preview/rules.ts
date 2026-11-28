@@ -68,11 +68,3 @@ export function previewLink(origin: string, path: string, token: string, theme?:
   return `${origin.replace(/\/+$/, '')}/api/preview?secret=${encodeURIComponent(token)}&slug=${encodeURIComponent(safePreviewPath(path))}${theme && /^[A-Za-z0-9_-]{1,40}$/.test(theme) ? `&theme=${theme}` : ''}`
 }
 
-/** The shop's public address: its own live domain first, then its free platform address, else where the dashboard is open now (development). */
-export function storeOrigin(i: { domains: { host: string; isPrimary: boolean }[]; free: string | null; requestHost: string | null }): string {
-  const d = i.domains.find((x) => x.isPrimary) ?? i.domains[0]
-  if (d) return `https://${d.host}`
-  if (i.free) return i.free
-  const h = i.requestHost || 'localhost:3000'
-  return `${/^(localhost|127\.|\[::1\])/.test(h) ? 'http' : 'https'}://${h}`
-}

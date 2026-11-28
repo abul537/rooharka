@@ -1,3 +1,4 @@
+import { shopOriginFor } from '@/lib/shop-address'
 import Link from 'next/link'
 import { headers } from 'next/headers'
 import { requireAdmin } from '@/lib/auth/guard'
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function NewProduct() {
   const admin = await requireAdmin('products.edit')
-  const [cats, org, host] = await Promise.all([listCategories(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => h.get('host') ?? '')])
+  const [cats, org, shop] = await Promise.all([listCategories(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => shopOriginFor(admin.storeId, h.get('host')))])
   const countries = COUNTRY_CODES.map((code) => ({ code, name: countryName(code) }))
   return (
     <div className="max-w-6xl">
@@ -39,7 +40,7 @@ export default async function NewProduct() {
               <ProductTypeFields />
             </Card>
             <Card title="Search engine listing" hint="Optional. How this product may appear on Google, and its page address.">
-              <SeoFields name="Your product title" shortDescription="" seoTitle="" seoDescription="" slug="" host={host} editableSlug={false} />
+              <SeoFields name="Your product title" shortDescription="" seoTitle="" seoDescription="" slug="" host={shop ? new URL(shop).host : 'your-shop'} editableSlug={false} />
             </Card>
             <button className={primaryBtn}>Save and add photos</button>
           </div>

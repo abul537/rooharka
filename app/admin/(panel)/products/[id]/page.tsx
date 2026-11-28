@@ -1,3 +1,4 @@
+import { shopOriginFor } from '@/lib/shop-address'
 import StockHistory from '@/components/admin/StockHistory'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -34,9 +35,9 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
   const admin = await requireAdmin('products.view')
   const plan = await loadPlanAccess(admin.storeId)
   const [{ id }, { created, copied }] = await Promise.all([params, searchParams])
-  const [p, cats, media, sections, services, org, host, videoMax] = await Promise.all([
+  const [p, cats, media, sections, services, org, shop, videoMax] = await Promise.all([
     getProductForEdit(admin.storeId, id), // every query below is scoped to this store
-    listCategories(admin.storeId), listMedia(admin.storeId, id), loadSections(admin.storeId, id), loadServiceViews(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => h.get('host') ?? ''), videoLimitBytes(admin.storeId),
+    listCategories(admin.storeId), listMedia(admin.storeId, id), loadSections(admin.storeId, id), loadServiceViews(admin.storeId), listOrganisation(admin.storeId), headers().then((h) => shopOriginFor(admin.storeId, h.get('host'))), videoLimitBytes(admin.storeId),
   ])
   if (!p) notFound()
   const editable = can(admin.role, 'products.edit')
@@ -57,7 +58,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
         <Link href="/admin/products" className="text-sm text-slate-600 underline">← All products</Link>
         <h1 className="text-2xl font-bold mt-2">{p.name}</h1>
         <p className="text-sm text-slate-500">
-          {p.status === 'ACTIVE' ? <>Live at <Link className="underline" href={`/product/${p.slug}`} target="_blank">/product/{p.slug}</Link></> : <>Not visible to customers yet (status: {p.status.toLowerCase()}).{p.status === 'DRAFT' && <> <a className="underline font-medium" href={`/admin/preview?path=${encodeURIComponent(`/product/${p.slug}`)}`} target="_blank" rel="noopener">Preview it in your shop</a></>}</>}
+          {p.status === 'ACTIVE' ? (shop ? <>Live at <a className="underline" href={`${shop}/product/${p.slug}`} target="_blank" rel="noopener">{new URL(shop).host}/product/{p.slug}</a></> : <>Live (your shop has no web address yet)</>) : <>Not visible to customers yet (status: {p.status.toLowerCase()}).{p.status === 'DRAFT' && <> <a className="underline font-medium" href={`/admin/preview?path=${encodeURIComponent(`/product/${p.slug}`)}`} target="_blank" rel="noopener">Preview it in your shop</a></>}</>}
           {!editable && ' · You can view but not edit.'}
         </p>
       </div>
@@ -105,7 +106,7 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
               </Card>
 
               <Card title="Search engine listing" hint="How this product may appear on Google, and its page address.">
-                <SeoFields name={p.name} shortDescription={p.shortDescription ?? htmlToText(p.description, 150)} seoTitle={p.seoTitle ?? ''} seoDescription={p.seoDescription ?? ''} slug={p.slug} host={host} editableSlug />
+                <SeoFields name={p.name} shortDescription={p.shortDescription ?? htmlToText(p.description, 150)} seoTitle={p.seoTitle ?? ''} seoDescription={p.seoDescription ?? ''} slug={p.slug} host={shop ? new URL(shop).host : 'your-shop'} editableSlug />
               </Card>
               {editable && <button className={primaryBtn}>Save product</button>}
             </div>

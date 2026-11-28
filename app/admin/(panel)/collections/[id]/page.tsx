@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { headers } from 'next/headers'
+import { shopOriginFor } from '@/lib/shop-address'
 import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth/guard'
 import { can } from '@/lib/auth/permissions'
@@ -14,7 +16,7 @@ export const dynamic = 'force-dynamic'
 export default async function EditCollection({ params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin('products.view')
   const { id } = await params
-  const [c, products] = await Promise.all([getCollection(admin.storeId, id), listPickable(admin.storeId)]) // both limited to this store
+  const [c, products, shop] = await Promise.all([getCollection(admin.storeId, id), listPickable(admin.storeId), headers().then((h) => shopOriginFor(admin.storeId, h.get('host')))]) // both limited to this store
   if (!c) notFound()
   const editable = can(admin.role, 'products.edit')
   return (
@@ -22,7 +24,7 @@ export default async function EditCollection({ params }: { params: Promise<{ id:
       <div>
         <Link href="/admin/collections" className="text-sm text-slate-600 underline">← All collections</Link>
         <h1 className="text-2xl font-bold mt-2">{c.title}</h1>
-        <p className="text-sm text-slate-500">{c.isActive ? <>Shop page: <Link className="underline" href={`/collections/${c.handle}`} target="_blank">/collections/{c.handle}</Link></> : 'Hidden from the shop.'}</p>
+        <p className="text-sm text-slate-500">{!c.isActive ? 'Hidden from the shop.' : shop ? <>Shop page: <a className="underline" href={`${shop}/collections/${c.handle}`} target="_blank" rel="noopener">{new URL(shop).host}/collections/{c.handle}</a></> : 'Shown in the shop (your shop has no web address yet).'}</p>
       </div>
       <ActionForm action={saveCollectionAction} className="space-y-6">
         <input type="hidden" name="id" value={c.id} />

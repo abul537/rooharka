@@ -1,10 +1,17 @@
 import { Eye } from 'lucide-react'
+import { headers } from 'next/headers'
+import { normalizeHost } from '@/lib/domains'
+import { isLocalAddress, isPlatformHost, platformHosts } from '@/lib/platform-host'
 
 /**
  * Shown on every shop page while the owner is previewing. It stays at the bottom of the screen so it can never be
  * mistaken for part of the shop, and it is the way out. Plain links (not client code): they work even if scripts fail.
  */
-export default function PreviewBanner({ closed, draftTheme = false }: { closed: boolean; draftTheme?: boolean }) {
+export default async function PreviewBanner({ closed, draftTheme = false }: { closed: boolean; draftTheme?: boolean }) {
+  // Owners sign in on the platform's own address, so "Back to dashboard" goes there from a shop's address.
+  const host = normalizeHost((await headers()).get('host'))
+  const platform = platformHosts()[0]
+  const dashboard = platform && !isLocalAddress(host) && !isPlatformHost(host) ? `https://${platform}/admin` : '/admin'
   return (
     <>
       <div aria-hidden className="h-16" />{/* keeps the page's own footer from hiding behind the bar */}
@@ -13,7 +20,7 @@ export default function PreviewBanner({ closed, draftTheme = false }: { closed: 
         {draftTheme && <span className="text-amber-300">This design is not published. Customers still see your live theme.</span>}
         <span className="text-gray-300">{closed ? 'Your shop is not open to customers yet. Only you can see this.' : 'You also see your draft products. Customers do not.'} Orders are switched off here.</span>
         <a href="/api/disable-preview" className="rounded-full bg-white px-4 py-1.5 font-semibold text-gray-900 hover:bg-gray-100">Exit preview</a>
-        <a href="/admin" className="underline text-gray-300 hover:text-white">Back to dashboard</a>
+        <a href={dashboard} className="underline text-gray-300 hover:text-white">Back to dashboard</a>
       </aside>
     </>
   )

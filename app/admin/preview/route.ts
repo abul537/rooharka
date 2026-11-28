@@ -2,9 +2,8 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth/guard'
 import { audit } from '@/lib/audit'
-import { db } from '@/lib/db'
-import { storeAddress } from '@/lib/platform-host'
-import { makeLinkToken, previewLink, safePreviewPath, storeOrigin } from '@/lib/preview/rules'
+import { shopOriginFor } from '@/lib/shop-address'
+import { makeLinkToken, previewLink, safePreviewPath } from '@/lib/preview/rules'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,12 +16,12 @@ export async function GET(request: Request) {
   const admin = await requireAdmin() // not signed in -> login page
   const params = new URL(request.url).searchParams
   const path = safePreviewPath(params.get('path'))
-  const [store, host] = await Promise.all([
-    db.store.findUnique({ where: { id: admin.storeId }, select: { slug: true, domains: { where: { verifiedAt: { not: null } }, select: { host: true, isPrimary: true } } } }),
-    headers().then((h) => h.get('host')),
-  ])
-  if (!store) redirect('/admin')
-  const origin = storeOrigin({ domains: store.domains, free: storeAddress(store.slug), requestHost: host })
+  const host = (await headers()).get('host')
+  // The shop's own address (never the public site's): there the one-minute token is exchanged for the preview pass.
+  const origin = await shopOriginFor(admin.storeId, host, true)
+  if (!origin) {
+    return new Response('Your shop does not have a web address yet, so there is nothing to preview. Connect a domain in Settings, or ask the platform team for your shop address.', { status: 409, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } })
+  }
   await audit({ storeId: admin.storeId, userId: admin.id, action: 'store.preview', entity: 'Store', entityId: admin.storeId, after: { path } })
   redirect(previewLink(origin, path, makeLinkToken({ storeId: admin.storeId, userId: admin.id }), params.get('theme')))
 }

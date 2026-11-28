@@ -6,6 +6,8 @@ import { getShopContext } from '@/lib/storefront/data'
 import { listPublicCollections } from '@/lib/admin/collections'
 import { POLICY_KEYS } from '@/lib/storefront/rules'
 import { shopSitemap } from '@/lib/seo'
+import { normalizeHost } from '@/lib/domains'
+import { isPlatformHost } from '@/lib/platform-host'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,13 +16,15 @@ export const dynamic = 'force-dynamic'
  * (live products and collections only); on the platform's own address, the platform's public pages.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const host = ((await headers()).get('host') ?? '').toLowerCase()
+  const host = normalizeHost((await headers()).get('host'))
   if (!host) return []
   const origin = `https://${host}`
+  const platformPages = () => ['/', '/pricing', '/signup', '/terms', '/privacy'].map((p) => ({ url: `${origin}${p}` }))
+  if (isPlatformHost(host)) return platformPages() // the platform's own address lists its public site, never a shop
   const store = await getStoreForHost().catch(() => null)
   if (!store || store.approval !== 'APPROVED') {
     // The platform's own site (or an address with no open shop: an empty list is the honest answer there).
-    return store ? [] : ['/', '/pricing', '/signup', '/terms', '/privacy'].map((p) => ({ url: `${origin}${p}` }))
+    return store ? [] : platformPages()
   }
   const [products, collections, ctx] = await Promise.all([
     db.product.findMany({ where: { storeId: store.id, status: 'ACTIVE' }, select: { slug: true, updatedAt: true }, orderBy: { updatedAt: 'desc' }, take: 5000 }),
